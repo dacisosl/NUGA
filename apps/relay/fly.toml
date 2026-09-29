@@ -1,0 +1,44 @@
+# Fly.io 배포 예시 — 앱 이름과 리전을 바꿔 쓰세요.
+#   fly launch --no-deploy --copy-config   (처음 한 번)
+#   fly volumes create relay_data --size 1 --region nrt
+#   fly deploy
+app = "nuga-relay"
+primary_region = "nrt"   # 도쿄. 서울은 "icn" 이 열려 있으면 사용
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+  RELAY_TTL_HOURS = "24"
+  RELAY_MAX_BODY = "262144"
+  RELAY_DB = "/data/relay.sqlite"   # 볼륨에 SQLite 저장 (머신 재시작 후에도 봉투 유지)
+  RELAY_TRUST_PROXY = "1"           # Fly 프록시 뒤라서 Fly-Client-IP 로 속도 제한
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/health"
+
+[[mounts]]
+  source = "relay_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

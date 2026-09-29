@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nuga_bg">#F4F3EF</color>
+    <color name="nuga_surface">#FFFFFF</color>
+    <color name="nuga_line">#E3E1DA</color>
+    <color name="nuga_text">#1A1C21</color>
+    <color name="nuga_text2">#5E6270</color>
+    <color name="nuga_accent">#2448C9</color>
+    <color name="nuga_accent_soft">#E8EDFB</color>
+    <color name="nuga_cat1">#2448C9</color>
+    <color name="nuga_cat1_bg">#E8EDFB</color>
+    <color name="nuga_cat2">#0D6660</color>
+    <color name="nuga_cat2_bg">#DDF1EF</color>
+    <color name="nuga_cat3">#6C33A3</color>
+    <color name="nuga_cat3_bg">#F0E7FA</color>
+    <color name="nuga_cat4">#4A4E5A</color>
+    <color name="nuga_cat4_bg">#ECECEE</color>
+</resources>

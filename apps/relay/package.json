@@ -1,0 +1,17 @@
+{
+  "name": "@nuga/relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "누가 E2E 릴레이 서버 — 암호문 봉투만 TTL 동안 보관하는 우편함",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/dev.js",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
