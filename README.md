@@ -1,5 +1,7 @@
 # 누가 — 생기부 누가기록 앱
 
+**웹 데모(GitHub Pages):** https://dacisosl.github.io/NUGA/ · **저장소:** https://github.com/dacisosl/NUGA · 설치 파일·APK는 `v*` 태그를 푸시하면 Actions가 빌드해 Releases에 올린다.
+
 수업 중 워치·위젯으로 학생 행동을 10초 안에 기록하고, 수업 후 PC에서 1~2분 안에 보완하며, 학기 말에 그 기록을 근거로 세특 초안을 만들고 검토하는 앱.
 기획서: [누가_앱_제작_기획서.md](누가_앱_제작_기획서.md) · 프로토콜: [docs/PROTOCOL.md](docs/PROTOCOL.md) · 디자인 토큰: [docs/DESIGN.md](docs/DESIGN.md) · 기획서 대비 개선점: [docs/UPGRADES.md](docs/UPGRADES.md)
 
