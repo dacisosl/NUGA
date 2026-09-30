@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  WEEKDAY_LABELS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
+  WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
   type BackupContainer, type Level, type ProgressRow, type Student,
 } from "@nuga/core";
 import { TopBar } from "../App";
@@ -15,20 +15,21 @@ import { syncEngine } from "../lib/syncEngine";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
 const COMMON_TABS: { key: string; label: string }[] = [
-  { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" },
-  { key: "ai", label: "AI" }, { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
+  { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" },
+  { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
 ];
 /** 개별 설정: 지금 열린 영역에만 적용된다 */
 const AREA_TABS: { key: string; label: string }[] = [
   { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" },
-  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" },
+  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" },
+  { key: "prompt", label: "초안 프롬프트" },
 ];
 
 export function SettingsPage() {
   const tab = useStore((s) => s.settingsTab);
   const setTab = useStore((s) => s.setSettingsTab);
   const areaName = useStore((s) => s.doc.settings.school.subject) || "현재 영역";
-  const override = useStore((s) => s.doc.settings.lengthOverride);
+  const draftPrompt = useStore((s) => s.doc.settings.draftPrompt) || "";
   const group: "common" | "area" = COMMON_TABS.some((t) => t.key === tab) ? "common" : "area";
   const tabs = group === "common" ? COMMON_TABS : AREA_TABS;
   return (
@@ -41,11 +42,11 @@ export function SettingsPage() {
       <div className="content">
         <div className={`scope-note ${group}`}>
           {group === "common"
-            ? <><b>모든 영역에 똑같이 적용됩니다.</b><span>글자수·기준은 영역마다 따로 정할 수도 있습니다.</span></>
+            ? <><b>모든 영역에 똑같이 적용됩니다.</b><span>글자수·기준과 초안 프롬프트는 개별 설정에서 영역마다 정합니다.</span></>
             : <><b>{areaName}에만 적용됩니다.</b><span>다른 영역은 상단 영역 배지에서 바꿔 설정하세요.</span></>}
         </div>
         <div className="settings-layout">
-          <nav className="settings-nav">{tabs.map((t) => <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>{t.label}{t.key === "length" && override && <span className="tag">이 영역 전용</span>}</button>)}</nav>
+          <nav className="settings-nav">{tabs.map((t) => <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>{t.label}{t.key === "prompt" && draftPrompt.trim() && <span className="tag">직접 설정</span>}</button>)}</nav>
           <div className="settings-body">
             {tab === "subject" && <SubjectSection />}
             {tab === "roster" && <RosterSection />}
@@ -58,6 +59,7 @@ export function SettingsPage() {
             {tab === "ai" && <AiSection />}
             {tab === "data" && <DataSection />}
             {tab === "privacy" && <PrivacySection />}
+            {tab === "prompt" && <PromptSection />}
           </div>
         </div>
       </div>
@@ -445,18 +447,11 @@ function CategorySection() {
 function LengthSection() {
   const s = useStore((x) => x.doc.settings);
   const setSettings = useStore((x) => x.setSettings);
-  const setLengthOverride = useStore((x) => x.setLengthOverride);
   const areaName = s.school.subject || "현재 영역";
   return (
     <>
-    <div className={`card pad ${s.lengthOverride ? "override" : ""}`}>
-      <div className="flex between">
-        <div><b>{s.lengthOverride ? `${areaName} 전용 값 사용 중` : "공통 값 사용 중"}</b><div className="muted small">{s.lengthOverride ? "아래 값은 이 영역에만 적용됩니다. 끄면 공통 값으로 돌아갑니다." : "아래 값을 바꾸면 모든 영역에 함께 적용됩니다."}</div></div>
-        <Switch on={s.lengthOverride} onChange={setLengthOverride} label={`${areaName}만 따로 설정`} />
-      </div>
-    </div>
     <div className="card pad">
-      <h3>글자수 · 판단 기준</h3>
+      <h3>글자수 · 판단 기준 <span className="muted small">{areaName} 영역</span></h3>
       <div className="grid2">
         <div className="field"><label>세특 목표 글자수</label><input type="number" className="num" value={s.targetLength["세특"] || 500} onChange={(e) => setSettings((x) => ({ ...x, targetLength: { ...x.targetLength, "세특": Number(e.target.value) } }))} /><span className="muted small">허용 구간 N−20 ~ N−1 · NEIS 바이트는 검토 패널에 병기</span></div>
         <div className="field"><label>글자수 기준</label><span className="seg"><button className={s.lengthMode === "withSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withSpaces" })}>공백 포함</button><button className={s.lengthMode === "withoutSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withoutSpaces" })}>공백 제외</button></span></div>
@@ -618,7 +613,7 @@ function AiSection() {
     const s = doc.students.find((x) => recordsOf(doc, x.class, x.no).length > 0) || doc.students[0];
     const recs = s ? recordsOf(doc, s.class, s.no) : [];
     const req = buildDraftRequest({ level: s?.level || "B", targetLength: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
-    setPreview(previewPayload(req));
+    setPreview(previewPayload(req, doc.settings.draftPrompt));
   };
   return (
     <>
@@ -679,5 +674,49 @@ function PrivacySection() {
       </div>
       <iframe title="개인정보 처리방침" src={url} style={{ width: "100%", height: "70vh", border: "none", background: "#fff" }} />
     </div>
+  );
+}
+
+/* ---------- 초안 프롬프트 (영역별) ---------- */
+function PromptSection() {
+  const s = useStore((x) => x.doc.settings);
+  const setSettings = useStore((x) => x.setSettings);
+  const toast = useStore((x) => x.toast);
+  const areaName = s.school.subject || "현재 영역";
+  const custom = s.draftPrompt.trim().length > 0;
+  const value = custom ? s.draftPrompt : DEFAULT_DRAFT_GUIDE;
+  const [confirmPreset, setConfirmPreset] = useState<string | null>(null);
+  const applyPreset = (key: string) => {
+    const p = DRAFT_PROMPT_PRESETS.find((x) => x.key === key); if (!p) return;
+    setSettings({ draftPrompt: p.text === DEFAULT_DRAFT_GUIDE ? "" : p.text }); toast({ text: `"${p.label}" 양식을 불러옴` });
+  };
+  return (
+    <>
+      <div className="card pad">
+        <div className="flex between">
+          <h3 style={{ margin: 0 }}>초안 프롬프트 <span className="muted small">{areaName} 영역</span></h3>
+          <span className="flex">
+            <span className={`chip ${custom ? "check" : "pass"}`}>{custom ? "직접 설정" : "기본값 사용 중"}</span>
+            <select className="select" value="" onChange={(e) => { if (e.target.value) setConfirmPreset(e.target.value); }}>
+              <option value="">양식 불러오기</option>
+              {DRAFT_PROMPT_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+            <button className="btn sm" disabled={!custom} onClick={() => { setSettings({ draftPrompt: "" }); toast({ text: "기본 프롬프트로 되돌림" }); }}>기본값으로</button>
+          </span>
+        </div>
+        <div className="muted small" style={{ margin: "6px 0 10px" }}>AI가 초안을 쓸 때 따르는 지침입니다. 영역마다 따로 저장됩니다. AI가 꺼져 있으면 규칙 기반 생성기가 동작하며 이 지침은 쓰이지 않습니다.</div>
+        <textarea className="prompt-edit" rows={16} value={value} onChange={(e) => setSettings({ draftPrompt: e.target.value === DEFAULT_DRAFT_GUIDE ? "" : e.target.value })} spellCheck={false} />
+      </div>
+      <div className="card pad">
+        <h3>항상 덧붙는 출력 형식 <span className="muted small">바꿀 수 없음</span></h3>
+        <div className="muted small" style={{ marginBottom: 8 }}>앱이 AI 응답을 읽고 문장마다 근거 기록을 연결하려면 이 형식이 필요합니다.</div>
+        <pre className="prompt-fixed">{DRAFT_OUTPUT_RULES}</pre>
+      </div>
+      <div className="card pad">
+        <h3>함께 전달되는 내용</h3>
+        <div className="small muted">과목·수준·목표 글자수, 체크한 누가기록(날짜·분류·단원·내용), PDF기록 발췌, 현재 초안과 대화 내역, 요청 문장. 반·번호·이름은 보내지 않습니다. 실제 전송 본문은 공통 설정 → AI → 전송 내용 미리보기에서 볼 수 있습니다.</div>
+      </div>
+      {confirmPreset && <Confirm title="양식 불러오기" body="지금 프롬프트를 선택한 양식으로 바꿉니다." okLabel="불러오기" onOk={() => applyPreset(confirmPreset)} onClose={() => setConfirmPreset(null)} />}
+    </>
   );
 }

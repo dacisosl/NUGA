@@ -334,3 +334,27 @@ textarea { resize: vertical; }
 .reccard .rc-text { margin-top: 4px; padding: 7px 12px; border-radius: 8px; background: var(--content-bg); border: 1px solid var(--content-line); color: var(--text); font-weight: 500; line-height: 1.55; }
 .reccard.off .rc-text { background: var(--bg); border-color: var(--line2); }
 .dm-rec .t { background: var(--content-bg); padding: 2px 8px; border-radius: 6px; }
+
+/* PDF 가리기 · 글자 뽑기 */
+.ocr-steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ocr-steps .st { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--line2); color: var(--text3); }
+.ocr-steps .st.cur { background: var(--text); color: #fff; }
+.ocr-steps .st.done { background: var(--accent-soft); color: var(--accent); }
+.mask-overlay { z-index: 70; padding: 16px; }
+.mask-modal { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg); width: min(1400px, 100%); height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden; }
+.mask-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+.mask-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr); }
+.mask-thumbs { overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); border-right: 1px solid var(--line); }
+.mask-thumb { border: 2px solid transparent; border-radius: 8px; background: var(--surface); padding: 4px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text2); }
+.mask-thumb img { width: 100%; border-radius: 4px; }
+.mask-thumb.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.mask-stage { overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 16px; background: #E9E7E1; }
+.mask-page { position: relative; height: calc(100vh - 220px); max-width: 100%; cursor: crosshair; box-shadow: 0 2px 12px rgba(0,0,0,.18); background: #fff; user-select: none; }
+.mask-page img { width: 100%; height: 100%; display: block; pointer-events: none; }
+.mask-rect { position: absolute; background: #000; outline: 2px solid var(--warn); }
+.mask-rect.drawing { background: rgba(0,0,0,.55); outline-style: dashed; }
+.mask-rect button { position: absolute; top: -10px; right: -10px; width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--warn); color: #fff; font-size: 13px; line-height: 20px; padding: 0; cursor: pointer; }
+.mask-foot { display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: #FAFAF7; flex-wrap: wrap; }
+/* 초안 프롬프트 */
+.prompt-edit { width: 100%; font-family: ui-monospace, Consolas, "Malgun Gothic", monospace; font-size: 13px; line-height: 1.65; background: #FCFCFA; }
+.prompt-fixed { margin: 0; white-space: pre-wrap; font-size: 12.5px; line-height: 1.6; background: var(--bg); padding: 10px 12px; border-radius: 8px; color: var(--text2); }

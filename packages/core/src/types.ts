@@ -112,6 +112,8 @@ export interface Settings {
   similarityThreshold: number;
   /** true면 공통 글자수·기준 대신 이 영역 전용 값을 쓴다 */
   lengthOverride: boolean;
+  /** 영역별 초안 지침. 비우면 기본 지침(교과 세특) */
+  draftPrompt: string;
   options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean };
   sync: SyncSettings | null;
   ai: AiSettings;
@@ -176,6 +178,7 @@ export function defaultSettings(): Settings {
     supplementEnabled: false,
     similarityThreshold: 0.7,
     lengthOverride: false,
+    draftPrompt: "",
     options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false },
     sync: null,
     ai: { enabled: false, provider: "local", apiKey: "", model: "claude-opus-5-5" },

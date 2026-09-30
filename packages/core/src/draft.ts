@@ -53,18 +53,55 @@ export const LEVEL_GUIDE: Record<Level, string> = {
   C: "참여 사실과 성장 가능성 중심 (예: 실험 결과를 정리하여 발표함)",
 };
 
-export function systemPrompt(): string {
-  return [
-    "당신은 고등학교 교과 교사의 생활기록부 '세부능력 및 특기사항' 초안 작성을 돕는 도우미다.",
+/** 기본 초안 지침(교과 세특). 설정 → 개별 설정 → 초안 프롬프트에서 영역마다 바꿀 수 있다. */
+export const DEFAULT_DRAFT_GUIDE = [
+  "당신은 고등학교 교과 교사의 생활기록부 '세부능력 및 특기사항' 초안 작성을 돕는 도우미다.",
+  "규칙:",
+  "1. 어체: 모든 문장은 명사형 종결(~함, ~임, ~보임, ~드러냄, ~됨)로 끝낸다. 주어와 학생 이름을 쓰지 않는다. 존칭·감탄·느낌표를 쓰지 않는다.",
+  "2. 근거: 전달된 기록(records)과 PDF기록(performance) 내용만 사용한다. 기록에 없는 활동·성취·수상은 절대 만들지 않는다. 여러 기록을 종합한 총평 문장은 종합한 기록을 근거로 삼는다.",
+  "3. 수준 반영: A = " + LEVEL_GUIDE.A + " / B = " + LEVEL_GUIDE.B + " / C = " + LEVEL_GUIDE.C,
+  "4. 글자수: 목표 N자일 때 N-20 ~ N-1자 (공백 포함 여부는 요청을 따른다). 목표를 초과하지 않는다. 기록이 부족하면 미달을 허용하되 내용을 지어내지 않는다.",
+  "5. 기재 금지: 교외 활동·수상, 대학명, 부모 정보, 특정 기관명은 쓰지 않는다.",
+  "6. 수정 요청(현재 초안 + 대화 내역 + 요청)이 있으면 요청을 반영해 전체 초안을 다시 작성한다.",
+].join("\n");
+
+/** 앱이 응답을 읽기 위해 항상 덧붙이는 출력 형식 (사용자가 바꿀 수 없음) */
+export const DRAFT_OUTPUT_RULES = [
+  "출력은 JSON 하나만 낸다: {\"text\": 전체 초안, \"sentences\": [{\"text\": 문장, \"evidence\": [근거 기록 id...]}]}.",
+  "text 는 sentences 의 text 를 공백 한 칸으로 이어 붙인 것과 같아야 한다.",
+  "evidence 에는 그 문장의 근거가 된 records·performance 의 id 를 넣는다. 근거가 없는 문장은 쓰지 않는다.",
+].join("\n");
+
+export interface PromptPreset { key: string; label: string; text: string }
+export const DRAFT_PROMPT_PRESETS: PromptPreset[] = [
+  { key: "setuk", label: "교과 세특", text: DEFAULT_DRAFT_GUIDE },
+  { key: "club", label: "동아리활동 (창체)", text: [
+    "당신은 고등학교 교사의 학교생활기록부 '창의적 체험활동 — 동아리활동' 특기사항 초안 작성을 돕는 도우미다.",
     "규칙:",
-    "1. 어체: 모든 문장은 명사형 종결(~함, ~임, ~보임, ~드러냄, ~됨)로 끝낸다. 주어와 학생 이름을 쓰지 않는다. 존칭·감탄·느낌표를 쓰지 않는다.",
-    "2. 근거: 전달된 기록(records)과 수행평가(performance) 내용만 사용한다. 기록에 없는 활동·성취·수상은 절대 만들지 않는다. 각 문장마다 근거가 된 기록 id 배열(evidence)을 반환한다. 여러 기록을 종합한 총평 문장은 종합한 기록 id를 모두 넣는다.",
-    "3. 수준 반영: A = " + LEVEL_GUIDE.A + " / B = " + LEVEL_GUIDE.B + " / C = " + LEVEL_GUIDE.C,
-    "4. 글자수: 목표 N자일 때 N-20 ~ N-1자 (공백 " + "포함 기준은 요청의 lengthMode 를 따른다). 목표를 초과하지 않는다. 기록이 부족하면 미달을 허용하되 내용을 지어내지 않는다.",
-    "5. 기재 금지: 교외 활동·수상, 대학명, 부모 정보, 특정 기관명은 쓰지 않는다.",
-    "6. 수정 요청(draft + history + instruction)이 있으면 요청을 반영해 전체 초안을 다시 작성하여 반환한다.",
-    "7. 출력은 JSON 하나만: {\"text\": 전체 초안, \"sentences\": [{\"text\": 문장, \"evidence\": [id...]}]}. text는 sentences의 text를 공백 한 칸으로 이어 붙인 것과 같아야 한다.",
-  ].join("\n");
+    "1. 어체: 모든 문장은 명사형 종결(~함, ~임, ~보임)로 끝낸다. 주어와 학생 이름을 쓰지 않는다. 존칭·감탄을 쓰지 않는다.",
+    "2. 근거: 전달된 기록과 PDF기록 내용만 사용한다. 기록에 없는 역할·활동·성과를 만들지 않는다.",
+    "3. 내용: 동아리에서 맡은 역할, 협력 과정, 탐구·활동 과정에서 드러난 태도와 성장을 중심으로 쓴다.",
+    "4. 수준 반영: A = 활동을 기획·주도하고 확장함 / B = 맡은 역할을 성실히 수행함 / C = 참여 사실과 성장 가능성.",
+    "5. 글자수: 목표 N자일 때 N-20 ~ N-1자. 초과하지 않는다. 기록이 부족하면 미달을 허용한다.",
+    "6. 기재 금지: 교외 활동·수상, 대학명, 부모 정보, 특정 기관명.",
+    "7. 수정 요청이 있으면 반영해 전체 초안을 다시 작성한다.",
+  ].join("\n") },
+  { key: "behavior", label: "행동특성 및 종합의견", text: [
+    "당신은 고등학교 담임교사의 학교생활기록부 '행동특성 및 종합의견' 초안 작성을 돕는 도우미다.",
+    "규칙:",
+    "1. 어체: 모든 문장은 명사형 종결(~함, ~임, ~보임)로 끝낸다. 주어와 학생 이름을 쓰지 않는다. 존칭·감탄을 쓰지 않는다.",
+    "2. 근거: 전달된 관찰 기록만 사용한다. 기록에 없는 일화·성품을 지어내지 않는다.",
+    "3. 내용: 학급 생활에서 드러난 인성, 배려·나눔·협력, 규칙 준수, 책임감, 교우 관계, 성장 과정을 구체적인 장면과 함께 쓴다. 단점은 성장 가능성과 함께 긍정적으로 표현한다.",
+    "4. 수준(A·B·C)은 참고만 하고 학생을 서열화하는 표현을 쓰지 않는다.",
+    "5. 글자수: 목표 N자일 때 N-20 ~ N-1자. 초과하지 않는다.",
+    "6. 기재 금지: 교외 활동·수상, 대학명, 부모 정보, 특정 기관명, 성적·석차.",
+    "7. 수정 요청이 있으면 반영해 전체 초안을 다시 작성한다.",
+  ].join("\n") },
+];
+
+/** AI 에 보내는 system 프롬프트 = (영역별 지침 또는 기본 지침) + 고정 출력 형식 */
+export function systemPrompt(guide?: string): string {
+  return `${(guide && guide.trim()) || DEFAULT_DRAFT_GUIDE}\n\n[출력 형식 — 앱이 읽는 형식이라 바꿀 수 없음]\n${DRAFT_OUTPUT_RULES}`;
 }
 
 export function userPrompt(req: DraftRequest): string {
@@ -75,13 +112,13 @@ export function userPrompt(req: DraftRequest): string {
   if (!req.records.length) lines.push("(없음)");
   for (const r of req.records) lines.push(`- id=${r.id} | ${r.date} | ${r.category} | ${r.lesson || "-"} | ${r.text || "(내용 없음)"}`);
   lines.push("");
-  lines.push("[수행평가]");
+  lines.push("[PDF기록]");
   if (!req.performance.length) lines.push("(없음)");
   for (const p of req.performance) lines.push(`- id=${p.id} | ${p.title} | ${p.excerpt}`);
   if (req.draft) { lines.push(""); lines.push("[현재 초안]"); lines.push(req.draft); }
   if (req.history?.length) { lines.push(""); lines.push("[대화 내역]"); for (const h of req.history) lines.push(`${h.role === "user" ? "교사" : "도우미"}: ${h.text}`); }
   lines.push("");
-  lines.push(`[요청] ${req.instruction || "위 기록을 근거로 세특 초안을 작성해줘."}`);
+  lines.push(`[요청] ${req.instruction || "위 기록을 근거로 초안을 작성해줘."}`);
   return lines.join("\n");
 }
 

@@ -12,12 +12,8 @@ export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
 
 /** 영역 = 독립 문서(명단·기록·초안·시간표). 동기화·AI·표시 옵션은 모든 영역이 공유한다. */
 export interface AreaMeta { id: string; name: string; createdAt: string }
-/** 공통 설정: 모든 영역이 따른다. 글자수·기준(LENGTH_KEYS)은 영역별로 lengthOverride 를 켜면 따로 쓸 수 있다. */
-export interface GlobalSettings {
-  sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; supplementEnabled: boolean;
-  lowRecordEnabled: boolean; targetLength?: Settings["targetLength"]; lengthMode?: Settings["lengthMode"]; lowRecordThreshold?: number; similarityThreshold?: number;
-}
-const LENGTH_KEYS = ["targetLength", "lengthMode", "lowRecordThreshold", "lowRecordEnabled", "similarityThreshold"] as const;
+/** 공통 설정: 모든 영역이 같은 값을 쓴다 (동기화·AI·표시 옵션·보완 대기). 글자수·기준과 초안 프롬프트는 영역별. */
+export interface GlobalSettings { sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; supplementEnabled: boolean }
 let lastGlobal: GlobalSettings | null = null;
 export interface AreaStats { id: string; name: string; students: number; records: number; drafts: number; performances: number }
 export interface MultiBackup { format: "nuga-multi"; version: 1; exportedAt: string; global: GlobalSettings | null; currentArea: string; areas: { meta: AreaMeta; doc: NugaDoc }[] }
@@ -28,23 +24,13 @@ function normalizeDoc(doc: NugaDoc): NugaDoc {
   doc.settings = { ...base.settings, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
   return doc;
 }
-/** 현재 문서에서 공통 설정을 뽑는다. 이 영역이 글자수를 따로 쓰는 중이면 글자수 값은 이전 공통값을 유지한다. */
-function pickGlobal(doc: NugaDoc, prev: GlobalSettings | null): GlobalSettings {
+function pickGlobal(doc: NugaDoc, _prev: GlobalSettings | null): GlobalSettings {
   const s = doc.settings;
-  const src = s.lengthOverride && prev ? prev : s;
-  return {
-    sync: s.sync, ai: s.ai, options: s.options, supplementEnabled: s.supplementEnabled,
-    lowRecordEnabled: src.lowRecordEnabled ?? s.lowRecordEnabled, targetLength: { ...(src.targetLength ?? s.targetLength) }, lengthMode: src.lengthMode ?? s.lengthMode,
-    lowRecordThreshold: src.lowRecordThreshold ?? s.lowRecordThreshold, similarityThreshold: src.similarityThreshold ?? s.similarityThreshold,
-  };
+  return { sync: s.sync, ai: s.ai, options: s.options, supplementEnabled: s.supplementEnabled };
 }
 function applyGlobal(doc: NugaDoc, g: GlobalSettings | null): NugaDoc {
   if (!g) return doc;
-  const next = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, supplementEnabled: g.supplementEnabled };
-  if (!doc.settings.lengthOverride) {
-    for (const k of LENGTH_KEYS) { const v = g[k]; if (v !== undefined) (next as Record<string, unknown>)[k] = k === "targetLength" ? { ...(v as Settings["targetLength"]) } : v; }
-  }
-  doc.settings = next;
+  doc.settings = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, supplementEnabled: g.supplementEnabled ?? doc.settings.supplementEnabled };
   return doc;
 }
 export function currentGlobal(): GlobalSettings | null { return lastGlobal; }
@@ -80,7 +66,6 @@ interface State {
   switchArea(id: string): Promise<void>;
   renameArea(id: string, name: string): void;
   deleteArea(id: string): Promise<void>;
-  setLengthOverride(on: boolean): void;
   areaStats(): Promise<AreaStats[]>;
   exportAll(): Promise<MultiBackup>;
   importAll(b: MultiBackup): Promise<void>;
@@ -185,7 +170,10 @@ export const useStore = create<State>((set, get) => ({
     const p = await getPersist();
     const cur = get().doc;
     const d = applyGlobal(emptyDoc(), pickGlobal(cur, lastGlobal));
-    d.settings = { ...d.settings, lengthOverride: false, school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cur.settings.categories.map((c) => ({ ...c })), periods: cur.settings.periods.map((x) => ({ ...x })), onboarded: true };
+    const cs = cur.settings;
+    d.settings = { ...d.settings, school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cs.categories.map((c) => ({ ...c })), periods: cs.periods.map((x) => ({ ...x })), onboarded: true,
+      // 글자수·기준은 영역별이지만 새 영역은 지금 영역 값에서 시작한다
+      targetLength: { ...cs.targetLength }, lengthMode: cs.lengthMode, lowRecordThreshold: cs.lowRecordThreshold, lowRecordEnabled: cs.lowRecordEnabled, similarityThreshold: cs.similarityThreshold, draftPrompt: "" };
     if (a.copyRoster) { d.students = cur.students.map((s) => ({ ...s })); d.settings.classes = cur.settings.classes.map((c) => ({ ...c })); }
     const id = uuid();
     await writeAreaDoc(id, d);
@@ -219,12 +207,6 @@ export const useStore = create<State>((set, get) => ({
     await p.saveAux("areas", areas);
     set({ areas });
     if (id === get().areaId) { const next = areas[0].id; useStore.setState({ areaId: "" }); await get().switchArea(next); }
-  },
-
-  setLengthOverride(on) {
-    if (on) { get().update((d) => { d.settings.lengthOverride = true; }); return; }
-    const g = lastGlobal;
-    get().update((d) => { d.settings.lengthOverride = false; if (g) applyGlobal(d, g); });
   },
 
   async areaStats() {

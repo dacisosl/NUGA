@@ -4,7 +4,8 @@ import { DRAFT_JSON_SCHEMA, generateLocalDraft, parseDraftResponse, systemPrompt
 export interface DraftProviderResult extends DraftResponse { provider: "anthropic" | "local"; model?: string }
 
 /** 초안 생성. AI 설정이 꺼져 있거나 키가 없으면 로컬 규칙 생성기로 동작. 요청 본문에는 반·번호·이름이 없다. */
-export async function generateDraft(req: DraftRequest, ai: AiSettings, signal?: AbortSignal): Promise<DraftProviderResult> {
+export async function generateDraft(req: DraftRequest, ai: AiSettings, opts?: { guide?: string; signal?: AbortSignal }): Promise<DraftProviderResult> {
+  const signal = opts?.signal;
   if (!ai.enabled || ai.provider !== "anthropic" || !ai.apiKey.trim()) {
     return { ...generateLocalDraft(req), provider: "local" };
   }
@@ -13,7 +14,7 @@ export async function generateDraft(req: DraftRequest, ai: AiSettings, signal?: 
   const base = {
     model,
     max_tokens: 4096,
-    system: systemPrompt(),
+    system: systemPrompt(opts?.guide),
     messages: [{ role: "user" as const, content: userPrompt(req) }],
   };
   let text = "";
@@ -42,6 +43,6 @@ export async function generateDraft(req: DraftRequest, ai: AiSettings, signal?: 
 }
 
 /** 전송될 내용 미리보기(설정 화면용) */
-export function previewPayload(req: DraftRequest): string {
-  return `[system]\n${systemPrompt()}\n\n[user]\n${userPrompt(req)}`;
+export function previewPayload(req: DraftRequest, guide?: string): string {
+  return `[system]\n${systemPrompt(guide)}\n\n[user]\n${userPrompt(req)}`;
 }

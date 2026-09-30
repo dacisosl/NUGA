@@ -7,7 +7,9 @@ import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catCounts, draftOf, fillLesson, isLowRecord, perfsOf, recordsOf, studentsOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, LevelBadge, Modal, StatusChip, Switch } from "../components/ui";
 import { generateDraft } from "../lib/ai";
-import { pickFile, readFileAsDataUrl } from "../lib/platform";
+import { pickFile } from "../lib/platform";
+import { extractText, hasTextLayer, loadDocument, makeExcerpt, maskedThumb, scrubNames, suggestMasks, type DocPage, type ExtractProgress, type Rect } from "../lib/docOcr";
+import { MaskEditor } from "../components/MaskEditor";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 
@@ -39,7 +41,7 @@ async function runGenerate(student: Student, records: NugaRecord[], perfs: Perfo
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
   });
-  return generateDraft(req, doc.settings.ai);
+  return generateDraft(req, doc.settings.ai, { guide: doc.settings.draftPrompt });
 }
 
 function makeDraft(student: Student, w: Working, review: ReturnType<typeof reviewText>, prev?: Draft): Draft {
@@ -420,44 +422,98 @@ function DragHandle({ onDrag }: { onDrag: (dy: number) => void }) {
 }
 
 /* ---------------- PDF기록 등록(개별) ---------------- */
+/*
+ * 흐름: 파일 선택 → 쪽 이미지로 펼치기 → [가리기] → 글자 뽑기(글자층 또는 OCR) → 이름 한 번 더 지우기 → 발췌 → 등록
+ * 원본 파일은 저장하지 않는다. 저장하는 것은 가린 첫 쪽 축소 이미지와 뽑은 글자뿐이다.
+ */
 
-async function tryOcr(dataUrl: string, onProgress?: (p: number) => void): Promise<string> {
-  try {
-    const url = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js";
-    const mod = await import(/* @vite-ignore */ url);
-    const worker = await mod.createWorker("kor+eng", 1, { logger: (m: { status: string; progress: number }) => { if (m.status === "recognizing text") onProgress?.(m.progress); } });
-    const { data } = await worker.recognize(dataUrl);
-    await worker.terminate();
-    return String(data.text || "").trim();
-  } catch { return ""; }
+type OcrStage = "idle" | "loading" | "mask" | "extract" | "done";
+
+function progressLabel(p: ExtractProgress | null): string {
+  if (!p) return "";
+  return p.stage === "text" ? `${p.page}/${p.pages}쪽 글자층 읽는 중` : `${p.page}/${p.pages}쪽 OCR ${Math.round(p.ratio * 100)}%`;
 }
 
 function PerfAddModal({ student, onClose }: { student: Student; onClose: () => void }) {
+  const doc = useStore((s) => s.doc);
   const addPerformance = useStore((s) => s.addPerformance);
   const toast = useStore((s) => s.toast);
+  const names = useMemo(() => doc.students.map((s) => s.name), [doc.students]);
   const [title, setTitle] = useState("탐구보고서");
   const [date, setDate] = useState(nowIso().slice(0, 10));
+  const [fileName, setFileName] = useState("");
+  const [pages, setPages] = useState<DocPage[] | null>(null);
+  const [auto, setAuto] = useState<Rect[][]>([]);
+  const [masks, setMasks] = useState<Rect[][] | null>(null);
+  const [stage, setStage] = useState<OcrStage>("idle");
+  const [prog, setProg] = useState<ExtractProgress | null>(null);
+  const [text, setText] = useState("");
   const [excerpt, setExcerpt] = useState("");
-  const [file, setFile] = useState<string | null>(null);
-  const [ocr, setOcr] = useState("");
-  const [prog, setProg] = useState<number | null>(null);
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [scrubbed, setScrubbed] = useState(0);
+  const [err, setErr] = useState("");
+
   const pick = async () => {
-    const [f] = await pickFile("image/*,.pdf");
+    const [f] = await pickFile("application/pdf,.pdf,image/*");
     if (!f) return;
-    const url = await readFileAsDataUrl(f); setFile(url);
-    if (f.type.startsWith("image/")) { setProg(0); const t = await tryOcr(url, setProg); setProg(null); setOcr(t); if (t && !excerpt) setExcerpt(truncate(t.replace(/\s+/g, " "), 120)); }
+    setErr(""); setStage("loading"); setFileName(f.name); setText(""); setThumb(null); setMasks(null);
+    try {
+      const { pages: pg, truncated } = await loadDocument(f);
+      if (truncated) toast({ text: "앞 10쪽까지만 처리합니다" });
+      setPages(pg); setAuto(suggestMasks(pg, [...names, student.name])); setStage("mask");
+    } catch (e) { setErr(`파일을 열 수 없음: ${e instanceof Error ? e.message : String(e)}`); setStage("idle"); }
   };
-  const save = () => { addPerformance({ class: student.class, no: student.no, title: title.trim() || "PDF기록", date, file, ocrText: ocr, excerpt: excerpt.trim(), matched: true }); toast({ text: "수행평가 등록" }); onClose(); };
+  const run = async (m: Rect[][]) => {
+    if (!pages) return;
+    setMasks(m); setStage("extract"); setProg(null);
+    try {
+      const raw = await extractText(pages, m, setProg);
+      const s = scrubNames(raw, [...names, student.name]);
+      setText(s.text); setScrubbed(s.count);
+      setExcerpt((x) => x || makeExcerpt(s.text));
+      setThumb(await maskedThumb(pages[0], m[0] || []));
+      setStage("done");
+    } catch (e) { setErr(`글자 추출 실패: ${e instanceof Error ? e.message : String(e)}`); setStage("done"); }
+  };
+  const save = () => {
+    addPerformance({ class: student.class, no: student.no, title: title.trim() || "PDF기록", date, file: thumb, ocrText: text, excerpt: excerpt.trim(), matched: true });
+    toast({ text: "PDF기록 등록" }); onClose();
+  };
+  const autoCount = auto.reduce((n, a) => n + a.length, 0);
+  const maskCount = masks?.reduce((n, a) => n + a.length, 0) ?? 0;
+
   return (
-    <Modal title={`PDF기록 · ${student.name}`} onClose={onClose} width="narrow" footer={<><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save}>등록</button></>}>
-      <div className="col" style={{ gap: 12 }}>
-        <div className="grid2"><div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div><div className="field"><label>날짜</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div></div>
-        <div className="flex"><button className="btn sm" onClick={pick}>파일 선택</button>{file && <span className="muted small">첨부됨</span>}{prog !== null && <span className="muted small">OCR {Math.round(prog * 100)}%</span>}</div>
-        {file && file.startsWith("data:image") && <img src={file} alt="" style={{ maxHeight: 160, borderRadius: 8, border: "1px solid var(--line)", objectFit: "contain" }} />}
-        <div className="field"><label>발췌 (초안에 사용되는 내용)</label><textarea rows={3} value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="예: 생활 속 산화·환원 반응 — 철의 부식과 방지 방법 조사" /></div>
-        {ocr && <details><summary className="muted small">OCR 전체 텍스트</summary><pre className="small" style={{ whiteSpace: "pre-wrap", maxHeight: 120, overflow: "auto" }}>{ocr}</pre></details>}
-      </div>
-    </Modal>
+    <>
+      <Modal title={`PDF기록 · ${student.name}`} onClose={onClose} footer={<><span className="muted small">원본 파일은 저장되지 않습니다</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save} disabled={stage === "loading" || stage === "extract" || stage === "mask"}>등록</button></>}>
+        <div className="col" style={{ gap: 12 }}>
+          <div className="grid2"><div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div><div className="field"><label>날짜</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div></div>
+          <div className="ocr-steps">
+            <span className={`st ${stage !== "idle" ? "done" : "cur"}`}>1 파일</span>
+            <span className={`st ${masks ? "done" : stage === "mask" || stage === "loading" ? "cur" : ""}`}>2 가리기</span>
+            <span className={`st ${stage === "done" ? "done" : stage === "extract" ? "cur" : ""}`}>3 글자 뽑기</span>
+            <span className="grow" />
+            <button className="btn sm" onClick={pick} disabled={stage === "loading" || stage === "extract"}>{fileName ? "다른 파일" : "PDF·이미지 선택"}</button>
+            {pages && stage !== "loading" && stage !== "extract" && <button className="btn sm" onClick={() => setStage("mask")}>다시 가리기</button>}
+          </div>
+          {fileName && <div className="small muted">{fileName}{pages ? ` · ${pages.length}쪽` : ""}{masks ? ` · 가림 ${maskCount}곳` : ""}{scrubbed ? ` · 남은 이름 ${scrubbed}곳 ○○○ 처리` : ""}</div>}
+          {stage === "loading" && <div className="flex small"><span className="spin" />쪽 이미지로 펼치는 중</div>}
+          {stage === "extract" && <div className="flex small"><span className="spin" />{progressLabel(prog) || "준비 중"} <span className="muted">(처음 OCR은 한글 인식 데이터를 내려받느라 시간이 걸립니다)</span></div>}
+          {err && <div className="small" style={{ color: "var(--warn)" }}>{err}</div>}
+          {stage === "done" && (
+            <div className="grid2" style={{ gridTemplateColumns: "160px 1fr", alignItems: "start" }}>
+              {thumb ? <img src={thumb} alt="가린 첫 쪽" style={{ width: 160, borderRadius: 8, border: "1px solid var(--line)" }} /> : <span />}
+              <div className="field"><label>뽑은 글자 (고칠 수 있음)</label><textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder="뽑은 글자가 없습니다. 직접 입력할 수 있습니다." /></div>
+            </div>
+          )}
+          <div className="field"><label>발췌 (초안에 쓰이는 내용)</label><textarea rows={3} value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="예: 생활 속 산화·환원 반응 — 철의 부식과 방지 방법 조사" /></div>
+        </div>
+      </Modal>
+      {stage === "mask" && pages && (
+        <MaskEditor title={fileName} pages={pages} initial={masks ?? auto} autoCount={autoCount}
+          onCancel={() => { setStage(masks ? "done" : "idle"); if (!masks) { setPages(null); setFileName(""); } }}
+          onConfirm={run} />
+      )}
+    </>
   );
 }
 
@@ -569,7 +625,11 @@ function Batch() {
 
 /* ---------------- PDF기록 일괄 등록 ---------------- */
 
-interface PerfCandidate { name: string; file: string; ocr: string; no: number | null; excerpt: string }
+interface PerfCandidate {
+  id: string; fileName: string; pages: DocPage[]; auto: Rect[][]; masks: Rect[][] | null;
+  no: number | null; text: string; excerpt: string; thumb: string | null;
+  status: "ready" | "extracting" | "done" | "error"; note: string; textLayer: boolean;
+}
 
 function PerfBatchPanel({ onClose }: { onClose: () => void }) {
   const doc = useStore((s) => s.doc);
@@ -577,13 +637,18 @@ function PerfBatchPanel({ onClose }: { onClose: () => void }) {
   const students = useClassStudents();
   const addPerformance = useStore((s) => s.addPerformance);
   const toast = useStore((s) => s.toast);
+  const names = useMemo(() => doc.students.map((s) => s.name), [doc.students]);
   const [title, setTitle] = useState("탐구보고서");
   const [date, setDate] = useState(nowIso().slice(0, 10));
   const [items, setItems] = useState<PerfCandidate[]>([]);
-  const [busy, setBusy] = useState<string>("");
+  const [loading, setLoading] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [prog, setProg] = useState<Record<string, string>>({});
+  const patchItem = (id: string, p: Partial<PerfCandidate>) => setItems((xs) => xs.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
-  const match = (text: string, filename: string): number | null => {
-    const hay = `${filename} ${text}`;
+  /** 학생 찾기: 파일명 → PDF 글자층(메모리에서만 읽고 저장하지 않음) */
+  const match = (filename: string, rawText: string): number | null => {
+    const hay = `${filename} ${rawText}`;
     for (const s of students) if (s.name && hay.includes(s.name)) return s.no;
     const m = hay.match(/(\d)(\d{2})(\d{2})/);
     if (m) { const c = `${m[1]}-${parseInt(m[2], 10)}`; const no = parseInt(m[3], 10); if (c === cls && students.some((s) => s.no === no)) return no; }
@@ -593,53 +658,88 @@ function PerfBatchPanel({ onClose }: { onClose: () => void }) {
   };
 
   const pick = async () => {
-    const files = await pickFile("image/*,.pdf", true);
-    if (!files.length) return;
-    const out: PerfCandidate[] = [];
+    const files = await pickFile("application/pdf,.pdf,image/*", true);
     for (const f of files) {
-      setBusy(f.name);
-      const url = await readFileAsDataUrl(f);
-      const ocr = f.type.startsWith("image/") ? await tryOcr(url) : "";
-      out.push({ name: f.name, file: url, ocr, no: match(ocr, f.name), excerpt: truncate(ocr.replace(/\s+/g, " "), 120) });
-      setItems([...items, ...out]);
+      setLoading(f.name);
+      try {
+        const { pages } = await loadDocument(f);
+        const raw = pages.map((p) => p.items.map((i) => i.str).join(" ")).join(" ");
+        const auto = suggestMasks(pages, names);
+        const textLayer = pages.some(hasTextLayer);
+        setItems((xs) => [...xs, { id: uuid(), fileName: f.name, pages, auto, masks: null, no: match(f.name, raw), text: "", excerpt: "", thumb: null, status: "ready", note: "", textLayer }]);
+      } catch (e) { toast({ text: `${f.name}: 열 수 없음` }); }
     }
-    setBusy("");
+    setLoading("");
   };
-  const ready = items.filter((i) => i.no !== null);
+
+  const extractOne = async (it: PerfCandidate, masks: Rect[][]) => {
+    patchItem(it.id, { masks, status: "extracting" });
+    try {
+      const raw = await extractText(it.pages, masks, (p) => setProg((x) => ({ ...x, [it.id]: progressLabel(p) })));
+      const s = scrubNames(raw, names);
+      const thumb = await maskedThumb(it.pages[0], masks[0] || []);
+      patchItem(it.id, { text: s.text, excerpt: makeExcerpt(s.text), thumb, status: "done", note: s.count ? `남은 이름 ${s.count}곳 ○○○` : "" });
+    } catch (e) { patchItem(it.id, { status: "error", note: e instanceof Error ? e.message : "실패" }); }
+  };
+  const extractAllAuto = async () => {
+    for (const it of items.filter((x) => x.status === "ready")) await extractOne(it, it.auto);
+  };
+
+  const ready = items.filter((i) => i.no !== null && i.status === "done");
+  const pending = items.filter((i) => i.status === "ready").length;
   const register = () => {
-    for (const i of ready) addPerformance({ class: cls, no: i.no!, title, date, file: i.file, ocrText: i.ocr, excerpt: i.excerpt, matched: true });
+    for (const i of ready) addPerformance({ class: cls, no: i.no!, title, date, file: i.thumb, ocrText: i.text, excerpt: i.excerpt, matched: true });
     toast({ text: `${ready.length}건 등록` }); onClose();
   };
+  const cur = items.find((x) => x.id === editing);
+
   return (
-    <Modal title={`PDF기록 일괄 등록 · ${cls}`} onClose={onClose} width="wide" footer={<><span className="muted small">파일명에 이름 또는 학번(20315)이 있으면 자동 매칭. 이미지는 OCR 시도.</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!ready.length} onClick={register}>{ready.length}건 등록</button></>}>
-      <div className="col" style={{ gap: 12 }}>
-        <div className="flex">
-          <div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-          <div className="field"><label>날짜</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-          <span className="grow" />
-          <button className="btn" onClick={pick} disabled={!!busy}>{busy ? <><span className="spin" /> {busy}</> : "파일 업로드"}</button>
+    <>
+      <Modal title={`PDF기록 일괄 등록 · ${cls}`} onClose={onClose} width="wide" footer={<><span className="muted small">파일명이나 PDF 속 이름·학번으로 학생을 찾습니다. 원본 파일은 저장되지 않습니다.</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!ready.length} onClick={register}>{ready.length}건 등록</button></>}>
+        <div className="col" style={{ gap: 12 }}>
+          <div className="flex">
+            <div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+            <div className="field"><label>날짜</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+            <span className="grow" />
+            <button className="btn" onClick={pick} disabled={!!loading}>{loading ? <><span className="spin" /> {loading}</> : "PDF·이미지 올리기"}</button>
+            <button className="btn primary" onClick={extractAllAuto} disabled={!pending}>자동 가리기로 모두 뽑기 ({pending})</button>
+          </div>
+          {items.some((x) => x.status === "ready" && !x.textLayer) && <div className="small" style={{ color: "var(--warn)" }}>스캔본(글자층 없음)은 이름을 자동으로 찾지 못합니다. "가리기"로 직접 확인한 뒤 뽑으세요.</div>}
+          {items.length > 0 && (
+            <table className="table">
+              <thead><tr><th style={{ width: 64 }}>미리보기</th><th style={{ width: 200 }}>파일</th><th style={{ width: 190 }}>학생</th><th>발췌</th><th style={{ width: 170 }}>가리기 · 추출</th></tr></thead>
+              <tbody>
+                {items.map((it) => (
+                  <tr key={it.id}>
+                    <td>{it.thumb ? <img src={it.thumb} alt="" style={{ width: 44, height: 56, objectFit: "cover", borderRadius: 4, border: "1px solid var(--line)" }} /> : <span className="chip outline">{it.pages.length}쪽</span>}</td>
+                    <td className="small ellipsis" title={it.fileName}>{it.fileName}<div className="muted">{it.textLayer ? "글자층 있음" : "스캔본"} · 자동 {it.auto.reduce((n, a) => n + a.length, 0)}곳</div></td>
+                    <td>
+                      <span className="flex">{it.no !== null ? <span style={{ color: "var(--accent)" }}>✓</span> : <span style={{ color: "var(--warn)" }}>!</span>}
+                        <select className="select" style={{ height: 30 }} value={it.no ?? ""} onChange={(e) => patchItem(it.id, { no: e.target.value ? Number(e.target.value) : null })}>
+                          <option value="">학생 선택</option>{students.map((s) => <option key={s.no} value={s.no}>{s.no}번 {s.name}</option>)}
+                        </select></span>
+                    </td>
+                    <td className="content">{it.status === "done" ? <EditableCell value={it.excerpt} placeholder="발췌 입력" onSave={(v) => patchItem(it.id, { excerpt: v })} /> : <span className="muted small">{it.status === "extracting" ? prog[it.id] || "뽑는 중" : it.status === "error" ? it.note : "가리기 후 뽑기"}</span>}{it.note && it.status === "done" && <div className="muted small">{it.note}</div>}</td>
+                    <td>
+                      <span className="flex">
+                        {it.status === "extracting" ? <span className="spin" /> : <>
+                          <button className="btn sm" onClick={() => setEditing(it.id)}>{it.masks ? "다시 가리기" : "가리기"}</button>
+                          {it.status !== "done" && <button className="btn sm ghost" onClick={() => extractOne(it, it.auto)} title="자동으로 찾은 곳만 가리고 뽑기">자동</button>}
+                        </>}
+                        {it.status === "done" && <span className="chip pass">✓</span>}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
-        {items.length > 0 && (
-          <table className="table">
-            <thead><tr><th style={{ width: 60 }}>미리보기</th><th>파일</th><th style={{ width: 180 }}>학생</th><th>발췌</th></tr></thead>
-            <tbody>
-              {items.map((it, idx) => (
-                <tr key={idx}>
-                  <td>{it.file.startsWith("data:image") ? <img src={it.file} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 4 }} /> : <span className="chip outline">PDF</span>}</td>
-                  <td className="small ellipsis" style={{ maxWidth: 200 }}>{it.name}</td>
-                  <td>
-                    <span className="flex">{it.no !== null ? <span style={{ color: "var(--accent)" }}>✓</span> : <span style={{ color: "var(--warn)" }}>!</span>}
-                      <select className="select" style={{ height: 30 }} value={it.no ?? ""} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, no: e.target.value ? Number(e.target.value) : null } : x))}>
-                        <option value="">인식 실패 — 선택</option>{students.map((s) => <option key={s.no} value={s.no}>{s.no}번 {s.name}</option>)}
-                      </select></span>
-                  </td>
-                  <td><EditableCell value={it.excerpt} placeholder="발췌 입력" onSave={(v) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, excerpt: v } : x))} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </Modal>
+      </Modal>
+      {cur && (
+        <MaskEditor title={cur.fileName} pages={cur.pages} initial={cur.masks ?? cur.auto} autoCount={cur.auto.reduce((n, a) => n + a.length, 0)}
+          onCancel={() => setEditing(null)} onConfirm={(m) => { setEditing(null); extractOne(cur, m); }} />
+      )}
+    </>
   );
 }
