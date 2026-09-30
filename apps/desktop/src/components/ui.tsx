@@ -42,7 +42,7 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   );
 }
 
-export function Modal({ title, children, footer, onClose, width, header }: { title?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; onClose: () => void; width?: "wide" | "narrow"; header?: React.ReactNode }) {
+export function Modal({ title, children, footer, onClose, width, header }: { title?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; onClose: () => void; width?: "wide" | "narrow" | "xl"; header?: React.ReactNode }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);

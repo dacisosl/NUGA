@@ -114,14 +114,14 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
       <div className="col" style={{ gap: 14 }}>
         {recs.length === 0 ? <Empty title="기록 없음" /> : (
           <table className="table">
-            <thead><tr><th style={{ width: 90 }}>날짜</th><th style={{ width: 70 }}>분류</th><th style={{ width: 200 }}>단원</th><th>내용</th><th style={{ width: 70 }}>상태</th><th style={{ width: 40 }} /></tr></thead>
+            <thead><tr><th style={{ width: 90 }}>날짜</th><th style={{ width: 70 }}>분류</th><th style={{ width: 200 }}>단원</th><th className="content-h">내용</th><th style={{ width: 70 }}>상태</th><th style={{ width: 40 }} /></tr></thead>
             <tbody>
               {recs.map((r) => (
                 <tr key={r.id}>
                   <td className="num muted small">{fmtMD(r.time)} {fmtHM(r.time)}</td>
                   <td><select className="select" style={{ height: 28, fontSize: 12 }} value={r.category} onChange={(e) => updateRecord(r.id, { category: Number(e.target.value) as Category })}>{doc.settings.categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></td>
                   <td className="small muted ellipsis" style={{ maxWidth: 200 }}>{lessonLabel(r.lesson) || "—"}</td>
-                  <td>
+                  <td className="content">
                     <EditableCell value={r.note || r.memo || r.voiceMemo?.transcript || ""} placeholder="내용 입력" onSave={(v) => { updateRecord(r.id, { note: v, status: v ? "confirmed" : r.status }); toast({ text: "수정됨" }); }} />
                   </td>
                   <td>{doc.settings.supplementEnabled && r.status === "pending" ? <span className="chip pending">보완 전</span> : r.status === "skipped" ? <span className="chip none">생략</span> : <span className="chip pass">확정</span>}</td>
