@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>학습지원 소프트웨어 필수기준 체크리스트(공급자용) — 누가</title>
+<style>
+@page { size: A4; margin: 11mm 12mm; }
+body { font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", sans-serif; color: #111; font-size: 9.6pt; line-height: 1.35; margin: 0; }
+h1 { text-align: center; font-size: 15.5pt; margin: 0 0 8px; letter-spacing: -0.02em; }
+h2 { font-size: 11.5pt; margin: 9px 0 4px; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td { border: 1px solid #444; padding: 2.5px 5px; vertical-align: middle; word-break: keep-all; }
+th { background: #e9e9e9; font-weight: 700; text-align: center; }
+td.lab { background: #f3f3f3; font-weight: 700; text-align: center; }
+td.c { text-align: center; font-size: 11pt; }
+td.ev { font-size: 8.6pt; color: #1a3fb0; }
+ul { margin: 0; padding-left: 16px; } li { margin: 1px 0; }
+.note { font-size: 9.5pt; margin: 6px 0 0; }
+.small { font-size: 9pt; color: #555; text-align: center; }
+</style></head><body>
+<h1>학습지원 소프트웨어 필수기준 체크리스트(공급자용)</h1>
+
+<h2>□ 제품/서비스 개요</h2>
+<table>
+<colgroup><col style="width:17%"><col style="width:38%"><col style="width:12%"><col style="width:33%"></colgroup>
+<tr><td class="lab">제품/서비스명</td><td>누가(Nuga) — 생기부 누가기록·세특 초안 도구</td><td class="lab">공급자</td><td>[작성자 성명] (교사, 개인 개발)</td></tr>
+<tr><td class="lab">접속경로</td><td colspan="3">웹 https://dacisosl.github.io/NUGA/ · Windows 앱 「Nuga」(설치 파일: github.com/dacisosl/NUGA/releases) · Android 앱 「누가」 · Wear OS 앱 「누가」 · 소스 공개 github.com/dacisosl/NUGA</td></tr>
+<tr><td class="lab">주요 내용 및<br>기능·특장점</td><td colspan="3"><ul>
+<li>교사가 수업 중 워치·폰 위젯으로 학생 행동(질문·발표·협동)을 기록하고 수업 후 PC에서 보완하는 교사 전용 누가기록 도구. 학생 계정·가입·입력 없음</li>
+<li>누가기록을 근거로 세특 초안을 만들고 금지어·문장 유사·어체·글자수를 자동 검토. AI는 선택 기능이며 반·번호·이름은 전송하지 않음(전송 본문 미리보기 제공)</li>
+<li>학생 정보는 교사 PC에만 저장. 기기 간 전송은 AES-256-GCM 종단간 암호화, 릴레이 서버는 암호문만 24시간 보관 후 삭제. 공급자는 어떠한 개인정보도 수집·보관하지 않음</li>
+</ul></td></tr>
+</table>
+
+<h2>□ 개인정보보호 기준 충족여부</h2>
+<table>
+<colgroup><col style="width:15%"><col style="width:43%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:21%"></colgroup>
+<tr><th rowspan="2">선정기준</th><th rowspan="2">세부 내용</th><th colspan="3">확인</th><th rowspan="2">증빙</th></tr>
+<tr><th>충족</th><th>미충족</th><th>해당<br>없음</th></tr>
+<tr><td class="lab" rowspan="3">1. 최소처리<br>원칙 준수</td><td>1-1. 개인정보가 최소한으로 수집되는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제2조: 반·번호·이름·관찰기록만)</td></tr>
+<tr><td>1-2. 개인정보 수집·이용 목적이 기재되어 있는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제3조)</td></tr>
+<tr><td>1-3. 개인정보 수집항목, 보유기간 등이 기재되어 있는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제2조, 제4조)</td></tr>
+<tr><td class="lab">2. 개인정보<br>안전조치 의무</td><td>2-1. 개인정보 안전성 확보에 필요한 조치 사항이 기재되어 있는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제5조, 제9조: 로컬 저장·E2E 암호화·키 관리)</td></tr>
+<tr><td class="lab">3. 열람/정정/<br>삭제/처리정지<br>절차</td><td>3-1. 이용자에게 언제든지 자신의 정보를 열람·정정·삭제·처리정지를 요구할 수 있는 절차가 안내되어 있는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제10조: 앱 내 열람·수정·삭제 기능)</td></tr>
+<tr><td class="lab">4. 만14세<br>미만 아동의<br>개인정보 보호</td><td>4-1. 만 14세 미만 아동의 경우 법정대리인 동의 등 아동의 개인정보 보호를 위한 절차가 마련되어 있는가?</td><td class="c">□</td><td class="c">□</td><td class="c">■</td><td class="ev">(개인정보 처리방침 제6조: 학생 가입·입력이 없는 교사 업무 도구, 학교생활기록 근거)</td></tr>
+<tr><td class="lab" rowspan="3">5.<br>보호책임자/<br>제3자제공/<br>위탁 등</td><td>5-1. 개인정보 보호책임자 관련 정보가 안내되어 있는가?</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제11조)</td></tr>
+<tr><td>5-2. 개인정보 제3자 제공에 관한 정보가 기재되어 있는가? (필요시)</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제7조: 제공 없음, 선택형 AI 전송 항목 명시)</td></tr>
+<tr><td>5-3. 개인정보 위·수탁관계에 관한 정보가 기재되어 있는가? (필요시)</td><td class="c">■</td><td class="c">□</td><td class="c">□</td><td class="ev">(개인정보 처리방침 제8조: 위탁 없음, 릴레이는 암호문만 중계)</td></tr>
+</table>
+<p class="note">※ 개인정보처리방침 확인 방법 : https://dacisosl.github.io/NUGA/privacy.html (앱 내 설정 → 개인정보 처리방침에서 동일 문서 표시). 개인정보처리방침 및 추가 증빙은 별도 파일로 업로드</p>
+
+<h2>□ 작성일 및 문의처</h2>
+<table>
+<colgroup><col style="width:17%"><col style="width:83%"></colgroup>
+<tr><td class="lab">작성일</td><td>2026. 9. 30.</td></tr>
+<tr><td class="lab">문의처</td><td>(전화) [연락처] (이메일) [이메일] · GitHub Issues: https://github.com/dacisosl/NUGA/issues</td></tr>
+</table>
+</body></html>
