@@ -14,7 +14,19 @@ export function CatChip({ cat }: { cat: Category }) {
   return <Chip cat={cat} label={label} />;
 }
 
-export function LevelBadge({ level }: { level: Level }) { return <span className={`lvl ${level}`}>{level}</span>; }
+const NEXT_LEVEL: Record<Level, Level> = { B: "C", C: "A", A: "B" };
+/** 수준 배지. student 를 주면 클릭할 때마다 B → C → A 순으로 바뀐다. */
+export function LevelBadge({ level, student }: { level: Level; student?: { class: string; no: number } }) {
+  const upsert = useStore((s) => s.upsertStudent);
+  const doc = useStore((s) => s.doc);
+  if (!student) return <span className={`lvl ${level}`}>{level}</span>;
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    const cur = doc.students.find((x) => x.class === student.class && x.no === student.no);
+    if (cur) upsert({ ...cur, level: NEXT_LEVEL[cur.level] });
+  };
+  return <span role="button" tabIndex={0} className={`lvl ${level} clickable`} onClick={onClick} onDoubleClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(e as unknown as React.MouseEvent); }} title="클릭: 수준 변경 (B → C → A)">{level}</span>;
+}
 
 export function StatusChip({ result }: { result: ReviewResult }) {
   const icon = result === "pass" ? "✓" : result === "check" ? "!" : result === "fix" ? "✕" : "–";

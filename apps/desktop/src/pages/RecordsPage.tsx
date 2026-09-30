@@ -68,7 +68,7 @@ export function RecordsPage() {
                 <tr key={s.no} className="row" onClick={() => setOpen(s)}>
                   <td className="num key">{s.no}</td>
                   <td className="key"><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
-                  <td><LevelBadge level={s.level} /></td>
+                  <td><LevelBadge level={s.level} student={s} /></td>
                   <td className="tight">
                     <div className="reclist">
                       {recs.length === 0 && <span className="muted small">—</span>}
@@ -107,7 +107,7 @@ export function StudentDetail({ student, onClose }: { student: Student; onClose:
   const perfs = perfsOf(doc, student.class, student.no);
   const goDraft = () => { select({ class: student.class, no: student.no }); setMode2p("individual"); setPage("draft"); onClose(); };
   return (
-    <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span></div>}
+    <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} student={student} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span></div>}
       footer={<><span className="muted small">항목을 클릭하면 수정</span><span className="grow" /><button className="btn primary" onClick={goDraft}><Icon name="pen" />초안 작성</button></>}>
       <div className="col" style={{ gap: 14 }}>
         <Timeline records={recs} perfs={perfs} semester={doc.settings.school.semester} year={doc.settings.school.year} />

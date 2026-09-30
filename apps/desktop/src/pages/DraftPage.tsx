@@ -169,7 +169,7 @@ function Individual() {
               <button key={s.no} className={`stu ${s.no === student.no ? "active" : ""}`} onClick={() => select({ class: s.class, no: s.no })}>
                 <span className="no num">{s.no}</span><span className="n">{s.name}</span>
                 {cache?.dirty ? <span className="dot" style={{ background: "var(--accent)" }} title="저장 안 됨" /> : d?.text ? <span style={{ color: "var(--accent)" }}>✓</span> : s.level === "A" && low ? <span title="A · 기록 부족" style={{ color: "var(--warn)" }}><Icon name="warn" size={14} /></span> : null}
-                <LevelBadge level={s.level} />
+                <LevelBadge level={s.level} student={s} />
               </button>
             );
           })}
@@ -177,7 +177,7 @@ function Individual() {
         <div className="draft-main">
           <div className="draft-scroll">
             <div className="card profile">
-              <LevelBadge level={student.level} />
+              <LevelBadge level={student.level} student={student} />
               <div><div className="name">{student.name}</div><div className="muted small">{student.class} · {student.no}번</div></div>
               <div className="stats">
                 {doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={`${c.label} ${counts[c.key]}`} />)}
@@ -389,7 +389,7 @@ function Batch() {
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                   <td className="num key">{s.no}</td>
                   <td className="key">{s.name}</td>
-                  <td><LevelBadge level={s.level} /></td>
+                  <td><LevelBadge level={s.level} student={s} /></td>
                   <td><span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span></td>
                   <td>{perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>

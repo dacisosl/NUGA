@@ -106,7 +106,8 @@ textarea { resize: vertical; }
 .dot.c1 { background: var(--c1); } .dot.c2 { background: var(--c2); } .dot.c3 { background: var(--c3); } .dot.c4 { background: var(--c4); }
 .dot.warn { background: var(--warn); } .dot.gray { background: var(--text3); }
 .lvl { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font-size: 12px; font-weight: 700; flex: none; }
-.lvl.A { background: #1A1C21; color: #fff; } .lvl.B { background: #D6D8DE; color: #1A1C21; } .lvl.C { background: #fff; color: #1A1C21; border: 1px solid #C9CBD2; }
+.lvl.A { background: #1A1C21; color: #fff; } .lvl.B { background: #fff; color: #1A1C21; border: 1px solid #C9CBD2; } .lvl.C { background: #D6D8DE; color: #1A1C21; }
+.lvl.clickable { cursor: pointer; } .lvl.clickable:hover { box-shadow: 0 0 0 2px var(--accent-soft); }
 .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 11px; font-weight: 700; }
 .badge.blue { background: var(--accent); }
 
