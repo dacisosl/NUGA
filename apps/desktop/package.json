@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node ../../tools/build-privacy.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

@@ -8,13 +8,13 @@ import { TopBar } from "../App";
 import { classList, perfsOf, recordsOf, useStore } from "../store";
 import { Confirm, Icon, LevelBadge, Modal, Switch } from "../components/ui";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
-import { pickFile, readFileAsText, saveFile, hostName } from "../lib/platform";
+import { pickFile, readFileAsText, saveFile, hostName, openExternal } from "../lib/platform";
 import { previewPayload } from "../lib/ai";
 import { syncEngine } from "../lib/syncEngine";
 
 const TABS: { key: string; label: string }[] = [
   { key: "subject", label: "과목" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" }, { key: "progress", label: "진도" },
-  { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" }, { key: "data", label: "데이터" },
+  { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" }, { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
 ];
 
 export function SettingsPage() {
@@ -38,6 +38,7 @@ export function SettingsPage() {
             {tab === "backup" && <BackupSection />}
             {tab === "ai" && <AiSection />}
             {tab === "data" && <DataSection />}
+            {tab === "privacy" && <PrivacySection />}
           </div>
         </div>
       </div>
@@ -468,5 +469,19 @@ function DataSection() {
       {confirm === "sample" && <Confirm title="샘플 데이터" body="현재 데이터를 샘플(화학Ⅰ · 2개 반)로 대체합니다. 동기화·AI 설정은 유지됩니다." okLabel="불러오기" onOk={() => { loadSample(); toast({ text: "샘플 불러옴" }); }} onClose={() => setConfirm(null)} />}
       {confirm === "reset" && <Confirm title="모든 데이터 삭제" body="명단·기록·초안·설정이 모두 삭제됩니다. 먼저 백업하세요." okLabel="삭제" danger onOk={() => { resetAll(); toast({ text: "초기화됨" }); }} onClose={() => setConfirm(null)} />}
     </>
+  );
+}
+
+/* ---------- 개인정보 처리방침 (docs/PRIVACY.md → public/privacy.html) ---------- */
+function PrivacySection() {
+  const url = `${import.meta.env.BASE_URL}privacy.html`;
+  return (
+    <div className="card" style={{ overflow: "hidden" }}>
+      <div className="flex" style={{ padding: "10px 16px", borderBottom: "1px solid var(--line)" }}>
+        <b>누가 개인정보 처리방침</b><span className="muted small">v1.0 · 2026-09-30</span><span className="grow" />
+        <button className="btn sm" onClick={() => openExternal("https://github.com/dacisosl/NUGA/blob/main/docs/PRIVACY.md")}>원문(GitHub)</button>
+      </div>
+      <iframe title="개인정보 처리방침" src={url} style={{ width: "100%", height: "70vh", border: "none", background: "#fff" }} />
+    </div>
   );
 }
