@@ -199,6 +199,8 @@ export function scrubNames(text: string, names: string[]): { text: string; count
 
 /** 추출 글에서 초안에 쓸 발췌(앞부분 요약)를 뽑는다 */
 export function makeExcerpt(text: string, max = 140): string {
-  const flat = text.replace(/\s+/g, " ").trim();
+  // 가린 자리만 남은 줄("학번 ○○○ 성명 ○○○")과 ○○○ 는 발췌에서 뺀다
+  const lines = text.split(/\n/).filter((ln) => ln.replace(/(학번|성명|이름|번호|반|학년)\s*[:：]?|○+|\s/g, "").length > 0);
+  const flat = lines.join(" ").replace(/○+/g, "").replace(/\s+/g, " ").trim();
   return Array.from(flat).length > max ? Array.from(flat).slice(0, max - 1).join("") + "…" : flat;
 }

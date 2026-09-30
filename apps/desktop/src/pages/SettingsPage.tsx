@@ -612,7 +612,7 @@ function AiSection() {
   const showPreview = () => {
     const s = doc.students.find((x) => recordsOf(doc, x.class, x.no).length > 0) || doc.students[0];
     const recs = s ? recordsOf(doc, s.class, s.no) : [];
-    const req = buildDraftRequest({ level: s?.level || "B", targetLength: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
+    const req = buildDraftRequest({ level: s?.level || "B", targetLength: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject, school: doc.settings.school, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
     setPreview(previewPayload(req, doc.settings.draftPrompt));
   };
   return (
@@ -714,7 +714,7 @@ function PromptSection() {
       </div>
       <div className="card pad">
         <h3>함께 전달되는 내용</h3>
-        <div className="small muted">과목·수준·목표 글자수, 체크한 누가기록(날짜·분류·단원·내용), PDF기록 발췌, 현재 초안과 대화 내역, 요청 문장. 반·번호·이름은 보내지 않습니다. 실제 전송 본문은 공통 설정 → AI → 전송 내용 미리보기에서 볼 수 있습니다.</div>
+        <div className="small muted">영역명, 학년·학년도·학기, 수준, 목표 글자수, 체크한 누가기록(날짜·분류·수업 주제·내용), PDF기록 발췌와 가린 전산화 글, 현재 초안과 대화 내역, 요청 문장. 반·번호·이름과 단원·차시 번호는 보내지 않습니다. 실제 전송 본문은 공통 설정 → AI → 전송 내용 미리보기에서 볼 수 있습니다.</div>
       </div>
       {confirmPreset && <Confirm title="양식 불러오기" body="지금 프롬프트를 선택한 양식으로 바꿉니다." okLabel="불러오기" onOk={() => applyPreset(confirmPreset)} onClose={() => setConfirmPreset(null)} />}
     </>

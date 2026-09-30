@@ -38,6 +38,7 @@ async function runGenerate(student: Student, records: NugaRecord[], perfs: Perfo
   const { doc } = useStore.getState();
   const req = buildDraftRequest({
     level: student.level, targetLength: w.target || doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject,
+    school: doc.settings.school,
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
   });
@@ -124,7 +125,8 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     setW((x) => ({ ...x, history }));
     try {
       const res = await runGenerate(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
-      const note = res.provider === "local" ? "규칙 기반으로 초안을 갱신함 (AI 꺼짐)" : `초안을 갱신함 (${res.model})`;
+      const base = res.provider === "local" ? "규칙 기반으로 초안을 갱신함 (AI 꺼짐)" : `초안을 갱신함 (${res.model})`;
+      const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));
     } catch (e) {
       setW((x) => ({ ...x, history: [...history, { role: "assistant", text: `실패: ${e instanceof Error ? e.message : String(e)}`, at: nowIso() }] }));

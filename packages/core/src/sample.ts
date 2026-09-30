@@ -35,9 +35,11 @@ function fill(tpl: string, t: string): string {
 
 function pick<T>(r: () => number, arr: T[]): T { return arr[Math.floor(r() * arr.length)]; }
 
-function pickNote(r: () => number, cat: Category, unit: string | undefined): string {
+/** 그날 수업 주제(진도표 제목)로 관찰 내용을 만든다. 가끔 같은 단원의 세부 주제를 쓴다. */
+function pickNote(r: () => number, cat: Category, unit: string | undefined, title?: string): string {
   const topics = TOPICS[unit || ""] || Object.values(TOPICS).flat();
-  return fill(pick(r, ACTIONS[cat]), pick(r, topics));
+  const t = title && r() < 0.75 ? title : pick(r, topics);
+  return fill(pick(r, ACTIONS[cat]), t);
 }
 
 function iso(date: string, h: number, m: number): string {
@@ -114,7 +116,7 @@ export function makeSampleDoc(seed = 42): NugaDoc {
         lesson,
         memo: pending && r() < 0.5 ? pick(r, ["예외 사례", "오차 원인", "역할 조율", "모형 비교"]) : "",
         voiceMemo: null,
-        note: pending ? "" : pickNote(r, cat, lesson?.unit),
+        note: pending ? "" : pickNote(r, cat, lesson?.unit, lesson?.title),
         status: pending ? "pending" : "confirmed",
         source: pick(r, ["watch", "watch", "phone", "widget"]),
         createdAt: time, updatedAt: time,
