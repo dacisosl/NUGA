@@ -48,7 +48,7 @@ textarea { resize: vertical; }
 .sidebar { transition: width .15s ease; }
 .brand .fold { margin-left: auto; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .brand .fold:hover { background: var(--bg); color: var(--text); }
-.sidebar.collapsed { width: 60px; padding: 20px 8px; }
+.sidebar.collapsed { width: 60px !important; min-width: 60px; flex-basis: 60px; padding: 20px 8px; overflow: hidden; }
 .sidebar.collapsed .brand { padding: 4px 0 16px; justify-content: center; }
 .sidebar.collapsed .brand .dot { display: none; }
 .sidebar.collapsed .brand .fold { margin-left: 0; }
