@@ -13,29 +13,29 @@ import { exportSheets } from "../lib/excel";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
 
-interface Working { text: string; sentences: DraftSentence[]; history: DraftHistory[]; dirty: boolean }
+interface Working { text: string; sentences: DraftSentence[]; history: DraftHistory[]; dirty: boolean; target?: number }
 const workingCache = new Map<string, Working>();
 /** 내용이 있는 기록만 초안 근거로 쓴다 (보완 전 빈 기록 제외) */
 const hasText = (r: NugaRecord) => !!(r.note || r.memo || r.voiceMemo?.transcript || "").trim();
 const keyOf = (s: Student) => `${s.class}-${s.no}`;
 
-function useDraftReview(student: Student | null, text: string, sentences: DraftSentence[] | null) {
+function useDraftReview(student: Student | null, text: string, sentences: DraftSentence[] | null, targetOverride?: number) {
   const doc = useStore((s) => s.doc);
   return useMemo(() => {
     if (!student) return null;
     const others = doc.drafts.filter((d) => d.class === student.class && d.no !== student.no && d.text).map((d) => ({ text: d.text, label: `${d.no}번` }));
     return reviewText(text, sentences, {
-      target: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, level: student.level,
+      target: targetOverride || doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, level: student.level,
       recordCount: recordsOf(doc, student.class, student.no).filter((r) => r.status !== "skipped").length,
       lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: student.name,
     });
-  }, [doc, student?.class, student?.no, text, sentences]);
+  }, [doc, student?.class, student?.no, text, sentences, targetOverride]);
 }
 
 async function runGenerate(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined) {
   const { doc } = useStore.getState();
   const req = buildDraftRequest({
-    level: student.level, targetLength: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject,
+    level: student.level, targetLength: w.target || doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject,
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
   });
@@ -48,7 +48,7 @@ function makeDraft(student: Student, w: Working, review: ReturnType<typeof revie
   return {
     id: prev?.id || uuid(), class: student.class, no: student.no, field: "세특", text: w.text,
     length: doc.settings.lengthMode === "withSpaces" ? cc.withSpaces : cc.withoutSpaces,
-    sentences: w.sentences, evidence: [...new Set(w.sentences.flatMap((s) => s.evidence))], status: "saved",
+    sentences: w.sentences, evidence: [...new Set(w.sentences.flatMap((s) => s.evidence))], status: "saved", targetLength: w.target,
     review: { result: review.result, issues: review.issues, at: nowIso() }, history: w.history, updatedAt: nowIso(),
   };
 }
@@ -109,7 +109,7 @@ function Individual() {
     if (!student) return;
     const k = keyOf(student);
     const cached = workingCache.get(k);
-    setW(cached || { text: saved?.text || "", sentences: saved?.sentences || [], history: saved?.history || [], dirty: false });
+    setW(cached || { text: saved?.text || "", sentences: saved?.sentences || [], history: saved?.history || [], dirty: false, target: saved?.targetLength });
     const evid = new Set(saved?.evidence || []);
     setChecked(new Set([...recs.filter((r) => r.status !== "skipped" && hasText(r) && (evid.size ? evid.has(r.id) : true)).map((r) => r.id), ...perfs.filter((p) => (evid.size ? evid.has(p.id) : true)).map((p) => p.id)]));
     setInput("");
@@ -117,8 +117,8 @@ function Individual() {
   useEffect(() => { if (student) workingCache.set(keyOf(student), w); }, [w, student]);
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, expanded]);
 
-  const review = useDraftReview(student, w.text, w.sentences.length ? w.sentences : null);
-  const target = doc.settings.targetLength["세특"] || 500;
+  const target = w.target || doc.settings.targetLength["세특"] || 500;
+  const review = useDraftReview(student, w.text, w.sentences.length ? w.sentences : null, target);
   const len = doc.settings.lengthMode === "withSpaces" ? countChars(w.text).withSpaces : countChars(w.text).withoutSpaces;
 
   const toggle = (id: string) => setChecked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -167,9 +167,9 @@ function Individual() {
             const cache = workingCache.get(keyOf(s));
             return (
               <button key={s.no} className={`stu ${s.no === student.no ? "active" : ""}`} onClick={() => select({ class: s.class, no: s.no })}>
-                <LevelBadge level={s.level} /><span className="n">{s.name}</span>
+                <span className="no num">{s.no}</span><span className="n">{s.name}</span>
                 {cache?.dirty ? <span className="dot" style={{ background: "var(--accent)" }} title="저장 안 됨" /> : d?.text ? <span style={{ color: "var(--accent)" }}>✓</span> : s.level === "A" && low ? <span title="A · 기록 부족" style={{ color: "var(--warn)" }}><Icon name="warn" size={14} /></span> : null}
-                <span className="no num">{s.no}</span>
+                <LevelBadge level={s.level} />
               </button>
             );
           })}
@@ -191,7 +191,7 @@ function Individual() {
                 <label key={r.id} className={`reccard ${checked.has(r.id) ? "" : "off"}`} style={{ cursor: "pointer" }}>
                   <input type="checkbox" className="checkbox" checked={checked.has(r.id)} onChange={() => toggle(r.id)} style={{ marginTop: 3 }} />
                   <div className="grow">
-                    <div className="meta"><CatChip cat={r.category} /><span className="num">{fmtMD(r.time)}</span><span>{lessonLabel(r.lesson)}</span>{r.status === "pending" && <span className="chip pending">보완 전</span>}</div>
+                    <div className="meta"><CatChip cat={r.category} /><span className="num">{fmtMD(r.time)}</span><span>{lessonLabel(r.lesson)}</span>{doc.settings.supplementEnabled && r.status === "pending" && <span className="chip pending">보완 전</span>}</div>
                     <div>{r.note || r.memo || r.voiceMemo?.transcript || <span className="muted">내용 없음</span>}</div>
                   </div>
                 </label>
@@ -215,6 +215,7 @@ function Individual() {
             <div className="bar">
               <button className="btn ghost sm" onClick={() => setExpanded(!expanded)}>{expanded ? "접기" : "펼치기"}</button>
               <LenBar len={len} target={target} mode={doc.settings.lengthMode} />
+              <span className="flex small muted" title="이 학생의 목표 글자수 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(doc.settings.targetLength["세특"] || 500)} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />자</span>
               {review && w.text && <StatusChip result={review.result} />}
               {w.dirty && <span className="muted small">저장 안 됨</span>}
               <span className="grow" />
@@ -367,7 +368,7 @@ function Batch() {
     <div className="content">
       <div className="flex" style={{ marginBottom: 12 }}>
         <span className="muted">선택 <b className="num">{sel.size}</b>명</span>
-        <span className="flex small muted">목표 <input type="number" className="num" style={{ width: 70, height: 30 }} value={target} onChange={(e) => setSettings((s) => ({ ...s, targetLength: { ...s.targetLength, "세특": Number(e.target.value) || 0 } }))} />자</span>
+        <span className="flex small muted">일괄 목표 <input type="number" className="num" style={{ width: 70, height: 30 }} value={target} onChange={(e) => setSettings((s) => ({ ...s, targetLength: { ...s.targetLength, "세특": Number(e.target.value) || 0 } }))} />자</span>
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
         <span className="grow" />
         <button className="btn" onClick={() => setPerfPanel(true)}>수행평가 일괄 등록</button>
@@ -386,15 +387,15 @@ function Batch() {
               return (
                 <tr key={s.no} className={`row ${sel.has(s.no) ? "selected" : ""}`} onDoubleClick={() => { select({ class: s.class, no: s.no }); setMode("individual"); }}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
-                  <td className="num muted">{s.no}</td>
-                  <td>{s.name}</td>
+                  <td className="num key">{s.no}</td>
+                  <td className="key">{s.name}</td>
                   <td><LevelBadge level={s.level} /></td>
                   <td><span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span></td>
                   <td>{perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
                   <td onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
                     <EditableCell value={d?.text ? truncate(d.text, 80) : ""} placeholder="—" onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
                   </td>
-                  <td>{d?.text ? <LenBar len={d.length} target={target} /> : <span className="muted">—</span>}</td>
+                  <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : <span className="muted">—</span>}</td>
                   <td>
                     {st?.st === "running" ? <span className="flex small"><span className="spin" />생성 중</span>
                       : st?.st === "error" ? <span className="flex small" style={{ color: "var(--warn)" }}>{st.msg} <button className="btn sm" onClick={() => runOne(s)}>재시도</button></span>

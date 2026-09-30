@@ -13,7 +13,7 @@ import { previewPayload } from "../lib/ai";
 import { syncEngine } from "../lib/syncEngine";
 
 const TABS: { key: string; label: string }[] = [
-  { key: "subject", label: "과목" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" }, { key: "progress", label: "진도" },
+  { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" }, { key: "progress", label: "진도" },
   { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" }, { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
 ];
 
@@ -53,9 +53,9 @@ export function SubjectSection() {
   const up = (p: Partial<typeof school>) => setSettings((s) => ({ ...s, school: { ...s.school, ...p } }));
   return (
     <div className="card pad">
-      <h3>과목</h3>
+      <h3>영역</h3>
       <div className="grid2">
-        <div className="field"><label>담당 과목</label><input value={school.subject} onChange={(e) => up({ subject: e.target.value })} placeholder="예: 화학Ⅰ" /></div>
+        <div className="field"><label>영역명 (교과·동아리·행동특성 등)</label><input value={school.subject} onChange={(e) => up({ subject: e.target.value })} placeholder="예: 화학Ⅰ / 과학탐구 동아리 / 행동특성" /><span className="muted small">모든 화면 상단에 크게 표시됩니다.</span></div>
         <div className="field"><label>학년</label><select className="select" value={school.grade} onChange={(e) => up({ grade: Number(e.target.value) })}>{[1, 2, 3].map((g) => <option key={g} value={g}>{g}학년</option>)}</select></div>
         <div className="field"><label>학년도</label><input type="number" className="num" value={school.year} onChange={(e) => up({ year: Number(e.target.value) })} /></div>
         <div className="field"><label>학기</label><select className="select" value={school.semester} onChange={(e) => up({ semester: Number(e.target.value) })}><option value={1}>1학기</option><option value={2}>2학기</option></select></div>
@@ -291,7 +291,8 @@ function LengthSection() {
       <div className="grid2">
         <div className="field"><label>세특 목표 글자수</label><input type="number" className="num" value={s.targetLength["세특"] || 500} onChange={(e) => setSettings((x) => ({ ...x, targetLength: { ...x.targetLength, "세특": Number(e.target.value) } }))} /><span className="muted small">허용 구간 N−20 ~ N−1 · NEIS 바이트는 검토 패널에 병기</span></div>
         <div className="field"><label>글자수 기준</label><span className="seg"><button className={s.lengthMode === "withSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withSpaces" })}>공백 포함</button><button className={s.lengthMode === "withoutSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withoutSpaces" })}>공백 제외</button></span></div>
-        <div className="field"><label>기록 부족 기준 (건 이하)</label><input type="number" className="num" value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Number(e.target.value) })} /></div>
+        <div className="field"><label>기록 부족 표시</label><Switch on={s.lowRecordEnabled} onChange={(v) => setSettings({ lowRecordEnabled: v })} label={s.lowRecordEnabled ? "켬 — 이름 옆 주황 점과 필터 표시" : "끔"} />{s.lowRecordEnabled && <span className="flex small muted">기준 <input type="number" className="num" style={{ width: 60, height: 30 }} value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Number(e.target.value) })} />건 이하</span>}</div>
+        <div className="field"><label>보완 대기 흐름</label><Switch on={s.supplementEnabled} onChange={(v) => setSettings({ supplementEnabled: v })} label={s.supplementEnabled ? "켬 — 워치·폰 기록을 보완 전 상태로 받아 모달로 처리" : "끔 — 도착한 기록을 바로 확정"} /></div>
         <div className="field"><label>문장 유사도 임계값 (0~1)</label><input type="number" step="0.05" min="0.3" max="1" className="num" value={s.similarityThreshold} onChange={(e) => setSettings({ similarityThreshold: Number(e.target.value) })} /></div>
       </div>
     </div>

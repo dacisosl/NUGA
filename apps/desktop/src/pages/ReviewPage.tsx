@@ -29,7 +29,7 @@ export function ReviewPage() {
 
   const reviewOne = (s: Student, d: Draft): Draft => {
     const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
-    const r = reviewText(d.text, d.sentences.length ? d.sentences : null, { target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recordsOf(doc, s.class, s.no).filter((x) => x.status !== "skipped").length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name });
+    const r = reviewText(d.text, d.sentences.length ? d.sentences : null, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recordsOf(doc, s.class, s.no).filter((x) => x.status !== "skipped").length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name });
     return { ...d, review: { result: r.result, issues: r.issues, at: nowIso() } };
   };
   const runReview = () => {
@@ -71,9 +71,9 @@ export function ReviewPage() {
                     {visible.map(({ s, d, result }) => (
                       <tr key={s.no} className={`row ${cur === s.no ? "selected" : ""}`} onClick={() => setCur(s.no)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
-                        <td className="num muted">{s.no}</td><td>{s.name}</td><td><LevelBadge level={s.level} /></td>
+                        <td className="num key">{s.no}</td><td className="key">{s.name}</td><td><LevelBadge level={s.level} /></td>
                         <td className="wrap"><div className="review-preview">{d?.text || <span className="muted">—</span>}</div></td>
-                        <td>{d?.text ? <LenBar len={d.length} target={target} /> : ""}</td>
+                        <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : ""}</td>
                         <td><StatusChip result={result} /></td>
                       </tr>
                     ))}
@@ -83,7 +83,7 @@ export function ReviewPage() {
             </div>
           </div>
           <div className="review-side">
-            {!curRow ? <div className="card pad muted">행을 선택하면 문제 목록이 표시됩니다.</div> : <SidePanel row={curRow} target={target} onNext={goNext} onOpen={openDraft} onUpdate={(d) => saveDraft(reviewOne(curRow.s, d))} />}
+            {!curRow ? <div className="card pad muted">행을 선택하면 문제 목록이 표시됩니다.</div> : <SidePanel row={curRow} target={curRow.d?.targetLength || target} onNext={goNext} onOpen={openDraft} onUpdate={(d) => saveDraft(reviewOne(curRow.s, d))} />}
           </div>
         </div>
       </div>

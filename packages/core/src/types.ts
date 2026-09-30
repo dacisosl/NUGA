@@ -67,6 +67,7 @@ export interface Draft {
   sentences: DraftSentence[];
   evidence: string[];
   status: "draft" | "saved";
+  targetLength?: number;
   review: { result: ReviewResult; issues: ReviewIssue[]; at?: string };
   history: DraftHistory[];
   updatedAt: string;
@@ -106,6 +107,8 @@ export interface Settings {
   targetLength: Record<string, number>;
   lengthMode: "withSpaces" | "withoutSpaces";
   lowRecordThreshold: number;
+  lowRecordEnabled: boolean;
+  supplementEnabled: boolean;
   similarityThreshold: number;
   options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean };
   sync: SyncSettings | null;
@@ -167,6 +170,8 @@ export function defaultSettings(): Settings {
     targetLength: { "세특": 500 },
     lengthMode: "withSpaces",
     lowRecordThreshold: 1,
+    lowRecordEnabled: false,
+    supplementEnabled: false,
     similarityThreshold: 0.7,
     options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false },
     sync: null,

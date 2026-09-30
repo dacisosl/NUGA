@@ -123,7 +123,8 @@ class SyncEngine {
     const st = useStore.getState();
     let added: NugaRecord[] = [];
     st.update((d) => {
-      const filled = incoming.map((r) => ({ ...r, lesson: r.lesson || lessonFor(d.settings.progress, r.class, r.time) }));
+      const supp = d.settings.supplementEnabled;
+      const filled = incoming.map((r) => ({ ...r, lesson: r.lesson || lessonFor(d.settings.progress, r.class, r.time), status: !supp && r.status === "pending" ? "confirmed" as const : r.status }));
       const m = mergeRecords(d.records, filled);
       added = m.added;
       d.records = applyTombstones(m.records, tombs).records;
@@ -134,13 +135,14 @@ class SyncEngine {
         else dev.lastSeen = nowIso();
       }
     });
-    const pending = added.filter((r) => r.status === "pending").map((r) => r.id);
+    const supp = useStore.getState().doc.settings.supplementEnabled;
+    const pending = (supp ? added.filter((r) => r.status === "pending") : added).map((r) => r.id);
     if (pending.length) {
       const names = pending.slice(0, 3).map((id) => { const r = added.find((x) => x.id === id)!; return `${r.class} · ${r.no}번`; }).join(", ");
       const body = `${pending.length}건 도착 — ${names}${pending.length > 3 ? " 외" : ""}`;
       notify("누가 기록 도착", body);
       const s = useStore.getState();
-      s.toast({ text: body, kind: "notice", ttl: 15000, action: { label: "보완하기", onClick: () => useStore.getState().openSupplement(pending) } });
+      s.toast({ text: body, kind: "notice", ttl: 15000, action: supp ? { label: "보완하기", onClick: () => useStore.getState().openSupplement(pending) } : { label: "보기", onClick: () => useStore.getState().setPage("records") } });
     }
   }
 }

@@ -55,10 +55,11 @@ function Sidebar() {
   const sync = useStore((s) => s.syncStatus);
   const pending = useMemo(() => doc.records.filter((r) => r.status === "pending").length, [doc.records]);
   const openSupplement = useStore((s) => s.openSupplement);
-  const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"]; k: string }[] = [
-    { key: "records", label: "누가기록", icon: "list", k: "⌃1" },
-    { key: "draft", label: "초안 작성", icon: "pen", k: "⌃2" },
-    { key: "review", label: "검토", icon: "check", k: "⌃3" },
+  const supp = doc.settings.supplementEnabled;
+  const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"] }[] = [
+    { key: "records", label: "누가기록", icon: "list" },
+    { key: "draft", label: "초안 작성", icon: "pen" },
+    { key: "review", label: "검토", icon: "check" },
   ];
   return (
     <aside className="sidebar">
@@ -66,10 +67,9 @@ function Sidebar() {
       {items.map((it) => (
         <button key={it.key} className={`nav ${page === it.key ? "active" : ""}`} onClick={() => setPage(it.key)}>
           <Icon name={it.icon} />{it.label}
-          {it.key === "records" && pending > 0 ? <span className="badge">{pending}</span> : <span className="k">{it.k}</span>}
         </button>
       ))}
-      {pending > 0 && (
+      {supp && pending > 0 && (
         <button className="btn primary sm" style={{ margin: "8px 12px" }} onClick={() => openSupplement(doc.records.filter((r) => r.status === "pending").sort((a, b) => a.time.localeCompare(b.time)).map((r) => r.id))}>
           보완 {pending}건
         </button>
@@ -80,7 +80,7 @@ function Sidebar() {
           <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : ""}`} style={sync.state === "error" ? { background: "var(--warn)" } : undefined} />
           <span className="ellipsis">{sync.state === "error" ? `오류 · ${sync.message}` : sync.message}</span>
         </div>
-        <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" />설정<span className="k">⌃4</span></button>
+        <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" />설정</button>
       </div>
     </aside>
   );
@@ -90,7 +90,7 @@ function Sidebar() {
 export function TopBar({ title, center, onExcel, right }: { title: string; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
   const doc = useStore((s) => s.doc);
   const toast = useStore((s) => s.toast);
-  const subject = doc.settings.school.subject || "과목 미설정";
+  const subject = doc.settings.school.subject || "영역 미설정";
   const exportJson = async () => {
     const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
     if (ok) toast({ text: "JSON 내보내기 완료" });
@@ -98,7 +98,7 @@ export function TopBar({ title, center, onExcel, right }: { title: string; cente
   return (
     <div className="topbar">
       <h1>{title}</h1>
-      <span className="chip outline">{subject} · {doc.settings.school.grade}학년 · {doc.settings.school.year}-{doc.settings.school.semester}</span>
+      <span className="area"><b>{subject}</b><span className="meta">{doc.settings.school.grade}학년 · {doc.settings.school.year}-{doc.settings.school.semester}</span></span>
       {center}
       <span className="sep" />
       {right}

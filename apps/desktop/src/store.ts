@@ -182,6 +182,8 @@ export const useStore = create<State>((set, get) => ({
     const sample = makeSampleDoc();
     const cur = get().doc;
     sample.settings.sync = cur.settings.sync; sample.settings.ai = cur.settings.ai;
+    sample.settings.lowRecordEnabled = cur.settings.lowRecordEnabled; sample.settings.supplementEnabled = cur.settings.supplementEnabled;
+    if (!sample.settings.supplementEnabled) for (const r of sample.records) if (r.status === "pending") r.status = "confirmed";
     set({ doc: sample, cls: sample.settings.classes[0].class, page: "records" });
     scheduleSave(sample, get().outbox);
   },
@@ -239,5 +241,6 @@ export function fillLesson(doc: NugaDoc, r: NugaRecord): NugaRecord {
 }
 
 export function isLowRecord(doc: NugaDoc, cls: string, no: number): boolean {
+  if (!doc.settings.lowRecordEnabled) return false;
   return recordsOf(doc, cls, no).filter((r) => r.status !== "skipped").length <= doc.settings.lowRecordThreshold;
 }

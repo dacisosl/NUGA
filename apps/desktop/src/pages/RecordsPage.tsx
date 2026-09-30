@@ -17,6 +17,7 @@ export function RecordsPage() {
   const [open, setOpen] = useState<Student | null>(null);
   const [adding, setAdding] = useState(false);
   const toast = useStore((s) => s.toast);
+  const lowOn = doc.settings.lowRecordEnabled; const supp = doc.settings.supplementEnabled;
 
   const rows = useMemo(() => students.map((s) => {
     const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
@@ -47,17 +48,17 @@ export function RecordsPage() {
   return (
     <>
       <TopBar title="누가기록" onExcel={exportExcel} right={<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button>} />
-      <ClassTabs extra={(c) => { const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
+      <ClassTabs extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content">
         <div className="flex" style={{ marginBottom: 12 }}>
           <SearchBox value={q} onChange={setQ} />
           <span className="seg">
             <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 {students.length}</button>
-            <button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><span className="dot warn" style={{ marginRight: 6 }} />기록 부족 {counts.low}</button>
-            <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>보완 대기 {counts.pending}</button>
+            {lowOn && <button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><span className="dot warn" style={{ marginRight: 6 }} />기록 부족 {counts.low}</button>}
+            {supp && <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>보완 대기 {counts.pending}</button>}
           </span>
           <span className="grow" />
-          <span className="muted small">기록 부족 = {doc.settings.lowRecordThreshold}건 이하</span>
+          {lowOn && <span className="muted small">기록 부족 = {doc.settings.lowRecordThreshold}건 이하</span>}
         </div>
         {students.length === 0 ? <Empty title="명단 없음" desc="설정 → 반·명단에서 학생을 등록하세요" /> : (
           <table className="table">
@@ -65,8 +66,8 @@ export function RecordsPage() {
             <tbody>
               {rows.map(({ s, recs, low, pending }) => (
                 <tr key={s.no} className="row" onClick={() => setOpen(s)}>
-                  <td className="num muted">{s.no}</td>
-                  <td><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
+                  <td className="num key">{s.no}</td>
+                  <td className="key"><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
                   <td><LevelBadge level={s.level} /></td>
                   <td className="tight">
                     <div className="reclist">
@@ -74,7 +75,7 @@ export function RecordsPage() {
                       {recs.slice(0, 4).map((r) => (
                         <span key={r.id} className="recitem">
                           <CatChip cat={r.category} /><span className="d num">{fmtMD(r.time)}</span>
-                          <span className="t">{r.note || r.memo || r.voiceMemo?.transcript || <span className="muted">{r.status === "pending" ? "보완 전" : "내용 없음"}</span>}</span>
+                          <span className="t">{r.note || r.memo || r.voiceMemo?.transcript || <span className="muted">{supp && r.status === "pending" ? "보완 전" : "내용 없음"}</span>}</span>
                         </span>
                       ))}
                       {recs.length > 4 && <span className="muted small nowrap">+{recs.length - 4}</span>}
@@ -122,7 +123,7 @@ export function StudentDetail({ student, onClose }: { student: Student; onClose:
                   <td>
                     <EditableCell value={r.note || r.memo || r.voiceMemo?.transcript || ""} placeholder="내용 입력" onSave={(v) => { updateRecord(r.id, { note: v, status: v ? "confirmed" : r.status }); toast({ text: "수정됨" }); }} />
                   </td>
-                  <td>{r.status === "pending" ? <span className="chip pending">보완 전</span> : r.status === "skipped" ? <span className="chip none">생략</span> : <span className="chip pass">확정</span>}</td>
+                  <td>{doc.settings.supplementEnabled && r.status === "pending" ? <span className="chip pending">보완 전</span> : r.status === "skipped" ? <span className="chip none">생략</span> : <span className="chip pass">확정</span>}</td>
                   <td><button className="btn ghost icon sm" onClick={() => setDel(r)} aria-label="삭제"><Icon name="trash" size={14} /></button></td>
                 </tr>
               ))}
