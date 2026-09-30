@@ -7,6 +7,7 @@ import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Onboarding } from "./pages/Onboarding";
 import { SupplementModal } from "./components/SupplementModal";
+import { AreaSwitcher } from "./components/AreaSwitcher";
 import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
 import { saveFile } from "./lib/platform";
@@ -49,6 +50,8 @@ export default function App() {
 }
 
 function Sidebar() {
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("nuga.sidebar") === "1"; } catch { return false; } });
+  const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem("nuga.sidebar", v ? "1" : "0"); } catch { /* ignore */ } };
   const page = useStore((s) => s.page);
   const setPage = useStore((s) => s.setPage);
   const doc = useStore((s) => s.doc);
@@ -62,11 +65,11 @@ function Sidebar() {
     { key: "review", label: "검토", icon: "check" },
   ];
   return (
-    <aside className="sidebar">
-      <div className="brand"><span className="dot" />누가</div>
+    <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
+      <div className="brand"><span className="dot" />{!collapsed && "누가"}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
       {items.map((it) => (
-        <button key={it.key} className={`nav ${page === it.key ? "active" : ""}`} onClick={() => setPage(it.key)}>
-          <Icon name={it.icon} />{it.label}
+        <button key={it.key} className={`nav ${page === it.key ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
+          <Icon name={it.icon} /><span className="lbl">{it.label}</span>
         </button>
       ))}
       {supp && pending > 0 && (
@@ -78,9 +81,9 @@ function Sidebar() {
       <div className="syncbox">
         <div className="st" title={sync.lastAt ? `마지막 ${sync.lastAt.slice(11, 16)}` : ""}>
           <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : ""}`} style={sync.state === "error" ? { background: "var(--warn)" } : undefined} />
-          <span className="ellipsis">{sync.state === "error" ? `오류 · ${sync.message}` : sync.message}</span>
+          <span className="ellipsis lbl">{sync.state === "error" ? `오류 · ${sync.message}` : sync.message}</span>
         </div>
-        <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" />설정</button>
+        <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" /><span className="lbl">설정</span></button>
       </div>
     </aside>
   );
@@ -90,7 +93,6 @@ function Sidebar() {
 export function TopBar({ title, center, onExcel, right }: { title: string; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
   const doc = useStore((s) => s.doc);
   const toast = useStore((s) => s.toast);
-  const subject = doc.settings.school.subject || "영역 미설정";
   const exportJson = async () => {
     const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
     if (ok) toast({ text: "JSON 내보내기 완료" });
@@ -98,7 +100,7 @@ export function TopBar({ title, center, onExcel, right }: { title: string; cente
   return (
     <div className="topbar">
       <h1>{title}</h1>
-      <span className="area"><b>{subject}</b><span className="meta">{doc.settings.school.grade}학년 · {doc.settings.school.year}-{doc.settings.school.semester}</span></span>
+      <AreaSwitcher />
       {center}
       <span className="sep" />
       {right}

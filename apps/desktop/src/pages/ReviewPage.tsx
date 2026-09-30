@@ -71,7 +71,7 @@ export function ReviewPage() {
                     {visible.map(({ s, d, result }) => (
                       <tr key={s.no} className={`row ${cur === s.no ? "selected" : ""}`} onClick={() => setCur(s.no)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
-                        <td className="num key">{s.no}</td><td className="key">{s.name}</td><td><LevelBadge level={s.level} student={s} /></td>
+                        <td className="num key">{s.no}</td><td className="key name">{s.name}</td><td><LevelBadge level={s.level} student={s} /></td>
                         <td className="wrap"><div className="review-preview">{d?.text || <span className="muted">—</span>}</div></td>
                         <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : ""}</td>
                         <td><StatusChip result={result} /></td>

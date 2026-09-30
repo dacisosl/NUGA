@@ -1,5 +1,6 @@
 import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, type NugaRecord, type SyncMessage } from "@nuga/core";
-import { useStore } from "../store";
+import { readAreaDoc, useStore, writeAreaDoc } from "../store";
+import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
 
 /** PC 쪽 동기화 엔진: 릴레이 폴링 → 복호화 → 병합 → ack. 설정 변경 시 config 내려보내기. */
@@ -62,9 +63,31 @@ class SyncEngine {
   }
 
   /** 설정(시간표·진도·카테고리·명렬 옵션)이 바뀌었으면 폰으로 내려보냄 */
+  /** 현재 영역 + 나머지 영역 문서 (반·시간표 합산용) */
+  private async allDocs(): Promise<{ id: string; doc: NugaDoc }[]> {
+    const st = useStore.getState();
+    const out: { id: string; doc: NugaDoc }[] = [{ id: st.areaId, doc: st.doc }];
+    for (const a of st.areas) if (a.id !== st.areaId) { const d = await readAreaDoc(a.id); if (d) out.push({ id: a.id, doc: d }); }
+    return out;
+  }
+
   async pushConfigIfChanged(client: RelayClient, force = false) {
     const { doc, deviceId } = useStore.getState();
-    const cfg = buildConfigMessage(doc.settings, doc.students);
+    const docs = await this.allDocs();
+    // 여러 영역의 반·시간표·진도를 합쳐 폰에 내려보낸다 (같은 요일·교시는 먼저 등록된 영역 우선)
+    const classes = new Map<string, number>();
+    const tt = new Map<string, { weekday: number; period: number; class: string }>();
+    const progress = new Map<string, NugaDoc["settings"]["progress"][number]>();
+    const roster: { class: string; no: number; name: string }[] = [];
+    for (const { doc: d } of docs) {
+      for (const c of d.settings.classes) classes.set(c.class, Math.max(classes.get(c.class) || 0, c.size));
+      for (const s of d.students) classes.set(s.class, Math.max(classes.get(s.class) || 0, s.no));
+      for (const t of d.settings.timetable) { const k = `${t.weekday}-${t.period}`; if (!tt.has(k)) tt.set(k, t); }
+      for (const pr of d.settings.progress) progress.set(`${pr.class}|${pr.date}`, pr);
+      for (const s of d.students) if (!roster.some((r) => r.class === s.class && r.no === s.no)) roster.push({ class: s.class, no: s.no, name: s.name });
+    }
+    const merged = { ...doc.settings, classes: [...classes].map(([c, size]) => ({ class: c, size })), timetable: [...tt.values()], progress: [...progress.values()] };
+    const cfg = buildConfigMessage(merged, roster.map((r) => ({ ...r, level: "B" as const })));
     const key = JSON.stringify({ ...cfg, updatedAt: "" });
     if (!force && key === this.lastConfigJson) return;
     await client.send({ v: 1, type: "config", deviceId, sentAt: nowIso(), payload: cfg }, "pc");
@@ -100,7 +123,7 @@ class SyncEngine {
       if (message) this.handle(message, incoming, tombs);
       await client.ack(item.id);
     }
-    this.apply(incoming, tombs);
+    await this.apply(incoming, tombs);
     useStore.getState().setSettings((s) => ({ ...s, sync: s.sync ? { ...s.sync, lastPulledId: lastId, lastSyncAt: nowIso() } : null }));
   }
 
@@ -118,9 +141,30 @@ class SyncEngine {
     }
   }
 
-  private apply(incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[]) {
+  private async apply(incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[]) {
     if (!incoming.length && !tombs.length) return;
     const st = useStore.getState();
+    // 반이 속한 영역으로 라우팅: 현재 영역 우선, 없으면 그 반을 가진 다른 영역, 그래도 없으면 현재 영역
+    const docs = await this.allDocs();
+    const has = (d: NugaDoc, cls: string) => d.settings.classes.some((c) => c.class === cls) || d.students.some((s) => s.class === cls);
+    const mine: NugaRecord[] = []; const others = new Map<string, NugaRecord[]>();
+    for (const r of incoming) {
+      if (has(st.doc, r.class)) { mine.push(r); continue; }
+      const t = docs.find((x) => x.id !== st.areaId && has(x.doc, r.class));
+      if (t) others.set(t.id, [...(others.get(t.id) || []), r]); else mine.push(r);
+    }
+    for (const [id, recs] of others) {
+      const d = docs.find((x) => x.id === id)!.doc;
+      const supp = d.settings.supplementEnabled;
+      const filled = recs.map((r) => ({ ...r, lesson: r.lesson || lessonFor(d.settings.progress, r.class, r.time), status: !supp && r.status === "pending" ? "confirmed" as const : r.status }));
+      d.records = applyTombstones(mergeRecords(d.records, filled).records, tombs).records;
+      await writeAreaDoc(id, d);
+      const name = st.areas.find((a) => a.id === id)?.name || "다른 영역";
+      st.toast({ text: `${recs.length}건 도착 → ${name}`, kind: "notice", ttl: 10000, action: { label: "이동", onClick: () => useStore.getState().switchArea(id) } });
+    }
+    if (tombs.length) for (const { id, doc: d } of docs) if (id !== st.areaId && !others.has(id)) { const r = applyTombstones(d.records, tombs); if (r.removed.length) { d.records = r.records; await writeAreaDoc(id, d); } }
+    incoming = mine;
+    if (!incoming.length && !tombs.length) return;
     let added: NugaRecord[] = [];
     st.update((d) => {
       const supp = d.settings.supplementEnabled;

@@ -6,7 +6,8 @@ import {
 } from "@nuga/core";
 import { TopBar } from "../App";
 import { classList, perfsOf, recordsOf, useStore } from "../store";
-import { Confirm, Icon, LevelBadge, Modal, Switch } from "../components/ui";
+import { Confirm, EditableCell, Icon, Modal, Switch } from "../components/ui";
+import { AreaModal } from "../components/AreaSwitcher";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
 import { pickFile, readFileAsText, saveFile, hostName, openExternal } from "../lib/platform";
 import { previewPayload } from "../lib/ai";
@@ -50,10 +51,37 @@ export function SettingsPage() {
 export function SubjectSection() {
   const school = useStore((s) => s.doc.settings.school);
   const setSettings = useStore((s) => s.setSettings);
+  const areas = useStore((s) => s.areas);
+  const areaId = useStore((s) => s.areaId);
+  const switchArea = useStore((s) => s.switchArea);
+  const renameArea = useStore((s) => s.renameArea);
+  const deleteArea = useStore((s) => s.deleteArea);
+  const [adding, setAdding] = useState(false);
+  const [del, setDel] = useState<{ id: string; name: string } | null>(null);
   const up = (p: Partial<typeof school>) => setSettings((s) => ({ ...s, school: { ...s.school, ...p } }));
   return (
+    <>
     <div className="card pad">
-      <h3>영역</h3>
+      <div className="flex between"><h3 style={{ margin: 0 }}>영역 목록 <span className="muted small">{areas.length}개</span></h3><button className="btn sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />영역 추가</button></div>
+      <div className="muted small" style={{ margin: "6px 0 10px" }}>교과·동아리·행동특성처럼 명단과 기록을 따로 관리할 단위입니다. 이름을 클릭하면 바꿀 수 있습니다.</div>
+      <table className="table">
+        <thead><tr><th style={{ width: 40 }} /><th>영역명</th><th style={{ width: 160 }}>만든 날</th><th style={{ width: 150 }} /></tr></thead>
+        <tbody>
+          {areas.map((a) => (
+            <tr key={a.id} className={a.id === areaId ? "selected" : ""}>
+              <td className="num muted">{a.id === areaId ? "✓" : ""}</td>
+              <td className="name"><EditableCell value={a.name} onSave={(v) => renameArea(a.id, v)} /></td>
+              <td className="muted small num">{a.createdAt.slice(0, 10)}</td>
+              <td><span className="flex" style={{ justifyContent: "flex-end" }}>{a.id !== areaId && <button className="btn sm" onClick={() => switchArea(a.id)}>열기</button>}{areas.length > 1 && <button className="btn ghost sm" style={{ color: "var(--warn)" }} onClick={() => setDel({ id: a.id, name: a.name })}>삭제</button>}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+    {adding && <AreaModal onClose={() => setAdding(false)} />}
+    {del && <Confirm title={`영역 "${del.name}" 삭제`} body="이 영역의 명단·기록·초안·시간표가 모두 삭제됩니다. 먼저 JSON으로 내보내 두세요." okLabel="삭제" danger onOk={() => deleteArea(del.id)} onClose={() => setDel(null)} />}
+    <div className="card pad">
+      <h3>현재 영역</h3>
       <div className="grid2">
         <div className="field"><label>영역명 (교과·동아리·행동특성 등)</label><input value={school.subject} onChange={(e) => up({ subject: e.target.value })} placeholder="예: 화학Ⅰ / 과학탐구 동아리 / 행동특성" /><span className="muted small">모든 화면 상단에 크게 표시됩니다.</span></div>
         <div className="field"><label>학년</label><select className="select" value={school.grade} onChange={(e) => up({ grade: Number(e.target.value) })}>{[1, 2, 3].map((g) => <option key={g} value={g}>{g}학년</option>)}</select></div>
@@ -61,6 +89,7 @@ export function SubjectSection() {
         <div className="field"><label>학기</label><select className="select" value={school.semester} onChange={(e) => up({ semester: Number(e.target.value) })}><option value={1}>1학기</option><option value={2}>2학기</option></select></div>
       </div>
     </div>
+    </>
   );
 }
 

@@ -3,7 +3,6 @@ import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRe
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LevelBadge, Modal, SearchBox } from "../components/ui";
-import { Timeline } from "../components/Timeline";
 import { exportSheets } from "../lib/excel";
 
 type Filter = "all" | "low" | "pending";
@@ -67,7 +66,7 @@ export function RecordsPage() {
               {rows.map(({ s, recs, low, pending }) => (
                 <tr key={s.no} className="row" onClick={() => setOpen(s)}>
                   <td className="num key">{s.no}</td>
-                  <td className="key"><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
+                  <td className="key name"><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
                   <td><LevelBadge level={s.level} student={s} /></td>
                   <td className="tight">
                     <div className="reclist">
@@ -110,7 +109,6 @@ export function StudentDetail({ student, onClose }: { student: Student; onClose:
     <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} student={student} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span></div>}
       footer={<><span className="muted small">항목을 클릭하면 수정</span><span className="grow" /><button className="btn primary" onClick={goDraft}><Icon name="pen" />초안 작성</button></>}>
       <div className="col" style={{ gap: 14 }}>
-        <Timeline records={recs} perfs={perfs} semester={doc.settings.school.semester} year={doc.settings.school.year} />
         {recs.length === 0 ? <Empty title="기록 없음" /> : (
           <table className="table">
             <thead><tr><th style={{ width: 90 }}>날짜</th><th style={{ width: 70 }}>분류</th><th style={{ width: 200 }}>단원</th><th>내용</th><th style={{ width: 70 }}>상태</th><th style={{ width: 40 }} /></tr></thead>

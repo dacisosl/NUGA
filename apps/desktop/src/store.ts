@@ -10,8 +10,40 @@ export interface Toast { id: number; text: string; kind?: "notice" | "dark"; act
 
 export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
 
+/** 영역 = 독립 문서(명단·기록·초안·시간표). 동기화·AI·표시 옵션은 모든 영역이 공유한다. */
+export interface AreaMeta { id: string; name: string; createdAt: string }
+export interface GlobalSettings { sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; lowRecordEnabled: boolean; supplementEnabled: boolean }
+
+const DEFAULT_AREA = "default";
+function normalizeDoc(doc: NugaDoc): NugaDoc {
+  const base = emptyDoc();
+  doc.settings = { ...base.settings, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
+  return doc;
+}
+function pickGlobal(doc: NugaDoc): GlobalSettings {
+  const s = doc.settings;
+  return { sync: s.sync, ai: s.ai, options: s.options, lowRecordEnabled: s.lowRecordEnabled, supplementEnabled: s.supplementEnabled };
+}
+function applyGlobal(doc: NugaDoc, g: GlobalSettings | null): NugaDoc {
+  if (!g) return doc;
+  doc.settings = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, lowRecordEnabled: g.lowRecordEnabled, supplementEnabled: g.supplementEnabled };
+  return doc;
+}
+export async function readAreaDoc(id: string): Promise<NugaDoc | null> {
+  const p = await getPersist();
+  const raw = id === DEFAULT_AREA ? await p.load() : await p.loadAux<NugaDoc>(`doc:${id}`);
+  if (!raw) return null;
+  return applyGlobal(normalizeDoc(raw), await p.loadAux<GlobalSettings>("global"));
+}
+export async function writeAreaDoc(id: string, doc: NugaDoc): Promise<void> {
+  const p = await getPersist();
+  if (id === DEFAULT_AREA) await p.save(doc); else await p.saveAux(`doc:${id}`, doc);
+}
+
 interface State {
   doc: NugaDoc;
+  areas: AreaMeta[];
+  areaId: string;
   loaded: boolean;
   page: Page;
   cls: string;
@@ -25,6 +57,11 @@ interface State {
   deviceId: string;
 
   init(): Promise<void>;
+  addArea(a: { name: string; grade: number; year: number; semester: number; copyRoster: boolean }): Promise<void>;
+  switchArea(id: string): Promise<void>;
+  renameArea(id: string, name: string): void;
+  deleteArea(id: string): Promise<void>;
+  flush(): Promise<void>;
   update(mut: (d: NugaDoc) => void, opts?: { silent?: boolean }): void;
   setPage(p: Page): void;
   setClass(c: string): void;
@@ -56,19 +93,33 @@ interface State {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSave: (() => Promise<void>) | null = null;
 function scheduleSave(doc: NugaDoc, outbox: Outbox) {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
+  const areaId = useStore.getState().areaId || DEFAULT_AREA;
+  pendingSave = async () => {
+    pendingSave = null;
     const p = await getPersist();
-    await p.save(doc);
+    await writeAreaDoc(areaId, doc);
     await p.saveAux("outbox", outbox);
-  }, 250);
+    await p.saveAux("global", pickGlobal(doc));
+    // 영역 이름 = 영역 문서의 school.subject
+    const st = useStore.getState();
+    const name = doc.settings.school.subject.trim() || "영역";
+    if (st.areas.some((a) => a.id === areaId && a.name !== name)) {
+      const areas = st.areas.map((a) => a.id === areaId ? { ...a, name } : a);
+      useStore.setState({ areas }); await p.saveAux("areas", areas);
+    }
+  };
+  saveTimer = setTimeout(() => { pendingSave?.(); }, 250);
 }
 
 let toastSeq = 1;
 
 export const useStore = create<State>((set, get) => ({
   doc: emptyDoc(),
+  areas: [],
+  areaId: DEFAULT_AREA,
   loaded: false,
   page: "records",
   cls: "",
@@ -83,15 +134,64 @@ export const useStore = create<State>((set, get) => ({
 
   async init() {
     const p = await getPersist();
-    const doc = (await p.load()) || emptyDoc();
-    // 이전 버전 호환: 누락 필드 보정
-    const base = emptyDoc();
-    doc.settings = { ...base.settings, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
+    let areas = (await p.loadAux<AreaMeta[]>("areas")) || [];
+    let areaId = (await p.loadAux<string>("currentArea")) || DEFAULT_AREA;
+    if (!areas.length) {
+      const first = await p.load();
+      areas = [{ id: DEFAULT_AREA, name: first?.settings.school.subject?.trim() || "영역 1", createdAt: nowIso() }];
+      await p.saveAux("areas", areas);
+    }
+    if (!areas.some((a) => a.id === areaId)) areaId = areas[0].id;
+    set({ areas, areaId });
+    const doc = (await readAreaDoc(areaId)) || applyGlobal(emptyDoc(), await p.loadAux<GlobalSettings>("global"));
     const outbox = (await p.loadAux<Outbox>("outbox")) || { messages: [], tombstones: [] };
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
     const classes = [...doc.settings.classes].sort((a, b) => classSortKey(a.class) - classSortKey(b.class));
     set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "records" : "settings" });
+  },
+
+  async flush() { if (saveTimer) clearTimeout(saveTimer); if (pendingSave) await pendingSave(); },
+
+  async addArea(a) {
+    await get().flush();
+    const p = await getPersist();
+    const cur = get().doc;
+    const d = emptyDoc();
+    d.settings = { ...d.settings, ...pickGlobal(cur), school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cur.settings.categories.map((c) => ({ ...c })), periods: cur.settings.periods.map((x) => ({ ...x })), targetLength: { ...cur.settings.targetLength }, lengthMode: cur.settings.lengthMode, onboarded: true };
+    if (a.copyRoster) { d.students = cur.students.map((s) => ({ ...s })); d.settings.classes = cur.settings.classes.map((c) => ({ ...c })); }
+    const id = uuid();
+    await writeAreaDoc(id, d);
+    const areas = [...get().areas, { id, name: d.settings.school.subject || "영역", createdAt: nowIso() }];
+    await p.saveAux("areas", areas); await p.saveAux("currentArea", id);
+    set({ areas, areaId: id, doc: d, cls: d.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+  },
+
+  async switchArea(id) {
+    if (id === get().areaId) return;
+    await get().flush();
+    const p = await getPersist();
+    const doc = (await readAreaDoc(id)) || applyGlobal(emptyDoc(), await p.loadAux<GlobalSettings>("global"));
+    await p.saveAux("currentArea", id);
+    set({ areaId: id, doc, cls: doc.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+  },
+
+  renameArea(id, name) {
+    const n = name.trim(); if (!n) return;
+    const areas = get().areas.map((a) => a.id === id ? { ...a, name: n } : a);
+    set({ areas }); getPersist().then((p) => p.saveAux("areas", areas));
+    if (id === get().areaId) get().setSettings((s) => ({ ...s, school: { ...s.school, subject: n } }));
+    else readAreaDoc(id).then((d) => { if (d) { d.settings.school.subject = n; writeAreaDoc(id, d); } });
+  },
+
+  async deleteArea(id) {
+    const areas = get().areas.filter((a) => a.id !== id);
+    if (!areas.length) return;
+    const p = await getPersist();
+    if (id === DEFAULT_AREA) await p.save(emptyDoc()); else await p.saveAux(`doc:${id}`, null);
+    await p.saveAux("areas", areas);
+    set({ areas });
+    if (id === get().areaId) { const next = areas[0].id; useStore.setState({ areaId: "" }); await get().switchArea(next); }
   },
 
   update(mut, opts) {

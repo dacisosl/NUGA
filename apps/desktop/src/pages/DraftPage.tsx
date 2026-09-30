@@ -6,7 +6,6 @@ import {
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catCounts, draftOf, fillLesson, isLowRecord, perfsOf, recordsOf, studentsOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, LevelBadge, Modal, StatusChip, Switch } from "../components/ui";
-import { Timeline } from "../components/Timeline";
 import { generateDraft } from "../lib/ai";
 import { pickFile, readFileAsDataUrl } from "../lib/platform";
 import { exportSheets } from "../lib/excel";
@@ -115,6 +114,19 @@ function Individual() {
     setInput("");
   }, [student?.class, student?.no]);
   useEffect(() => { if (student) workingCache.set(keyOf(student), w); }, [w, student]);
+  // 명단에서 ↑↓ 키로 학생 이동 (입력란에 포커스가 있을 때는 제외)
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (document.querySelector(".overlay")) return;
+      const i = students.findIndex((s) => student && s.no === student.no);
+      const n = students[i + (e.key === "ArrowDown" ? 1 : -1)];
+      if (n) { e.preventDefault(); select({ class: n.class, no: n.no }); document.querySelector(`[data-stu="${n.no}"]`)?.scrollIntoView({ block: "nearest" }); }
+    };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
+  }, [students, student, select]);
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, expanded]);
 
   const target = w.target || doc.settings.targetLength["세특"] || 500;
@@ -166,7 +178,7 @@ function Individual() {
             const d = draftOf(doc, s.class, s.no); const low = isLowRecord(doc, s.class, s.no);
             const cache = workingCache.get(keyOf(s));
             return (
-              <button key={s.no} className={`stu ${s.no === student.no ? "active" : ""}`} onClick={() => select({ class: s.class, no: s.no })}>
+              <button key={s.no} data-stu={s.no} className={`stu ${s.no === student.no ? "active" : ""}`} onClick={() => select({ class: s.class, no: s.no })}>
                 <span className="no num">{s.no}</span><span className="n">{s.name}</span>
                 {cache?.dirty ? <span className="dot" style={{ background: "var(--accent)" }} title="저장 안 됨" /> : d?.text ? <span style={{ color: "var(--accent)" }}>✓</span> : s.level === "A" && low ? <span title="A · 기록 부족" style={{ color: "var(--warn)" }}><Icon name="warn" size={14} /></span> : null}
                 <LevelBadge level={s.level} student={s} />
@@ -184,7 +196,6 @@ function Individual() {
                 <Chip cat="perf" label={`수행 ${perfs.length}`} />
               </div>
             </div>
-            <Timeline records={recs} perfs={perfs} semester={doc.settings.school.semester} year={doc.settings.school.year} onPick={toggle} />
             <div className="card">
               {recs.length === 0 && <Empty title="기록 없음" />}
               {recs.map((r) => (
@@ -388,7 +399,7 @@ function Batch() {
                 <tr key={s.no} className={`row ${sel.has(s.no) ? "selected" : ""}`} onDoubleClick={() => { select({ class: s.class, no: s.no }); setMode("individual"); }}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                   <td className="num key">{s.no}</td>
-                  <td className="key">{s.name}</td>
+                  <td className="key name">{s.name}</td>
                   <td><LevelBadge level={s.level} student={s} /></td>
                   <td><span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span></td>
                   <td>{perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
