@@ -133,7 +133,7 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
         )}
         {perfs.length > 0 && (
           <div className="card pad">
-            <h3>수행평가</h3>
+            <h3>PDF기록</h3>
             {perfs.map((p) => <div key={p.id} className="flex small" style={{ padding: "4px 0" }}><Chip cat="perf" label={p.title} /><span className="muted num">{p.date}</span><span className="ellipsis">{p.excerpt}</span></div>)}
           </div>
         )}

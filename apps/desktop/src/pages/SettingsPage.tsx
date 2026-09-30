@@ -657,7 +657,7 @@ function DataSection() {
         <h3>데이터 · 모든 영역</h3>
         <div className="muted small" style={{ marginBottom: 10 }}>저장 위치: <span className="mono">{loc}</span></div>
         <table className="table" style={{ marginBottom: 12 }}>
-          <thead><tr><th>영역</th><th style={{ width: 80 }}>학생</th><th style={{ width: 80 }}>기록</th><th style={{ width: 90 }}>수행평가</th><th style={{ width: 80 }}>초안</th></tr></thead>
+          <thead><tr><th>영역</th><th style={{ width: 80 }}>학생</th><th style={{ width: 80 }}>기록</th><th style={{ width: 90 }}>PDF기록</th><th style={{ width: 80 }}>초안</th></tr></thead>
           <tbody>{stats.map((x) => <tr key={x.id}><td className="name">{x.name}</td><td className="num">{x.students}</td><td className="num">{x.records}</td><td className="num">{x.performances}</td><td className="num">{x.drafts}</td></tr>)}</tbody>
         </table>
         <div className="flex"><button className="btn" onClick={() => setConfirm("sample")}>{areaName}을(를) 샘플 데이터로</button><span className="grow" /><button className="btn ghost" style={{ color: "var(--warn)" }} onClick={() => setConfirm("reset")}>모든 영역 데이터 삭제</button></div>

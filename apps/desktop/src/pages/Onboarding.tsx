@@ -21,7 +21,7 @@ export function Onboarding() {
         <div className="box">
           <div className="flex" style={{ gap: 14, marginBottom: 16 }}><div className="logo-lg">누</div><div><h1>누가</h1><div className="muted">수업 중 10초 기록 · 수업 후 1분 보완 · 학기 말 세특 초안</div></div></div>
           <div className="hero">
-            <button onClick={() => { loadSample(); setSettings({ onboarded: true }); }}><b>샘플 데이터로 둘러보기</b><span className="muted small">화학Ⅰ · 2개 반 · 기록·수행평가 포함. 나중에 설정 → 데이터에서 지울 수 있음</span></button>
+            <button onClick={() => { loadSample(); setSettings({ onboarded: true }); }}><b>샘플 데이터로 둘러보기</b><span className="muted small">화학Ⅰ · 2개 반 · 기록·PDF기록 포함. 나중에 설정 → 데이터에서 지울 수 있음</span></button>
             <button onClick={() => setStep(0)}><b>처음부터 설정</b><span className="muted small">영역 → 명단 → 시간표 → 진도. 4단계, 약 5분</span></button>
           </div>
           <div className="muted small" style={{ marginTop: 20 }}>학생 이름은 이 PC에만 저장됩니다. 워치·폰·서버에는 반·번호만 오갑니다.</div>

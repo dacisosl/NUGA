@@ -210,7 +210,7 @@ function Individual() {
               <button className="btn sm" onClick={() => setEditStu(true)}><Icon name="pen" size={13} />번호·이름 수정</button>
               <div className="stats">
                 {doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={`${c.label} ${counts[c.key]}`} />)}
-                <Chip cat="perf" label={`수행 ${perfs.length}`} />
+                <Chip cat="perf" label={`PDF ${perfs.length}`} />
               </div>
             </div>
             <div className="card">
@@ -234,7 +234,7 @@ function Individual() {
                   </div>
                 </label>
               ))}
-              <div style={{ padding: "10px 16px" }}><button className="btn sm" onClick={() => setAddPerf(true)}><Icon name="plus" size={14} />수행평가</button></div>
+              <div style={{ padding: "10px 16px" }}><button className="btn sm" onClick={() => setAddPerf(true)}><Icon name="plus" size={14} />PDF기록</button></div>
             </div>
           </div>
 
@@ -384,7 +384,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             {perfs.map((p) => (
               <label key={p.id} className={`dm-rec ${checked.has(p.id) ? "" : "off"}`} title={`${p.title}\n${p.excerpt}`}>
                 <input type="checkbox" className="checkbox" checked={checked.has(p.id)} onChange={() => toggle(p.id)} />
-                <Chip cat="perf" label="수행" />
+                <Chip cat="perf" label="PDF" />
                 <span className="t">{p.title}{p.excerpt ? ` · ${p.excerpt}` : ""}</span>
               </label>
             ))}
@@ -419,7 +419,7 @@ function DragHandle({ onDrag }: { onDrag: (dy: number) => void }) {
   return <div className="drag" onMouseDown={onDown} />;
 }
 
-/* ---------------- 수행평가 등록(개별) ---------------- */
+/* ---------------- PDF기록 등록(개별) ---------------- */
 
 async function tryOcr(dataUrl: string, onProgress?: (p: number) => void): Promise<string> {
   try {
@@ -447,9 +447,9 @@ function PerfAddModal({ student, onClose }: { student: Student; onClose: () => v
     const url = await readFileAsDataUrl(f); setFile(url);
     if (f.type.startsWith("image/")) { setProg(0); const t = await tryOcr(url, setProg); setProg(null); setOcr(t); if (t && !excerpt) setExcerpt(truncate(t.replace(/\s+/g, " "), 120)); }
   };
-  const save = () => { addPerformance({ class: student.class, no: student.no, title: title.trim() || "수행평가", date, file, ocrText: ocr, excerpt: excerpt.trim(), matched: true }); toast({ text: "수행평가 등록" }); onClose(); };
+  const save = () => { addPerformance({ class: student.class, no: student.no, title: title.trim() || "PDF기록", date, file, ocrText: ocr, excerpt: excerpt.trim(), matched: true }); toast({ text: "수행평가 등록" }); onClose(); };
   return (
-    <Modal title={`수행평가 · ${student.name}`} onClose={onClose} width="narrow" footer={<><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save}>등록</button></>}>
+    <Modal title={`PDF기록 · ${student.name}`} onClose={onClose} width="narrow" footer={<><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save}>등록</button></>}>
       <div className="col" style={{ gap: 12 }}>
         <div className="grid2"><div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div><div className="field"><label>날짜</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div></div>
         <div className="flex"><button className="btn sm" onClick={pick}>파일 선택</button>{file && <span className="muted small">첨부됨</span>}{prog !== null && <span className="muted small">OCR {Math.round(prog * 100)}%</span>}</div>
@@ -523,7 +523,7 @@ function Batch() {
         <span className="flex small muted">일괄 목표 <input type="number" className="num" style={{ width: 70, height: 30 }} value={target} onChange={(e) => setSettings((s) => ({ ...s, targetLength: { ...s.targetLength, "세특": Number(e.target.value) || 0 } }))} />자</span>
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
         <span className="grow" />
-        <button className="btn" onClick={() => setPerfPanel(true)}>수행평가 일괄 등록</button>
+        <button className="btn" onClick={() => setPerfPanel(true)}>PDF기록 일괄 등록</button>
         {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={runAll} disabled={!sel.size}>일괄 생성</button>}
       </div>
       {running && <div className="prog" style={{ marginBottom: 12 }}><i style={{ width: `${(doneCount / Math.max(1, sel.size)) * 100}%` }} /></div>}
@@ -531,7 +531,7 @@ function Batch() {
         <table className="table">
           <thead><tr>
             <th style={{ width: 40 }}><input type="checkbox" className="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(students.map((s) => s.no)))} /></th>
-            <th style={{ width: 56 }}>번호</th><th style={{ width: 100 }}>이름</th><th style={{ width: 56 }}>수준</th><th style={{ width: 120 }}>누가기록</th><th style={{ width: 90 }}>수행평가</th><th>초안</th><th style={{ width: 90 }}>글자수</th><th style={{ width: 110 }}>상태</th>
+            <th style={{ width: 56 }}>번호</th><th style={{ width: 100 }}>이름</th><th style={{ width: 56 }}>수준</th><th style={{ width: 120 }}>누가기록</th><th style={{ width: 90 }}>PDF기록</th><th>초안</th><th style={{ width: 90 }}>글자수</th><th style={{ width: 110 }}>상태</th>
           </tr></thead>
           <tbody>
             {students.map((s) => {
@@ -567,7 +567,7 @@ function Batch() {
   );
 }
 
-/* ---------------- 수행평가 일괄 등록 ---------------- */
+/* ---------------- PDF기록 일괄 등록 ---------------- */
 
 interface PerfCandidate { name: string; file: string; ocr: string; no: number | null; excerpt: string }
 
@@ -611,7 +611,7 @@ function PerfBatchPanel({ onClose }: { onClose: () => void }) {
     toast({ text: `${ready.length}건 등록` }); onClose();
   };
   return (
-    <Modal title={`수행평가 일괄 등록 · ${cls}`} onClose={onClose} width="wide" footer={<><span className="muted small">파일명에 이름 또는 학번(20315)이 있으면 자동 매칭. 이미지는 OCR 시도.</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!ready.length} onClick={register}>{ready.length}건 등록</button></>}>
+    <Modal title={`PDF기록 일괄 등록 · ${cls}`} onClose={onClose} width="wide" footer={<><span className="muted small">파일명에 이름 또는 학번(20315)이 있으면 자동 매칭. 이미지는 OCR 시도.</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!ready.length} onClick={register}>{ready.length}건 등록</button></>}>
       <div className="col" style={{ gap: 12 }}>
         <div className="flex">
           <div className="field"><label>제목</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>

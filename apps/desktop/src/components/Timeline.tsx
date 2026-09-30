@@ -2,7 +2,7 @@ import React from "react";
 import type { NugaRecord, Performance } from "@nuga/core";
 import { fmtMD } from "@nuga/core";
 
-/** 학기 타임라인 스트립 (3~7월 또는 8~12월). 기록은 카테고리 색 점, 수행평가는 사각 점. */
+/** 학기 타임라인 스트립 (3~7월 또는 8~12월). 기록은 카테고리 색 점, PDF기록은 사각 점. */
 export function Timeline({ records, perfs, semester, year, onPick }: { records: NugaRecord[]; perfs: Performance[]; semester: number; year: number; onPick?: (id: string) => void }) {
   const startM = semester === 1 ? 2 : 7; // 0-based: 3월 / 8월
   const start = new Date(year, startM, 1).getTime();

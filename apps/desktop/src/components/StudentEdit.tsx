@@ -3,7 +3,7 @@ import type { Level, Student } from "@nuga/core";
 import { useStore } from "../store";
 import { Modal } from "./ui";
 
-/** 학생 번호·이름·수준 수정. 번호를 바꾸면 기록·초안·수행평가도 함께 옮겨진다. */
+/** 학생 번호·이름·수준 수정. 번호를 바꾸면 기록·초안·PDF기록도 함께 옮겨진다. */
 export function StudentEditModal({ student, onClose, onSaved }: { student: Student; onClose: () => void; onSaved?: (s: Student, oldNo: number) => void }) {
   const editStudent = useStore((s) => s.editStudent);
   const toast = useStore((s) => s.toast);
@@ -26,7 +26,7 @@ export function StudentEditModal({ student, onClose, onSaved }: { student: Stude
         </div>
         <div className="field"><label>수준</label><span className="seg">{(["A", "B", "C"] as Level[]).map((l) => <button key={l} className={level === l ? "active" : ""} onClick={() => setLevel(l)}>{l}</button>)}</span></div>
         {err && <div className="small" style={{ color: "var(--warn)" }}>{err}</div>}
-        <div className="muted small">번호를 바꾸면 이 학생의 누가기록·초안·수행평가도 새 번호로 함께 옮겨집니다.</div>
+        <div className="muted small">번호를 바꾸면 이 학생의 누가기록·초안·PDF기록도 새 번호로 함께 옮겨집니다.</div>
       </div>
     </Modal>
   );
