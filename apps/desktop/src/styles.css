@@ -292,3 +292,12 @@ textarea { resize: vertical; }
 .cell-edit { width: 100%; border: none; background: transparent; padding: 0; height: 100%; }
 .cell-edit:focus { box-shadow: none; outline: 2px solid var(--accent); border-radius: 4px; }
 .logo-lg { width: 48px; height: 48px; border-radius: 14px; background: var(--accent); color: #fff; font-weight: 800; font-size: 22px; display: flex; align-items: center; justify-content: center; }
+
+/* 상단 영역 나열 */
+.area-list { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.area-list::-webkit-scrollbar { display: none; }
+.area-pill { flex: none; height: 34px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.area-pill:hover { border-color: var(--accent); color: var(--accent); }
+.area-pill.on { background: var(--accent); border-color: var(--accent); color: #fff; font-size: 15px; font-weight: 800; cursor: default; }
+.area-list .area-add { flex: none; }
+.seg.seg-title button { height: 36px; padding: 0 16px; font-size: 16px; font-weight: 800; }

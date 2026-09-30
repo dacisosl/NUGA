@@ -90,7 +90,8 @@ function Sidebar() {
 }
 
 /** 모든 페이지에서 같은 자리: 제목 · 과목 · (페이지 슬롯) · 엑셀 · JSON */
-export function TopBar({ title, center, onExcel, right }: { title: string; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
+/** titleSlot 을 주면 페이지 제목 대신 그 자리에 표시한다 (예: 2p 개별·일괄 전환) */
+export function TopBar({ title, titleSlot, center, onExcel, right }: { title: string; titleSlot?: React.ReactNode; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
   const doc = useStore((s) => s.doc);
   const toast = useStore((s) => s.toast);
   const exportJson = async () => {
@@ -99,7 +100,7 @@ export function TopBar({ title, center, onExcel, right }: { title: string; cente
   };
   return (
     <div className="topbar">
-      <h1>{title}</h1>
+      {titleSlot ?? <h1>{title}</h1>}
       <AreaSwitcher />
       {center}
       <span className="sep" />

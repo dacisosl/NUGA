@@ -69,7 +69,7 @@ export function DraftPage() {
   };
   return (
     <>
-      <TopBar title="초안 작성" onExcel={exportExcel} center={<span className="seg"><button className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
+      <TopBar title="초안 작성" onExcel={exportExcel} titleSlot={<span className="seg seg-title" role="tablist" aria-label="초안 작성 방식"><button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
       <ClassTabs extra={(c) => { const n = studentsOf(doc, c).length; const d = doc.drafts.filter((x) => x.class === c && x.text).length; return <span className="cnt num">{d}/{n}</span>; }} />
       {mode === "individual" ? <Individual /> : <Batch />}
     </>
