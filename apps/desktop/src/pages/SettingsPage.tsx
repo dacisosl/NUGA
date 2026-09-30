@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  WEEKDAY_LABELS, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
+  WEEKDAY_LABELS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
   type BackupContainer, type Level, type ProgressRow, type Student,
 } from "@nuga/core";
 import { TopBar } from "../App";
-import { classList, perfsOf, recordsOf, useStore } from "../store";
+import { classList, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup } from "../store";
 import { Confirm, EditableCell, Icon, Modal, Switch } from "../components/ui";
 import { AreaModal } from "../components/AreaSwitcher";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
@@ -13,21 +13,39 @@ import { pickFile, readFileAsText, saveFile, hostName, openExternal } from "../l
 import { previewPayload } from "../lib/ai";
 import { syncEngine } from "../lib/syncEngine";
 
-const TABS: { key: string; label: string }[] = [
-  { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" }, { key: "progress", label: "진도" },
-  { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" }, { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
+/** 공통 설정: 모든 영역이 같은 값을 따른다 */
+const COMMON_TABS: { key: string; label: string }[] = [
+  { key: "length", label: "글자수·기준" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" },
+  { key: "ai", label: "AI" }, { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
+];
+/** 개별 설정: 지금 열린 영역에만 적용된다 */
+const AREA_TABS: { key: string; label: string }[] = [
+  { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" },
+  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" },
 ];
 
 export function SettingsPage() {
   const tab = useStore((s) => s.settingsTab);
   const setTab = useStore((s) => s.setSettingsTab);
+  const areaName = useStore((s) => s.doc.settings.school.subject) || "현재 영역";
+  const override = useStore((s) => s.doc.settings.lengthOverride);
+  const group: "common" | "area" = COMMON_TABS.some((t) => t.key === tab) ? "common" : "area";
+  const tabs = group === "common" ? COMMON_TABS : AREA_TABS;
   return (
     <>
       <TopBar title="설정" />
-      <div className="tabsrow" style={{ borderBottom: "none" }} />
+      <div className="tabsrow">
+        <button className={`tab ${group === "common" ? "active" : ""}`} onClick={() => group !== "common" && setTab(COMMON_TABS[0].key)}>공통 설정</button>
+        <button className={`tab ${group === "area" ? "active" : ""}`} onClick={() => group !== "area" && setTab(AREA_TABS[0].key)}>개별 설정<span className="cnt">{areaName}</span></button>
+      </div>
       <div className="content">
+        <div className={`scope-note ${group}`}>
+          {group === "common"
+            ? <><b>모든 영역에 똑같이 적용됩니다.</b><span>글자수·기준은 영역마다 따로 정할 수도 있습니다.</span></>
+            : <><b>{areaName}에만 적용됩니다.</b><span>다른 영역은 상단 영역 배지에서 바꿔 설정하세요.</span></>}
+        </div>
         <div className="settings-layout">
-          <nav className="settings-nav">{TABS.map((t) => <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>{t.label}</button>)}</nav>
+          <nav className="settings-nav">{tabs.map((t) => <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>{t.label}{t.key === "length" && override && <span className="tag">이 영역 전용</span>}</button>)}</nav>
           <div className="settings-body">
             {tab === "subject" && <SubjectSection />}
             {tab === "roster" && <RosterSection />}
@@ -99,6 +117,7 @@ export function RosterSection() {
   const setStudents = useStore((s) => s.setStudents);
   const upsertStudent = useStore((s) => s.upsertStudent);
   const removeStudent = useStore((s) => s.removeStudent);
+  const editStudent = useStore((s) => s.editStudent);
   const setSettings = useStore((s) => s.setSettings);
   const toast = useStore((s) => s.toast);
   const classes = classList(doc);
@@ -119,8 +138,9 @@ export function RosterSection() {
     toast({ text: `${st.length}명 가져옴` });
   };
   const addClass = () => {
-    const c = newClass.trim().replace(/\s/g, "");
-    if (!/^\d+-\d+$/.test(c)) { toast({ text: "형식: 2-3" }); return; }
+    let c = newClass.trim().replace(/\s+/g, " ");
+    if (!c) return;
+    if (/^\d+\s*-\s*\d+$/.test(c)) c = c.split("-").map((x) => String(parseInt(x, 10))).join("-");
     setSettings((s) => ({ ...s, classes: s.classes.some((x) => x.class === c) ? s.classes : [...s.classes, { class: c, size: 0 }].sort((a, b) => classSortKey(a.class) - classSortKey(b.class)) }));
     setCls(c); setNewClass("");
   };
@@ -135,7 +155,7 @@ export function RosterSection() {
   return (
     <>
       <div className="card pad">
-        <div className="flex between"><h3 style={{ margin: 0 }}>반</h3><span className="flex"><input value={newClass} onChange={(e) => setNewClass(e.target.value)} placeholder="2-3" style={{ width: 80 }} onKeyDown={(e) => e.key === "Enter" && addClass()} /><button className="btn sm" onClick={addClass}><Icon name="plus" size={14} />반 추가</button></span></div>
+        <div className="flex between"><h3 style={{ margin: 0 }}>반</h3><span className="flex"><input value={newClass} onChange={(e) => setNewClass(e.target.value)} placeholder="예: 2-3, 과학동아리" style={{ width: 160 }} onKeyDown={(e) => e.key === "Enter" && addClass()} /><button className="btn sm" onClick={addClass}><Icon name="plus" size={14} />반 추가</button></span></div>
         <div className="flex wrap" style={{ marginTop: 10 }}>
           {classes.map((c) => <button key={c} className={`chip clickable ${c === cls ? "selected" : ""} outline`} onClick={() => setCls(c)}>{c} <span className="muted">{doc.students.filter((s) => s.class === c).length}</span></button>)}
           {classes.length === 0 && <span className="muted small">반을 추가하거나 엑셀에서 명단을 가져오세요</span>}
@@ -159,7 +179,7 @@ export function RosterSection() {
             <tbody>
               {list.map((s) => (
                 <tr key={s.no} style={{ height: 44 }}>
-                  <td className="tight"><input type="number" className="cell-edit num" value={s.no} onChange={(e) => { const no = Number(e.target.value); if (no > 0) { removeStudent(s.class, s.no); upsertStudent({ ...s, no }); } }} style={{ width: 50 }} /></td>
+                  <td className="tight"><NoInput value={s.no} onCommit={(no) => { const r = editStudent(s.class, s.no, { no }); if (!r.ok) toast({ text: r.message || "변경 실패" }); return r.ok; }} /></td>
                   <td className="tight"><input className="cell-edit" value={s.name} placeholder="이름" onChange={(e) => upsertStudent({ ...s, name: e.target.value })} /></td>
                   <td className="tight"><span className="seg">{(["A", "B", "C"] as Level[]).map((l) => <button key={l} className={s.level === l ? "active" : ""} style={{ height: 26, padding: "0 10px" }} onClick={() => upsertStudent({ ...s, level: l })}>{l}</button>)}</span></td>
                   <td className="num muted small">{recordsOf(doc, s.class, s.no).length}</td>
@@ -177,26 +197,74 @@ export function RosterSection() {
   );
 }
 
+/** 번호 칸: 입력 후 Enter·포커스 이동 시 반영(기록도 함께 이동). 충돌하면 원래 값으로 되돌림 */
+function NoInput({ value, onCommit }: { value: number; onCommit: (no: number) => boolean }) {
+  const [v, setV] = useState(String(value));
+  useEffect(() => { setV(String(value)); }, [value]);
+  const commit = () => { const n = Number(v); if (n === value) return; if (!onCommit(n)) setV(String(value)); };
+  return <input type="number" className="cell-edit num" min={1} value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setV(String(value)); (e.target as HTMLInputElement).blur(); } }} style={{ width: 56 }} />;
+}
+
+/** 붙여넣기: 한 줄에 한 명. 이름만 있으면 번호를 차례로 매김. "3 홍길동", "3. 홍길동", "20315 홍길동", "홍길동 A" 모두 인식 */
 function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
   const doc = useStore((s) => s.doc);
   const setStudents = useStore((s) => s.setStudents);
   const toast = useStore((s) => s.toast);
+  const existing = doc.students.filter((s) => s.class === cls);
   const [text, setText] = useState("");
-  const parsed = useMemo(() => text.split(/\n/).map((l) => l.trim()).filter(Boolean).map((l, i) => {
-    const parts = l.split(/[\t,\s]+/);
-    const noIdx = parts.findIndex((p) => /^\d+$/.test(p));
-    const no = noIdx >= 0 ? parseInt(parts[noIdx], 10) : i + 1;
-    const name = parts.find((p, k) => k !== noIdx && /[가-힣a-zA-Z]{2,}/.test(p)) || "";
-    const lv = parts.find((p) => /^[ABCabc]$/.test(p))?.toUpperCase() as Level | undefined;
-    return { class: cls, no, name, level: lv || "B" } as Student;
-  }).filter((s) => s.name), [text, cls]);
+  const [mode, setMode] = useState<"append" | "replace">(existing.length ? "append" : "replace");
+  const parsed = useMemo(() => {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const used = new Set<number>(mode === "append" ? existing.map((s) => s.no) : []);
+    let next = mode === "append" ? Math.max(0, ...existing.map((s) => s.no)) + 1 : 1;
+    const out: (Student & { overwrite: boolean })[] = [];
+    for (const line of lines) {
+      let rest = line.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+      let no: number | null = null;
+      const hak = rest.match(/^(\d{4,5})[\s.,)\-]+(.+)$/);
+      const num = rest.match(/^(\d{1,3})[\s.,)\-]+(.+)$/);
+      if (hak) { no = parseInt(hak[1].slice(-2), 10); rest = hak[2]; }
+      else if (num) { no = parseInt(num[1], 10); rest = num[2]; }
+      let level: Level = "B";
+      const lv = rest.match(/[\s,]+([ABCabc])$/);
+      if (lv) { level = lv[1].toUpperCase() as Level; rest = rest.slice(0, lv.index).trim(); }
+      const name = rest.replace(/[,]+$/, "").trim();
+      if (!name) continue;
+      if (!no) { while (used.has(next)) next++; no = next++; }
+      const overwrite = mode === "append" && existing.some((s) => s.no === no);
+      used.add(no);
+      out.push({ class: cls, no, name, level, overwrite });
+    }
+    return out;
+  }, [text, cls, mode, existing.length]);
   const apply = () => {
-    const others = doc.students.filter((s) => !(s.class === cls && parsed.some((p) => p.no === s.no)));
-    setStudents([...others, ...parsed]); toast({ text: `${parsed.length}명 추가` }); onClose();
+    const keep = mode === "replace" ? doc.students.filter((s) => s.class !== cls) : doc.students.filter((s) => !(s.class === cls && parsed.some((p) => p.no === s.no)));
+    setStudents([...keep, ...parsed.map(({ overwrite: _o, ...s }) => s)]);
+    toast({ text: `${cls} ${parsed.length}명 ${mode === "replace" ? "등록" : "추가"}` }); onClose();
   };
+  const overwrites = parsed.filter((p) => p.overwrite).length;
   return (
-    <Modal title={`${cls} 명단 붙여넣기`} onClose={onClose} width="narrow" footer={<><span className="muted small">{parsed.length}명 인식</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!parsed.length} onClick={apply}>추가</button></>}>
-      <textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder={"한 줄에 한 명: 번호 이름 [수준]\n1 김민준 A\n2 이서연"} />
+    <Modal title={`${cls} 명단 붙여넣기`} onClose={onClose} footer={<><span className="muted small">{parsed.length}명 인식{overwrites ? ` · ${overwrites}명 덮어씀` : ""}</span><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" disabled={!parsed.length} onClick={apply}>{mode === "replace" ? "명단 등록" : "추가"}</button></>}>
+      <div className="col" style={{ gap: 10 }}>
+        {existing.length > 0 && (
+          <span className="seg" style={{ alignSelf: "flex-start" }}>
+            <button className={mode === "append" ? "active" : ""} onClick={() => setMode("append")}>기존 {existing.length}명 뒤에 이어 붙이기</button>
+            <button className={mode === "replace" ? "active" : ""} onClick={() => setMode("replace")}>새 명단으로 교체</button>
+          </span>
+        )}
+        <div className="grid2" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
+          <textarea rows={14} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={"한 줄에 한 명씩 이름만 붙여넣어도 됩니다.\n김민준\n이서연\n박지우\n\n번호·수준도 가능\n12 최하은 A\n20315 정도윤"} />
+          <div className="tablewrap" style={{ maxHeight: 300, border: "1px solid var(--line)" }}>
+            <table className="table" style={{ border: "none" }}>
+              <thead><tr><th style={{ width: 60 }}>번호</th><th>이름</th><th style={{ width: 56 }}>수준</th></tr></thead>
+              <tbody>
+                {parsed.map((p, i) => <tr key={i}><td className="num key">{p.no}</td><td className="key name">{p.name}{p.overwrite && <span className="chip check" style={{ marginLeft: 6 }}>덮어씀</span>}</td><td><span className={`lvl ${p.level}`}>{p.level}</span></td></tr>)}
+                {!parsed.length && <tr><td colSpan={3} className="muted small" style={{ textAlign: "center" }}>미리보기</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </Modal>
   );
 }
@@ -205,34 +273,82 @@ function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
 export function TimetableSection() {
   const doc = useStore((s) => s.doc);
   const setSettings = useStore((s) => s.setSettings);
+  const toast = useStore((s) => s.toast);
   const classes = classList(doc);
-  const [pick, setPick] = useState(classes[0] || "");
-  useEffect(() => { if (!classes.includes(pick)) setPick(classes[0] || ""); }, [classes.join(",")]);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [name, setName] = useState("");
+  const drag = useRef<boolean | null>(null);
+  useEffect(() => {
+    const up = () => { drag.current = null; };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setSel(new Set()); };
+    window.addEventListener("mouseup", up); window.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("mouseup", up); window.removeEventListener("keydown", esc); };
+  }, []);
+  const key = (w: number, p: number) => `${w}-${p}`;
   const cell = (w: number, p: number) => doc.settings.timetable.find((t) => t.weekday === w && t.period === p);
-  const click = (w: number, p: number) => setSettings((s) => {
-    const cur = s.timetable.find((t) => t.weekday === w && t.period === p);
-    const rest = s.timetable.filter((t) => !(t.weekday === w && t.period === p));
-    if (!cur) return { ...s, timetable: pick ? [...rest, { weekday: w, period: p, class: pick }] : s.timetable };
-    if (cur.class === pick) return { ...s, timetable: rest };
-    return { ...s, timetable: [...rest, { weekday: w, period: p, class: pick }] };
-  });
+  const colorOf = (c: string) => `tc${(Math.max(0, classes.indexOf(c)) % 6) + 1}`;
+  const mark = (k: string, on: boolean) => setSel((prev) => { const n = new Set(prev); if (on) n.add(k); else n.delete(k); return n; });
+  const onDown = (k: string) => { const on = !sel.has(k); drag.current = on; mark(k, on); };
+  const onEnter = (k: string) => { if (drag.current !== null) mark(k, drag.current); };
+  const selectClass = (c: string) => setSel(new Set(doc.settings.timetable.filter((t) => t.class === c).map((t) => key(t.weekday, t.period))));
+
+  const apply = (clsRaw: string | null) => {
+    const keys = [...sel];
+    if (!keys.length) return;
+    let cls = clsRaw?.trim().replace(/\s+/g, " ") || null;
+    if (cls && /^\d+\s*-\s*\d+$/.test(cls)) cls = cls.split("-").map((x) => String(parseInt(x, 10))).join("-");
+    let added = 0; let removed = 0;
+    setSettings((s) => {
+      const rest = s.timetable.filter((t) => !sel.has(key(t.weekday, t.period)));
+      const tt = cls ? [...rest, ...keys.map((k) => { const [w, p] = k.split("-").map(Number); return { weekday: w, period: p, class: cls! }; })] : rest;
+      const cl = cls && !s.classes.some((c) => c.class === cls) ? [...s.classes, { class: cls, size: 0 }].sort((a, b) => classSortKey(a.class) - classSortKey(b.class)) : s.classes;
+      const r = syncProgressSkeleton(s.progress, tt, s.school.year, s.school.semester); added = r.added; removed = r.removed;
+      return { ...s, timetable: tt, classes: cl, progress: r.progress };
+    });
+    setSel(new Set()); setName("");
+    const prog = added || removed ? ` · 진도표 빈 양식 ${added ? `+${added}` : ""}${removed ? ` −${removed}` : ""}행` : "";
+    toast({ text: cls ? `${cls} · ${keys.length}칸 지정${prog}` : `${keys.length}칸 비움${prog}` });
+  };
+
   const setPeriod = (no: number, k: "start" | "end", v: string) => setSettings((s) => ({ ...s, periods: s.periods.map((p) => p.no === no ? { ...p, [k]: v } : p) }));
   const addPeriod = () => setSettings((s) => { const last = s.periods[s.periods.length - 1]; return { ...s, periods: [...s.periods, { no: (last?.no || 0) + 1, start: last ? addMin(last.end, 10) : "08:50", end: last ? addMin(last.end, 60) : "09:40" }] }; });
   const removePeriod = () => setSettings((s) => ({ ...s, periods: s.periods.slice(0, -1), timetable: s.timetable.filter((t) => t.period < s.periods.length) }));
+  const counts = new Map<string, number>(); for (const t of doc.settings.timetable) counts.set(t.class, (counts.get(t.class) || 0) + 1);
+
   return (
     <>
       <div className="card pad">
-        <div className="flex between"><h3 style={{ margin: 0 }}>주간 시간표</h3><span className="flex small muted">칠할 반 {classes.map((c) => <button key={c} className={`chip clickable outline ${pick === c ? "selected" : ""}`} onClick={() => setPick(c)}>{c}</button>)}</span></div>
-        <div className="muted small" style={{ margin: "6px 0 12px" }}>칸을 클릭하면 선택한 반이 들어가고, 다시 클릭하면 지워집니다.</div>
-        <div className="ttgrid">
+        <div className="flex between"><h3 style={{ margin: 0 }}>주간 시간표</h3><span className="muted small">칸을 누르거나 끌어서 고른 뒤 반 이름을 정하세요 · Esc 선택 해제</span></div>
+        {classes.length > 0 && (
+          <div className="flex wrap" style={{ margin: "10px 0 4px" }}>
+            {classes.map((c) => <button key={c} className={`chip clickable tchip ${colorOf(c)}`} onClick={() => selectClass(c)} title="이 반의 칸 모두 선택">{c}<span className="muted">{counts.get(c) || 0}칸</span></button>)}
+          </div>
+        )}
+        <div className="ttgrid" style={{ marginTop: 10, userSelect: "none" }}>
           <div />{[1, 2, 3, 4, 5].map((w) => <div key={w} className="h">{WEEKDAY_LABELS[w]}</div>)}
           {doc.settings.periods.map((p) => (
             <React.Fragment key={p.no}>
-              <div className="p">{p.no}교시</div>
-              {[1, 2, 3, 4, 5].map((w) => { const c = cell(w, p.no); return <button key={w} className={`ttcell ${c ? "on" : ""}`} onClick={() => click(w, p.no)}>{c?.class || ""}</button>; })}
+              <div className="p">{p.no}교시<span className="t">{p.start}</span></div>
+              {[1, 2, 3, 4, 5].map((w) => {
+                const c = cell(w, p.no); const k = key(w, p.no);
+                return <button key={w} className={`ttcell ${c ? `on ${colorOf(c.class)}` : ""} ${sel.has(k) ? "sel" : ""}`} onMouseDown={(e) => { e.preventDefault(); onDown(k); }} onMouseEnter={() => onEnter(k)} title={c ? c.class : "빈 칸"}>{c?.class || ""}</button>;
+              })}
             </React.Fragment>
           ))}
         </div>
+        {sel.size > 0 && (
+          <div className="ttbar">
+            <b>선택 {sel.size}칸</b>
+            <span className="sep" />
+            {classes.map((c) => <button key={c} className={`chip clickable tchip ${colorOf(c)}`} onClick={() => apply(c)}>{c}</button>)}
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="새 반 이름 (예: 2-3, 과학동아리)" onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) apply(name); }} autoFocus />
+            <button className="btn primary sm" disabled={!name.trim()} onClick={() => apply(name)}>반으로 지정</button>
+            <span className="grow" />
+            <button className="btn sm" onClick={() => apply(null)}>칸 비우기</button>
+            <button className="btn ghost sm" style={{ color: "#fff" }} onClick={() => setSel(new Set())}>선택 해제</button>
+          </div>
+        )}
+        <div className="muted small" style={{ marginTop: 10 }}>반을 지정하면 진도표에 그 반의 수업 날짜별 빈 행이 자동으로 만들어집니다.</div>
       </div>
       <div className="card pad">
         <div className="flex between"><h3 style={{ margin: 0 }}>교시 시간</h3><span className="flex"><button className="btn sm" onClick={addPeriod}><Icon name="plus" size={14} />교시</button><button className="btn ghost sm" onClick={removePeriod} disabled={doc.settings.periods.length <= 1}>마지막 삭제</button></span></div>
@@ -253,10 +369,23 @@ export function ProgressSection() {
   const toast = useStore((s) => s.toast);
   const classes = classList(doc);
   const [cls, setCls] = useState<string>("all");
-  const rows = doc.settings.progress.map((p, i) => ({ ...p, i })).filter((p) => cls === "all" || p.class === cls).sort((a, b) => a.date.localeCompare(b.date) || classSortKey(a.class) - classSortKey(b.class));
+  const [blankOnly, setBlankOnly] = useState(false);
+  const rows = doc.settings.progress.map((p, i) => ({ ...p, i })).filter((p) => (cls === "all" || p.class === cls) && (!blankOnly || isBlankProgress(p))).sort((a, b) => a.date.localeCompare(b.date) || classSortKey(a.class) - classSortKey(b.class));
   const up = (i: number, patch: Partial<ProgressRow>) => setSettings((s) => ({ ...s, progress: s.progress.map((p, k) => k === i ? { ...p, ...patch } : p) }));
   const del = (i: number) => setSettings((s) => ({ ...s, progress: s.progress.filter((_, k) => k !== i) }));
-  const add = () => setSettings((s) => ({ ...s, progress: [...s.progress, { date: nowIso().slice(0, 10), class: cls === "all" ? classes[0] || "" : cls, unit: "", lesson: 1, title: "" }] }));
+  const add = () => setSettings((s) => ({ ...s, progress: [...s.progress, { date: nowIso().slice(0, 10), class: cls === "all" ? classes[0] || "" : cls, unit: "", lesson: 0, title: "" }] }));
+  const makeSkeleton = () => {
+    let added = 0; let removed = 0;
+    setSettings((s) => { const r = syncProgressSkeleton(s.progress, s.timetable, s.school.year, s.school.semester); added = r.added; removed = r.removed; return { ...s, progress: r.progress }; });
+    toast({ text: doc.settings.timetable.length ? `빈 양식 ${added}행 추가${removed ? ` · 쓸모없는 빈 행 ${removed}개 정리` : ""}` : "먼저 시간표에서 반을 지정하세요" });
+  };
+  const exportForm = () => {
+    const src = doc.settings.progress.filter((p) => cls === "all" || p.class === cls).sort((a, b) => a.date.localeCompare(b.date) || classSortKey(a.class) - classSortKey(b.class));
+    const rows = src.length ? src.map((p) => ({ 날짜: p.date, 반: p.class, 단원: p.unit, 차시: p.lesson || "", 제목: p.title })) : templateProgress();
+    exportSheets(`진도표-${cls === "all" ? "전체" : cls}.xlsx`, [{ name: "진도", rows, widths: [12, 10, 12, 6, 30] }]);
+  };
+  const filled = doc.settings.progress.filter((p) => (cls === "all" || p.class === cls) && !isBlankProgress(p)).length;
+  const total = doc.settings.progress.filter((p) => cls === "all" || p.class === cls).length;
   const importExcel = async () => {
     const [f] = await pickFile(".xlsx,.xls,.csv"); if (!f) return;
     const p = progressFromRows(await readSheetRows(f, true));
@@ -267,11 +396,13 @@ export function ProgressSection() {
   return (
     <div className="card pad">
       <div className="flex between">
-        <h3 style={{ margin: 0 }}>진도 <span className="muted small">{rows.length}행</span></h3>
+        <h3 style={{ margin: 0 }}>진도 <span className="muted small">채움 {filled} / {total}행</span></h3>
         <span className="flex">
+          <label className="flex small muted" style={{ gap: 4 }}><input type="checkbox" className="checkbox" checked={blankOnly} onChange={(e) => setBlankOnly(e.target.checked)} />빈칸만</label>
           <select className="select" value={cls} onChange={(e) => setCls(e.target.value)}><option value="all">전체 반</option>{classes.map((c) => <option key={c}>{c}</option>)}</select>
+          <button className="btn sm" onClick={makeSkeleton} title="시간표의 수업 날짜마다 빈 행 만들기">시간표로 빈 양식</button>
+          <button className="btn sm" onClick={exportForm} title="지금 진도표를 엑셀로 내보내 채운 뒤 다시 가져오기">엑셀 양식 내보내기</button>
           <button className="btn sm" onClick={importExcel}><Icon name="excel" size={14} />엑셀 가져오기</button>
-          <button className="btn sm" onClick={() => exportSheets("진도-양식.xlsx", [{ name: "진도", rows: templateProgress() }])}>양식</button>
           <button className="btn sm" onClick={add}><Icon name="plus" size={14} />행</button>
         </span>
       </div>
@@ -283,12 +414,12 @@ export function ProgressSection() {
               <td className="tight"><input type="date" className="cell-edit" value={p.date} onChange={(e) => up(p.i, { date: e.target.value })} /></td>
               <td className="tight"><select className="cell-edit" value={p.class} onChange={(e) => up(p.i, { class: e.target.value })}>{classes.map((c) => <option key={c}>{c}</option>)}</select></td>
               <td className="tight"><input className="cell-edit" value={p.unit} placeholder="3단원" onChange={(e) => up(p.i, { unit: e.target.value })} /></td>
-              <td className="tight"><input type="number" className="cell-edit num" value={p.lesson} onChange={(e) => up(p.i, { lesson: Number(e.target.value) })} /></td>
+              <td className="tight"><input type="number" className="cell-edit num" value={p.lesson || ""} placeholder="—" onChange={(e) => up(p.i, { lesson: Number(e.target.value) || 0 })} /></td>
               <td className="tight"><input className="cell-edit" value={p.title} placeholder="화학 평형" onChange={(e) => up(p.i, { title: e.target.value })} /></td>
               <td className="tight"><button className="btn ghost icon sm" onClick={() => del(p.i)}><Icon name="trash" size={14} /></button></td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="muted small" style={{ textAlign: "center" }}>진도 없음 — 기록의 단원·차시는 이 표에서 자동으로 채워집니다</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={6} className="muted small" style={{ textAlign: "center" }}>진도 없음 — 시간표에서 반을 지정하면 빈 양식이 자동으로 생깁니다</td></tr>}
         </tbody>
       </table>
     </div>
@@ -314,17 +445,26 @@ function CategorySection() {
 function LengthSection() {
   const s = useStore((x) => x.doc.settings);
   const setSettings = useStore((x) => x.setSettings);
+  const setLengthOverride = useStore((x) => x.setLengthOverride);
+  const areaName = s.school.subject || "현재 영역";
   return (
+    <>
+    <div className={`card pad ${s.lengthOverride ? "override" : ""}`}>
+      <div className="flex between">
+        <div><b>{s.lengthOverride ? `${areaName} 전용 값 사용 중` : "공통 값 사용 중"}</b><div className="muted small">{s.lengthOverride ? "아래 값은 이 영역에만 적용됩니다. 끄면 공통 값으로 돌아갑니다." : "아래 값을 바꾸면 모든 영역에 함께 적용됩니다."}</div></div>
+        <Switch on={s.lengthOverride} onChange={setLengthOverride} label={`${areaName}만 따로 설정`} />
+      </div>
+    </div>
     <div className="card pad">
       <h3>글자수 · 판단 기준</h3>
       <div className="grid2">
         <div className="field"><label>세특 목표 글자수</label><input type="number" className="num" value={s.targetLength["세특"] || 500} onChange={(e) => setSettings((x) => ({ ...x, targetLength: { ...x.targetLength, "세특": Number(e.target.value) } }))} /><span className="muted small">허용 구간 N−20 ~ N−1 · NEIS 바이트는 검토 패널에 병기</span></div>
         <div className="field"><label>글자수 기준</label><span className="seg"><button className={s.lengthMode === "withSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withSpaces" })}>공백 포함</button><button className={s.lengthMode === "withoutSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withoutSpaces" })}>공백 제외</button></span></div>
         <div className="field"><label>기록 부족 표시</label><Switch on={s.lowRecordEnabled} onChange={(v) => setSettings({ lowRecordEnabled: v })} label={s.lowRecordEnabled ? "켬 — 이름 옆 주황 점과 필터 표시" : "끔"} />{s.lowRecordEnabled && <span className="flex small muted">기준 <input type="number" className="num" style={{ width: 60, height: 30 }} value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Number(e.target.value) })} />건 이하</span>}</div>
-        <div className="field"><label>보완 대기 흐름</label><Switch on={s.supplementEnabled} onChange={(v) => setSettings({ supplementEnabled: v })} label={s.supplementEnabled ? "켬 — 워치·폰 기록을 보완 전 상태로 받아 모달로 처리" : "끔 — 도착한 기록을 바로 확정"} /></div>
         <div className="field"><label>문장 유사도 임계값 (0~1)</label><input type="number" step="0.05" min="0.3" max="1" className="num" value={s.similarityThreshold} onChange={(e) => setSettings({ similarityThreshold: Number(e.target.value) })} /></div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -360,6 +500,10 @@ export function SyncSection() {
   };
   return (
     <>
+      <div className="card pad">
+        <h3>도착한 기록 처리</h3>
+        <Switch on={doc.settings.supplementEnabled} onChange={(v) => setSettings({ supplementEnabled: v })} label={doc.settings.supplementEnabled ? "보완 대기 켬 — 워치·폰 기록을 보완 전 상태로 받아 모달로 처리" : "보완 대기 끔 — 도착한 기록을 바로 확정"} />
+      </div>
       <div className="card pad">
         <h3>릴레이 서버</h3>
         <div className="grid2">
@@ -407,16 +551,23 @@ export function SyncSection() {
 
 /* ---------- 백업 ---------- */
 function BackupSection() {
-  const doc = useStore((s) => s.doc);
+  const exportAll = useStore((s) => s.exportAll);
+  const importAll = useStore((s) => s.importAll);
   const replaceDoc = useStore((s) => s.replaceDoc);
+  const areaStats = useStore((s) => s.areaStats);
+  const areaName = useStore((s) => s.doc.settings.school.subject) || "현재 영역";
   const toast = useStore((s) => s.toast);
   const [pw, setPw] = useState("");
   const [mode, setMode] = useState<"export" | "import" | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [stats, setStats] = useState<AreaStats[]>([]);
+  useEffect(() => { areaStats().then(setStats); }, [areaStats]);
+  const total = stats.reduce((a, x) => ({ s: a.s + x.students, r: a.r + x.records, d: a.d + x.drafts }), { s: 0, r: 0, d: 0 });
   const doExport = async () => {
     if (pw.length < 4) { toast({ text: "비밀번호 4자 이상" }); return; }
-    const c = await encryptBackup(pw, toExportJson(doc, nowIso()), nowIso());
-    if (await saveFile(`누가-암호백업-${nowIso().slice(0, 10)}.nuga`, JSON.stringify(c), [{ name: "누가 백업", extensions: ["nuga"] }])) toast({ text: "암호화 백업 저장" });
+    const bundle = await exportAll();
+    const c = await encryptBackup(pw, JSON.stringify(bundle), nowIso());
+    if (await saveFile(`누가-암호백업-전체영역-${nowIso().slice(0, 10)}.nuga`, JSON.stringify(c), [{ name: "누가 백업", extensions: ["nuga"] }])) toast({ text: `암호화 백업 저장 · 영역 ${bundle.areas.length}개` });
     setMode(null); setPw("");
   };
   const doImport = async () => {
@@ -425,21 +576,31 @@ function BackupSection() {
       const text = await readFileAsText(file);
       const j = JSON.parse(text);
       const json = j.format === "nuga-backup" ? await decryptBackup(pw, j as BackupContainer) : text;
-      replaceDoc(parseImportJson(json)); toast({ text: "불러오기 완료" }); setMode(null); setPw("");
+      const parsed = JSON.parse(json);
+      if (parsed.format === "nuga-multi") { await importAll(parsed as MultiBackup); toast({ text: `불러오기 완료 · 영역 ${parsed.areas.length}개` }); }
+      else { replaceDoc(parseImportJson(json)); toast({ text: `${areaName} 영역에 불러옴` }); }
+      setMode(null); setPw(""); areaStats().then(setStats);
     } catch (e) { toast({ text: e instanceof Error ? e.message : "불러오기 실패" }); }
   };
   const pickImport = async () => { const [f] = await pickFile(".nuga,.json"); if (!f) return; setFile(f); setMode("import"); };
   return (
     <>
       <div className="card pad">
-        <h3>백업</h3>
-        <div className="muted small" style={{ marginBottom: 10 }}>서버에는 원본이 없습니다. 학기 중 주기적으로 내보내 보관하세요. 현재 데이터: 학생 {doc.students.length} · 기록 {doc.records.length} · 초안 {doc.drafts.length}</div>
+        <h3>백업 · 모든 영역</h3>
+        <div className="muted small" style={{ marginBottom: 10 }}>서버에는 원본이 없습니다. 학기 중 주기적으로 내보내 보관하세요. 백업 파일 하나에 모든 영역과 공통 설정이 들어갑니다(API 키 제외).</div>
+        <table className="table" style={{ marginBottom: 12 }}>
+          <thead><tr><th>영역</th><th style={{ width: 90 }}>학생</th><th style={{ width: 90 }}>기록</th><th style={{ width: 90 }}>초안</th></tr></thead>
+          <tbody>
+            {stats.map((x) => <tr key={x.id}><td className="name">{x.name}</td><td className="num">{x.students}</td><td className="num">{x.records}</td><td className="num">{x.drafts}</td></tr>)}
+            {stats.length > 1 && <tr><td className="key">합계</td><td className="num key">{total.s}</td><td className="num key">{total.r}</td><td className="num key">{total.d}</td></tr>}
+          </tbody>
+        </table>
         <div className="flex"><button className="btn primary" onClick={() => setMode("export")}>암호화 백업 내보내기</button><button className="btn" onClick={pickImport}>백업 / JSON 불러오기</button></div>
       </div>
       {mode && (
         <Modal title={mode === "export" ? "백업 비밀번호" : `불러오기 · ${file?.name}`} onClose={() => setMode(null)} width="narrow" footer={<><span className="grow" /><button className="btn" onClick={() => setMode(null)}>취소</button><button className="btn primary" onClick={mode === "export" ? doExport : doImport}>{mode === "export" ? "내보내기" : "불러오기 (덮어씀)"}</button></>}>
           <div className="field"><label>비밀번호 {mode === "import" && <span className="muted">(JSON 파일이면 비워 둠)</span>}</label><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus onKeyDown={(e) => e.key === "Enter" && (mode === "export" ? doExport() : doImport())} /></div>
-          {mode === "import" && <div className="muted small" style={{ marginTop: 8 }}>현재 데이터가 파일 내용으로 대체됩니다.</div>}
+          {mode === "import" && <div className="muted small" style={{ marginTop: 8 }}>전체 영역 백업이면 모든 영역이 파일 내용으로 바뀝니다. 한 영역짜리 JSON이면 지금 열린 {areaName} 영역만 바뀝니다.</div>}
         </Modal>
       )}
     </>
@@ -481,23 +642,28 @@ function AiSection() {
 
 /* ---------- 데이터 ---------- */
 function DataSection() {
-  const doc = useStore((s) => s.doc);
   const loadSample = useStore((s) => s.loadSample);
-  const resetAll = useStore((s) => s.resetAll);
+  const resetEverything = useStore((s) => s.resetEverything);
+  const areaStats = useStore((s) => s.areaStats);
+  const areaName = useStore((s) => s.doc.settings.school.subject) || "현재 영역";
   const toast = useStore((s) => s.toast);
   const [confirm, setConfirm] = useState<"sample" | "reset" | null>(null);
   const [loc, setLoc] = useState("");
-  useEffect(() => { import("../lib/persist").then((m) => m.getPersist()).then((p) => setLoc(p.location())); }, []);
+  const [stats, setStats] = useState<AreaStats[]>([]);
+  useEffect(() => { import("../lib/persist").then((m) => m.getPersist()).then((p) => setLoc(p.location())); areaStats().then(setStats); }, [areaStats]);
   return (
     <>
       <div className="card pad">
-        <h3>데이터</h3>
+        <h3>데이터 · 모든 영역</h3>
         <div className="muted small" style={{ marginBottom: 10 }}>저장 위치: <span className="mono">{loc}</span></div>
-        <div className="flex"><button className="btn" onClick={() => setConfirm("sample")}>샘플 데이터 불러오기</button><button className="btn ghost" style={{ color: "var(--warn)" }} onClick={() => setConfirm("reset")}>모든 데이터 삭제</button></div>
-        <div className="muted small" style={{ marginTop: 10 }}>학생 {doc.students.length} · 기록 {doc.records.length} · 수행평가 {doc.performances.length} · 초안 {doc.drafts.length}</div>
+        <table className="table" style={{ marginBottom: 12 }}>
+          <thead><tr><th>영역</th><th style={{ width: 80 }}>학생</th><th style={{ width: 80 }}>기록</th><th style={{ width: 90 }}>수행평가</th><th style={{ width: 80 }}>초안</th></tr></thead>
+          <tbody>{stats.map((x) => <tr key={x.id}><td className="name">{x.name}</td><td className="num">{x.students}</td><td className="num">{x.records}</td><td className="num">{x.performances}</td><td className="num">{x.drafts}</td></tr>)}</tbody>
+        </table>
+        <div className="flex"><button className="btn" onClick={() => setConfirm("sample")}>{areaName}을(를) 샘플 데이터로</button><span className="grow" /><button className="btn ghost" style={{ color: "var(--warn)" }} onClick={() => setConfirm("reset")}>모든 영역 데이터 삭제</button></div>
       </div>
-      {confirm === "sample" && <Confirm title="샘플 데이터" body="현재 데이터를 샘플(화학Ⅰ · 2개 반)로 대체합니다. 동기화·AI 설정은 유지됩니다." okLabel="불러오기" onOk={() => { loadSample(); toast({ text: "샘플 불러옴" }); }} onClose={() => setConfirm(null)} />}
-      {confirm === "reset" && <Confirm title="모든 데이터 삭제" body="명단·기록·초안·설정이 모두 삭제됩니다. 먼저 백업하세요." okLabel="삭제" danger onOk={() => { resetAll(); toast({ text: "초기화됨" }); }} onClose={() => setConfirm(null)} />}
+      {confirm === "sample" && <Confirm title="샘플 데이터" body={`지금 열린 ${areaName} 영역의 명단·기록·초안을 샘플(화학Ⅰ · 2개 반)로 대체합니다. 다른 영역과 공통 설정은 그대로입니다.`} okLabel="불러오기" onOk={() => { loadSample(); toast({ text: "샘플 불러옴" }); }} onClose={() => setConfirm(null)} />}
+      {confirm === "reset" && <Confirm title="모든 영역 데이터 삭제" body={`영역 ${stats.length}개의 명단·기록·초안과 공통 설정(동기화 키 포함)이 모두 삭제됩니다. 먼저 백업하세요.`} okLabel="모두 삭제" danger onOk={async () => { await resetEverything(); toast({ text: "초기화됨" }); }} onClose={() => setConfirm(null)} />}
     </>
   );
 }

@@ -12,7 +12,15 @@ export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
 
 /** 영역 = 독립 문서(명단·기록·초안·시간표). 동기화·AI·표시 옵션은 모든 영역이 공유한다. */
 export interface AreaMeta { id: string; name: string; createdAt: string }
-export interface GlobalSettings { sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; lowRecordEnabled: boolean; supplementEnabled: boolean }
+/** 공통 설정: 모든 영역이 따른다. 글자수·기준(LENGTH_KEYS)은 영역별로 lengthOverride 를 켜면 따로 쓸 수 있다. */
+export interface GlobalSettings {
+  sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; supplementEnabled: boolean;
+  lowRecordEnabled: boolean; targetLength?: Settings["targetLength"]; lengthMode?: Settings["lengthMode"]; lowRecordThreshold?: number; similarityThreshold?: number;
+}
+const LENGTH_KEYS = ["targetLength", "lengthMode", "lowRecordThreshold", "lowRecordEnabled", "similarityThreshold"] as const;
+let lastGlobal: GlobalSettings | null = null;
+export interface AreaStats { id: string; name: string; students: number; records: number; drafts: number; performances: number }
+export interface MultiBackup { format: "nuga-multi"; version: 1; exportedAt: string; global: GlobalSettings | null; currentArea: string; areas: { meta: AreaMeta; doc: NugaDoc }[] }
 
 const DEFAULT_AREA = "default";
 function normalizeDoc(doc: NugaDoc): NugaDoc {
@@ -20,20 +28,31 @@ function normalizeDoc(doc: NugaDoc): NugaDoc {
   doc.settings = { ...base.settings, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
   return doc;
 }
-function pickGlobal(doc: NugaDoc): GlobalSettings {
+/** 현재 문서에서 공통 설정을 뽑는다. 이 영역이 글자수를 따로 쓰는 중이면 글자수 값은 이전 공통값을 유지한다. */
+function pickGlobal(doc: NugaDoc, prev: GlobalSettings | null): GlobalSettings {
   const s = doc.settings;
-  return { sync: s.sync, ai: s.ai, options: s.options, lowRecordEnabled: s.lowRecordEnabled, supplementEnabled: s.supplementEnabled };
+  const src = s.lengthOverride && prev ? prev : s;
+  return {
+    sync: s.sync, ai: s.ai, options: s.options, supplementEnabled: s.supplementEnabled,
+    lowRecordEnabled: src.lowRecordEnabled ?? s.lowRecordEnabled, targetLength: { ...(src.targetLength ?? s.targetLength) }, lengthMode: src.lengthMode ?? s.lengthMode,
+    lowRecordThreshold: src.lowRecordThreshold ?? s.lowRecordThreshold, similarityThreshold: src.similarityThreshold ?? s.similarityThreshold,
+  };
 }
 function applyGlobal(doc: NugaDoc, g: GlobalSettings | null): NugaDoc {
   if (!g) return doc;
-  doc.settings = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, lowRecordEnabled: g.lowRecordEnabled, supplementEnabled: g.supplementEnabled };
+  const next = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, supplementEnabled: g.supplementEnabled };
+  if (!doc.settings.lengthOverride) {
+    for (const k of LENGTH_KEYS) { const v = g[k]; if (v !== undefined) (next as Record<string, unknown>)[k] = k === "targetLength" ? { ...(v as Settings["targetLength"]) } : v; }
+  }
+  doc.settings = next;
   return doc;
 }
+export function currentGlobal(): GlobalSettings | null { return lastGlobal; }
 export async function readAreaDoc(id: string): Promise<NugaDoc | null> {
   const p = await getPersist();
   const raw = id === DEFAULT_AREA ? await p.load() : await p.loadAux<NugaDoc>(`doc:${id}`);
   if (!raw) return null;
-  return applyGlobal(normalizeDoc(raw), await p.loadAux<GlobalSettings>("global"));
+  return applyGlobal(normalizeDoc(raw), lastGlobal ?? (await p.loadAux<GlobalSettings>("global")));
 }
 export async function writeAreaDoc(id: string, doc: NugaDoc): Promise<void> {
   const p = await getPersist();
@@ -61,6 +80,11 @@ interface State {
   switchArea(id: string): Promise<void>;
   renameArea(id: string, name: string): void;
   deleteArea(id: string): Promise<void>;
+  setLengthOverride(on: boolean): void;
+  areaStats(): Promise<AreaStats[]>;
+  exportAll(): Promise<MultiBackup>;
+  importAll(b: MultiBackup): Promise<void>;
+  resetEverything(): Promise<void>;
   flush(): Promise<void>;
   update(mut: (d: NugaDoc) => void, opts?: { silent?: boolean }): void;
   setPage(p: Page): void;
@@ -81,6 +105,7 @@ interface State {
   deleteRecord(id: string): void;
   setStudents(students: Student[]): void;
   upsertStudent(s: Student): void;
+  editStudent(cls: string, oldNo: number, patch: { no?: number; name?: string; level?: Student["level"] }): { ok: boolean; message?: string; student?: Student };
   removeStudent(cls: string, no: number): void;
   setSettings(patch: Partial<Settings> | ((s: Settings) => Settings)): void;
   saveDraft(d: Draft): void;
@@ -97,12 +122,13 @@ let pendingSave: (() => Promise<void>) | null = null;
 function scheduleSave(doc: NugaDoc, outbox: Outbox) {
   if (saveTimer) clearTimeout(saveTimer);
   const areaId = useStore.getState().areaId || DEFAULT_AREA;
+  const g = pickGlobal(doc, lastGlobal); lastGlobal = g;
   pendingSave = async () => {
     pendingSave = null;
     const p = await getPersist();
     await writeAreaDoc(areaId, doc);
     await p.saveAux("outbox", outbox);
-    await p.saveAux("global", pickGlobal(doc));
+    await p.saveAux("global", g);
     // 영역 이름 = 영역 문서의 school.subject
     const st = useStore.getState();
     const name = doc.settings.school.subject.trim() || "영역";
@@ -143,7 +169,8 @@ export const useStore = create<State>((set, get) => ({
     }
     if (!areas.some((a) => a.id === areaId)) areaId = areas[0].id;
     set({ areas, areaId });
-    const doc = (await readAreaDoc(areaId)) || applyGlobal(emptyDoc(), await p.loadAux<GlobalSettings>("global"));
+    lastGlobal = await p.loadAux<GlobalSettings>("global");
+    const doc = (await readAreaDoc(areaId)) || applyGlobal(emptyDoc(), lastGlobal);
     const outbox = (await p.loadAux<Outbox>("outbox")) || { messages: [], tombstones: [] };
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
@@ -157,8 +184,8 @@ export const useStore = create<State>((set, get) => ({
     await get().flush();
     const p = await getPersist();
     const cur = get().doc;
-    const d = emptyDoc();
-    d.settings = { ...d.settings, ...pickGlobal(cur), school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cur.settings.categories.map((c) => ({ ...c })), periods: cur.settings.periods.map((x) => ({ ...x })), targetLength: { ...cur.settings.targetLength }, lengthMode: cur.settings.lengthMode, onboarded: true };
+    const d = applyGlobal(emptyDoc(), pickGlobal(cur, lastGlobal));
+    d.settings = { ...d.settings, lengthOverride: false, school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cur.settings.categories.map((c) => ({ ...c })), periods: cur.settings.periods.map((x) => ({ ...x })), onboarded: true };
     if (a.copyRoster) { d.students = cur.students.map((s) => ({ ...s })); d.settings.classes = cur.settings.classes.map((c) => ({ ...c })); }
     const id = uuid();
     await writeAreaDoc(id, d);
@@ -171,7 +198,7 @@ export const useStore = create<State>((set, get) => ({
     if (id === get().areaId) return;
     await get().flush();
     const p = await getPersist();
-    const doc = (await readAreaDoc(id)) || applyGlobal(emptyDoc(), await p.loadAux<GlobalSettings>("global"));
+    const doc = (await readAreaDoc(id)) || applyGlobal(emptyDoc(), lastGlobal);
     await p.saveAux("currentArea", id);
     set({ areaId: id, doc, cls: doc.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
   },
@@ -192,6 +219,64 @@ export const useStore = create<State>((set, get) => ({
     await p.saveAux("areas", areas);
     set({ areas });
     if (id === get().areaId) { const next = areas[0].id; useStore.setState({ areaId: "" }); await get().switchArea(next); }
+  },
+
+  setLengthOverride(on) {
+    if (on) { get().update((d) => { d.settings.lengthOverride = true; }); return; }
+    const g = lastGlobal;
+    get().update((d) => { d.settings.lengthOverride = false; if (g) applyGlobal(d, g); });
+  },
+
+  async areaStats() {
+    await get().flush();
+    const out: AreaStats[] = [];
+    for (const a of get().areas) {
+      const d = a.id === get().areaId ? get().doc : await readAreaDoc(a.id);
+      out.push({ id: a.id, name: a.name, students: d?.students.length || 0, records: d?.records.length || 0, drafts: d?.drafts.filter((x) => x.text).length || 0, performances: d?.performances.length || 0 });
+    }
+    return out;
+  },
+
+  async exportAll() {
+    await get().flush();
+    const areas: MultiBackup["areas"] = [];
+    for (const a of get().areas) {
+      const d = a.id === get().areaId ? structuredClone(get().doc) : await readAreaDoc(a.id);
+      if (!d) continue;
+      d.settings.ai = { ...d.settings.ai, apiKey: "" };
+      areas.push({ meta: a, doc: d });
+    }
+    const g = lastGlobal ? { ...lastGlobal, ai: { ...lastGlobal.ai, apiKey: "" } } : null;
+    return { format: "nuga-multi", version: 1, exportedAt: nowIso(), global: g, currentArea: get().areaId, areas };
+  },
+
+  async importAll(b) {
+    if (b.format !== "nuga-multi" || !Array.isArray(b.areas) || !b.areas.length) throw new Error("모든 영역 백업 형식이 아님");
+    await get().flush();
+    const p = await getPersist();
+    for (const a of get().areas) if (!b.areas.some((x) => x.meta.id === a.id)) { if (a.id === DEFAULT_AREA) await p.save(emptyDoc()); else await p.saveAux(`doc:${a.id}`, null); }
+    const keepKey = lastGlobal?.ai.apiKey || "";
+    for (const { meta, doc } of b.areas) await writeAreaDoc(meta.id, normalizeDoc(doc));
+    if (b.global) { lastGlobal = { ...b.global, ai: { ...b.global.ai, apiKey: b.global.ai.apiKey || keepKey } }; await p.saveAux("global", lastGlobal); }
+    const areas = b.areas.map((x) => x.meta);
+    await p.saveAux("areas", areas);
+    const target = areas.some((a) => a.id === b.currentArea) ? b.currentArea : areas[0].id;
+    const doc = (await readAreaDoc(target)) || emptyDoc();
+    await p.saveAux("currentArea", target);
+    set({ areas, areaId: target, doc, cls: doc.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+  },
+
+  async resetEverything() {
+    if (saveTimer) clearTimeout(saveTimer); pendingSave = null;
+    const p = await getPersist();
+    for (const a of get().areas) { if (a.id === DEFAULT_AREA) continue; await p.saveAux(`doc:${a.id}`, null); }
+    const d = emptyDoc();
+    await p.save(d);
+    const areas: AreaMeta[] = [{ id: DEFAULT_AREA, name: "영역 1", createdAt: nowIso() }];
+    lastGlobal = null;
+    await p.saveAux("global", null); await p.saveAux("areas", areas); await p.saveAux("currentArea", DEFAULT_AREA);
+    await p.saveAux("outbox", { messages: [], tombstones: [] });
+    set({ areas, areaId: DEFAULT_AREA, doc: d, cls: "", page: "settings", settingsTab: "subject", selected: null, supplementQueue: [], outbox: { messages: [], tombstones: [] } });
   },
 
   update(mut, opts) {
@@ -254,6 +339,31 @@ export const useStore = create<State>((set, get) => ({
     });
     if (!get().cls || !get().doc.settings.classes.some((c) => c.class === get().cls)) set({ cls: get().doc.settings.classes[0]?.class || "" });
   },
+  editStudent(cls, oldNo, patch) {
+    const d0 = get().doc;
+    const cur = d0.students.find((x) => x.class === cls && x.no === oldNo);
+    if (!cur) return { ok: false, message: "학생을 찾을 수 없음" };
+    const newNo = patch.no ?? oldNo;
+    if (!Number.isInteger(newNo) || newNo < 1) return { ok: false, message: "번호는 1 이상의 정수" };
+    if (newNo !== oldNo && d0.students.some((x) => x.class === cls && x.no === newNo)) return { ok: false, message: `${cls} ${newNo}번은 이미 있음` };
+    const name = (patch.name ?? cur.name).trim() || cur.name;
+    const next: Student = { ...cur, name, level: patch.level ?? cur.level, no: newNo };
+    const moved: NugaRecord[] = [];
+    get().update((d) => {
+      d.students = d.students.map((x) => (x.class === cls && x.no === oldNo ? next : x)).sort((a, b) => classSortKey(a.class) - classSortKey(b.class) || a.no - b.no);
+      if (newNo !== oldNo) {
+        const t = nowIso();
+        for (const r of d.records) if (r.class === cls && r.no === oldNo) { r.no = newNo; r.updatedAt = t; moved.push({ ...r }); }
+        for (const x of d.drafts) if (x.class === cls && x.no === oldNo) x.no = newNo;
+        for (const x of d.performances) if (x.class === cls && x.no === oldNo) x.no = newNo;
+        d.settings.classes = d.settings.classes.map((c) => (c.class === cls ? { ...c, size: Math.max(c.size, newNo) } : c));
+      }
+    });
+    if (moved.length) get().queueMessage({ v: 1, type: "records", deviceId: get().deviceId, sentAt: nowIso(), payload: moved });
+    const sel = get().selected;
+    if (sel && sel.class === cls && sel.no === oldNo) set({ selected: { class: cls, no: newNo } });
+    return { ok: true, student: next };
+  },
   upsertStudent(s) {
     const students = get().doc.students.filter((x) => !(x.class === s.class && x.no === s.no));
     get().setStudents([...students, s].sort((a, b) => classSortKey(a.class) - classSortKey(b.class) || a.no - b.no));
@@ -279,10 +389,8 @@ export const useStore = create<State>((set, get) => ({
   },
   removePerformance(id) { get().update((d) => { d.performances = d.performances.filter((x) => x.id !== id); }); },
   loadSample() {
-    const sample = makeSampleDoc();
     const cur = get().doc;
-    sample.settings.sync = cur.settings.sync; sample.settings.ai = cur.settings.ai;
-    sample.settings.lowRecordEnabled = cur.settings.lowRecordEnabled; sample.settings.supplementEnabled = cur.settings.supplementEnabled;
+    const sample = applyGlobal(makeSampleDoc(), lastGlobal ?? pickGlobal(cur, null));
     if (!sample.settings.supplementEnabled) for (const r of sample.records) if (r.status === "pending") r.status = "confirmed";
     set({ doc: sample, cls: sample.settings.classes[0].class, page: "records" });
     scheduleSave(sample, get().outbox);

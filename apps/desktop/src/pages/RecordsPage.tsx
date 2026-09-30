@@ -4,6 +4,7 @@ import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LevelBadge, Modal, SearchBox } from "../components/ui";
 import { exportSheets } from "../lib/excel";
+import { StudentEditModal } from "../components/StudentEdit";
 
 type Filter = "all" | "low" | "pending";
 
@@ -87,14 +88,16 @@ export function RecordsPage() {
           </table>
         )}
       </div>
-      {open && <StudentDetail student={open} onClose={() => setOpen(null)} />}
+      {open && <StudentDetail student={open} onClose={() => setOpen(null)} onChange={setOpen} />}
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </>
   );
 }
 
-export function StudentDetail({ student, onClose }: { student: Student; onClose: () => void }) {
+export function StudentDetail({ student: initial, onClose, onChange }: { student: Student; onClose: () => void; onChange?: (s: Student) => void }) {
   const doc = useStore((s) => s.doc);
+  const student = doc.students.find((x) => x.class === initial.class && x.no === initial.no) || initial;
+  const [editing, setEditing] = useState(false);
   const updateRecord = useStore((s) => s.updateRecord);
   const deleteRecord = useStore((s) => s.deleteRecord);
   const setPage = useStore((s) => s.setPage);
@@ -106,7 +109,7 @@ export function StudentDetail({ student, onClose }: { student: Student; onClose:
   const perfs = perfsOf(doc, student.class, student.no);
   const goDraft = () => { select({ class: student.class, no: student.no }); setMode2p("individual"); setPage("draft"); onClose(); };
   return (
-    <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} student={student} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span></div>}
+    <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} student={student} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span><button className="btn sm" onClick={() => setEditing(true)}><Icon name="pen" size={13} />번호·이름 수정</button></div>}
       footer={<><span className="muted small">항목을 클릭하면 수정</span><span className="grow" /><button className="btn primary" onClick={goDraft}><Icon name="pen" />초안 작성</button></>}>
       <div className="col" style={{ gap: 14 }}>
         {recs.length === 0 ? <Empty title="기록 없음" /> : (
@@ -135,6 +138,7 @@ export function StudentDetail({ student, onClose }: { student: Student; onClose:
           </div>
         )}
       </div>
+      {editing && <StudentEditModal student={student} onClose={() => setEditing(false)} onSaved={(s) => onChange?.(s)} />}
       {del && <Confirm title="기록 삭제" body={`${fmtMD(del.time)} · ${catLabel(doc, del.category)} 기록을 삭제합니다. 폰·워치에도 삭제가 전파됩니다.`} okLabel="삭제" danger onOk={() => { deleteRecord(del.id); toast({ text: "삭제됨" }); }} onClose={() => setDel(null)} />}
     </Modal>
   );

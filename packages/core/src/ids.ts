@@ -32,7 +32,10 @@ export function fmtHM(iso: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** 반 정렬 키. "2-3" 꼴은 학년·반 순, 숫자로 시작하면 그 숫자, 그 외 자유 이름은 뒤로. */
 export function classSortKey(c: string): number {
-  const [g, n] = c.split("-").map((x) => parseInt(x, 10));
-  return (g || 0) * 100 + (n || 0);
+  const m = c.match(/^(\d+)\s*-\s*(\d+)/);
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10);
+  const n = parseInt(c, 10);
+  return isNaN(n) ? 1_000_000 : n * 100;
 }

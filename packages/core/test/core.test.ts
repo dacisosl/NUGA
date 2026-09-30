@@ -3,7 +3,7 @@ import {
   buildPairingUri, parsePairingUri, generateSyncKey, keyIdOf, encryptEnvelope, decryptEnvelope, encryptBackup, decryptBackup,
   countChars, splitSentences, isNominalEnding, suggestNominal, similarity, josa,
   reviewText, generateLocalDraft, buildDraftRequest, parseDraftResponse,
-  resolveNow, lessonFor, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson,
+  resolveNow, lessonFor, syncProgressSkeleton, classSortKey, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson,
   type NugaRecord, type SyncMessage,
 } from "../src";
 
@@ -142,5 +142,22 @@ describe("import/export", () => {
     expect(text).not.toContain("secret");
     const back = parseImportJson(text);
     expect(back.students.length).toBe(doc.students.length);
+  });
+});
+
+describe("progress skeleton & class names", () => {
+  it("adds blank rows per lesson date, keeps filled rows, drops stale blanks", () => {
+    const tt = [{ weekday: 1, period: 3, class: "2-3" }, { weekday: 1, period: 4, class: "2-3" }, { weekday: 3, period: 2, class: "동아리A" }];
+    const r = syncProgressSkeleton([{ date: "2026-03-02", class: "2-3", unit: "1단원", lesson: 1, title: "몰" }], tt, 2026, 1);
+    expect(r.progress.find((p) => p.date === "2026-03-02")!.unit).toBe("1단원");
+    expect(r.progress.filter((p) => p.class === "2-3" && p.date === "2026-03-09").length).toBe(1); // 같은 날 2교시 → 1행
+    expect(r.progress.some((p) => p.class === "동아리A" && p.date === "2026-03-04")).toBe(true);
+    const r2 = syncProgressSkeleton(r.progress, tt.filter((t) => t.class !== "동아리A"), 2026, 1);
+    expect(r2.progress.some((p) => p.class === "동아리A")).toBe(false);
+    expect(r2.removed).toBeGreaterThan(0);
+    expect(lessonFor(r.progress, "2-3", "2026-03-09")?.unit).toBe("1단원"); // 빈 행은 건너뛰고 이전 진도
+  });
+  it("sorts free-form class names after numeric ones", () => {
+    expect(["동아리A", "2-10", "2-3", "1-1"].sort((a, b) => classSortKey(a) - classSortKey(b))).toEqual(["1-1", "2-3", "2-10", "동아리A"]);
   });
 });

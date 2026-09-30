@@ -110,6 +110,8 @@ export interface Settings {
   lowRecordEnabled: boolean;
   supplementEnabled: boolean;
   similarityThreshold: number;
+  /** true면 공통 글자수·기준 대신 이 영역 전용 값을 쓴다 */
+  lengthOverride: boolean;
   options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean };
   sync: SyncSettings | null;
   ai: AiSettings;
@@ -173,6 +175,7 @@ export function defaultSettings(): Settings {
     lowRecordEnabled: false,
     supplementEnabled: false,
     similarityThreshold: 0.7,
+    lengthOverride: false,
     options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false },
     sync: null,
     ai: { enabled: false, provider: "local", apiKey: "", model: "claude-opus-5-5" },

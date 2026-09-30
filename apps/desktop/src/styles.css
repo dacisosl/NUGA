@@ -232,14 +232,31 @@ textarea { resize: vertical; }
 .settings-nav button { text-align: left; border: none; background: transparent; padding: 8px 12px; border-radius: 8px; color: var(--text2); font-weight: 500; }
 .settings-nav button.active { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
 .settings-body { display: flex; flex-direction: column; gap: 16px; max-width: 860px; }
+.settings-nav .tag { display: block; font-size: 11px; font-weight: 700; color: var(--warn); margin-top: 2px; }
+.scope-note { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+.scope-note b { font-weight: 700; }
+.scope-note span { color: var(--text2); }
+.scope-note.common { background: var(--accent-soft); color: var(--accent); }
+.scope-note.area { background: var(--warn-soft); color: var(--warn); }
+.card.override { border-color: var(--warn); background: #FFFBF7; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .ttgrid { display: grid; grid-template-columns: 56px repeat(5, 1fr); gap: 4px; }
 .ttgrid .h { text-align: center; font-size: 12px; color: var(--text2); padding: 6px 0; }
 .ttgrid .p { font-size: 12px; color: var(--text2); display: flex; align-items: center; justify-content: center; }
-.ttcell { height: 44px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; color: var(--text3); }
+.ttcell { height: 44px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface); font-weight: 700; color: var(--text3); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 6px; cursor: pointer; }
 .ttcell.on { border-style: solid; background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .ttcell:hover { border-color: var(--accent); }
+.ttcell.sel { outline: 3px solid var(--accent); outline-offset: -2px; background: #DCE4FB !important; color: var(--accent) !important; border-style: solid; }
+.ttgrid .p { flex-direction: column; line-height: 1.2; } .ttgrid .p .t { font-size: 10px; color: var(--text3); }
+.tc1 { --tc: #2448C9; --tcs: #E8EDFB; } .tc2 { --tc: #0D6660; --tcs: #DDF1EF; } .tc3 { --tc: #6C33A3; --tcs: #F0E7FA; }
+.tc4 { --tc: #B4470B; --tcs: #FDEEE3; } .tc5 { --tc: #7A5B00; --tcs: #FBF1CC; } .tc6 { --tc: #4A4E5A; --tcs: #ECECEE; }
+.ttcell.on[class*="tc"] { background: var(--tcs); color: var(--tc); border: 1px solid transparent; }
+.chip.tchip { background: var(--tcs); color: var(--tc); gap: 6px; }
+.chip.tchip .muted { color: var(--tc); opacity: .7; font-weight: 500; }
+.ttbar { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; background: var(--text); color: #fff; border-radius: 12px; box-shadow: var(--shadow-lg); }
+.ttbar .sep { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+.ttbar input { height: 30px; min-width: 220px; color: var(--text); }
 .qr { display: flex; gap: 20px; align-items: flex-start; }
 .qr img { border: 1px solid var(--line); border-radius: 12px; background: #fff; width: 220px; height: 220px; }
 .steps { display: flex; gap: 6px; align-items: center; }

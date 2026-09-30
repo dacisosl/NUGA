@@ -9,6 +9,7 @@ import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, LevelBadge, 
 import { generateDraft } from "../lib/ai";
 import { pickFile, readFileAsDataUrl } from "../lib/platform";
 import { exportSheets } from "../lib/excel";
+import { StudentEditModal } from "../components/StudentEdit";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
 
@@ -101,6 +102,7 @@ function Individual() {
   const [input, setInput] = useState("");
   const [confirmA, setConfirmA] = useState(false);
   const [addPerf, setAddPerf] = useState(false);
+  const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   // 학생 바뀌면 작업본 로드 (캐시 → 저장본 → 빈 값)
@@ -191,6 +193,7 @@ function Individual() {
             <div className="card profile">
               <LevelBadge level={student.level} student={student} />
               <div><div className="name">{student.name}</div><div className="muted small">{student.class} · {student.no}번</div></div>
+              <button className="btn sm" onClick={() => setEditStu(true)}><Icon name="pen" size={13} />번호·이름 수정</button>
               <div className="stats">
                 {doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={`${c.label} ${counts[c.key]}`} />)}
                 <Chip cat="perf" label={`수행 ${perfs.length}`} />
@@ -253,6 +256,11 @@ function Individual() {
       </div>
       {confirmA && <Confirm title="수준 A · 글자수 미달" body={`목표 ${target}자에 미달(${len}자)입니다. 기록이 부족한 상태로 저장할까요?`} okLabel="저장" onOk={doSave} onClose={() => setConfirmA(false)} />}
       {addPerf && <PerfAddModal student={student} onClose={() => setAddPerf(false)} />}
+      {editStu && <StudentEditModal student={student} onClose={() => setEditStu(false)} onSaved={(s, oldNo) => {
+        const oldKey = `${s.class}-${oldNo}`; const w0 = workingCache.get(oldKey);
+        if (w0 && oldNo !== s.no) { workingCache.delete(oldKey); workingCache.set(keyOf(s), w0); }
+        select({ class: s.class, no: s.no });
+      }} />}
     </div>
   );
 }
