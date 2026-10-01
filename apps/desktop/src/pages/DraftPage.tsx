@@ -536,6 +536,24 @@ function Batch() {
   const [running, setRunning] = useState(false);
   const [perfPanel, setPerfPanel] = useState(false);
   const [modalNo, setModalNo] = useState<number | null>(null);
+  // 초안 칸 행 높이: 자동(전체 글이 보이게) / 고정(N줄, 넘치면 칸 안에서 스크롤)
+  const [rowMode, setRowMode] = useState<"auto" | "fixed">(() => { try { return localStorage.getItem("nuga.batchRowMode") === "fixed" ? "fixed" : "auto"; } catch { return "auto"; } });
+  const [rowLines, setRowLines] = useState<number>(() => { try { return Number(localStorage.getItem("nuga.batchRowLines")) || 3; } catch { return 3; } });
+  useEffect(() => { try { localStorage.setItem("nuga.batchRowMode", rowMode); localStorage.setItem("nuga.batchRowLines", String(rowLines)); } catch { /* 보기 설정 저장 실패는 무시 */ } }, [rowMode, rowLines]);
+  // 누가기록·PDF기록 열 접기 (보기 설정이라 이 기기에만 저장)
+  const [fold, setFold] = useState<{ recs: boolean; perfs: boolean }>(() => {
+    try { return { recs: false, perfs: false, ...JSON.parse(localStorage.getItem("nuga.batchFold") || "{}") }; } catch { return { recs: false, perfs: false }; }
+  });
+  const toggleFold = (k: "recs" | "perfs") => setFold((f) => {
+    const n = { ...f, [k]: !f[k] };
+    try { localStorage.setItem("nuga.batchFold", JSON.stringify(n)); } catch { /* 저장 못 해도 동작에는 지장 없음 */ }
+    return n;
+  });
+  const foldHead = (k: "recs" | "perfs", label: string) => (
+    <button type="button" className="fold-th" onClick={() => toggleFold(k)} title={fold[k] ? `${label} 펼치기` : `${label} 접기`} aria-expanded={!fold[k]}>
+      {fold[k] ? <Icon name="right" size={12} /> : <Icon name="left" size={12} />}{!fold[k] && <span>{label}</span>}
+    </button>
+  );
   const stopRef = useRef(false);
   const target = doc.settings.targetLength["세특"] || 500;
 
@@ -577,6 +595,10 @@ function Batch() {
       <div className="flex" style={{ marginBottom: 12 }}>
         <span className="muted">선택 <b className="num">{sel.size}</b>명</span>
         <span className="flex small muted">일괄 목표 <input type="number" className="num" style={{ width: 70, height: 30 }} value={target} onChange={(e) => setSettings((s) => ({ ...s, targetLength: { ...s.targetLength, "세특": Number(e.target.value) || 0 } }))} />자</span>
+        <span className="flex small muted" title="초안 칸의 행 높이">행 높이
+          <span className="seg"><button className={rowMode === "auto" ? "active" : ""} onClick={() => setRowMode("auto")}>전체 보기</button><button className={rowMode === "fixed" ? "active" : ""} onClick={() => setRowMode("fixed")}>고정</button></span>
+          {rowMode === "fixed" && <select className="select" style={{ height: 30 }} value={rowLines} onChange={(e) => setRowLines(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}줄</option>)}</select>}
+        </span>
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
         <span className="grow" />
         <button className="btn" onClick={() => setPerfPanel(true)}>PDF기록 일괄 등록</button>
@@ -587,7 +609,7 @@ function Batch() {
         <table className="table">
           <thead><tr>
             <th style={{ width: 40 }}><input type="checkbox" className="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(students.map((s) => s.no)))} /></th>
-            <th style={{ width: 56 }}>번호</th><th style={{ width: 130 }}>이름</th><th style={{ width: 120 }}>누가기록</th><th style={{ width: 90 }}>PDF기록</th><th>초안</th><th style={{ width: 90 }}>글자수</th><th style={{ width: 110 }}>상태</th>
+            <th style={{ width: 56 }}>번호</th><th style={{ width: 130 }}>이름</th><th className={`foldable ${fold.recs ? "folded" : ""}`} style={{ width: fold.recs ? 44 : 120 }}>{foldHead("recs", "누가기록")}</th><th className={`foldable ${fold.perfs ? "folded" : ""}`} style={{ width: fold.perfs ? 44 : 90 }}>{foldHead("perfs", "PDF기록")}</th><th>초안</th><th style={{ width: 90 }}>글자수</th><th style={{ width: 110 }}>상태</th>
           </tr></thead>
           <tbody>
             {students.map((s) => {
@@ -597,10 +619,10 @@ function Batch() {
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                   <td className="num key">{s.no}</td>
                   <td className="key name"><StudentTag student={s} onNameClick={() => setModalNo(s.no)} title="이름: 초안 편집 창 열기" /></td>
-                  <td><span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span></td>
-                  <td>{perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
-                  <td onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
-                    <EditableCell value={d?.text ? truncate(d.text, 80) : ""} placeholder="—" onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
+                  <td className={fold.recs ? "folded-cell" : ""} title={fold.recs ? `누가기록 ${recs.length}건` : undefined}>{fold.recs ? <span className="num small">{recs.length}</span> : <span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span>}</td>
+                  <td className={fold.perfs ? "folded-cell" : ""} title={fold.perfs ? `PDF기록 ${perfs.length}건` : undefined}>{fold.perfs ? <span className="num small">{perfs.length || "–"}</span> : perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
+                  <td className="draft-td" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+                    <DraftCell text={d?.text || ""} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
                   </td>
                   <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : <span className="muted">—</span>}</td>
                   <td>
@@ -619,6 +641,30 @@ function Batch() {
       {perfPanel && <PerfBatchPanel onClose={() => setPerfPanel(false)} />}
       {modalNo !== null && <DraftModal students={students} startNo={modalNo} onClose={() => setModalNo(null)} />}
     </div>
+  );
+}
+
+/** 일괄 표의 초안 칸. lines 가 없으면 전체 글을 보여 행이 늘어나고, 있으면 그 줄 수로 고정하고 칸 안에서 스크롤한다.
+ *  누르면 같은 크기의 여러 줄 편집칸으로 바뀌고, 칸 밖을 누르거나 Ctrl+Enter 로 저장, Esc 로 취소한다. */
+function DraftCell({ text, lines, onSave }: { text: string; lines: number | null; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(text);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (!editing) setV(text); }, [text, editing]);
+  useEffect(() => {
+    const el = ref.current; if (!editing || !el) return;
+    el.focus(); el.setSelectionRange(el.value.length, el.value.length);
+  }, [editing]);
+  // 자동 모드에서는 편집칸 높이를 글에 맞춘다
+  useEffect(() => { const el = ref.current; if (editing && el && !lines) { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; } }, [v, editing, lines]);
+  const style = lines ? { maxHeight: `${lines * 1.6}em` } : undefined;
+  if (!text && !editing) return <span className="muted">—</span>;
+  if (!editing) return <div className={`draft-cell ${lines ? "fixed" : ""}`} style={style} onClick={() => setEditing(true)} title="눌러서 고치기">{text}</div>;
+  const commit = () => { setEditing(false); if (v.trim() && v !== text) onSave(v.trim()); else setV(text); };
+  return (
+    <textarea ref={ref} className="draft-cell-edit" style={lines ? { height: `${lines * 1.6 + 0.9}em` } : undefined} value={v}
+      onChange={(e) => setV(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Escape") { setV(text); setEditing(false); } if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); } }} />
   );
 }
 
