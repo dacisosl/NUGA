@@ -1,4 +1,4 @@
-import type { Category, CategoryDef, DraftHistory, DraftSentence, Level, NugaRecord, Performance } from "./types";
+import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, Level, NugaRecord, Performance, SpanKind } from "./types";
 import { countChars, isNominalEnding, josa } from "./text";
 import { fmtMD } from "./ids";
 import { lessonLabel } from "./timetable";
@@ -151,6 +151,7 @@ export const DRAFT_OUTPUT_RULES = [
   "text 는 sentences 의 text 를 공백 한 칸으로 이어 붙인 것과 같아야 한다.",
   "evidence 에는 그 문장의 근거가 된 누가기록·PDF기록의 id 를 넣는다. 근거가 없는 문장은 쓰지 않는다.",
   "checks 에는 판독 불가·자료 불일치, 규정 적용이 불확실해 뺀 내용, 근거가 모자라 분량이 짧은 이유 등을 짧게 적는다. 없으면 빈 배열로 둔다.",
+  "각 문장은 spans 로도 나눈다: [{\"text\": 구간, \"kind\": activity|competency|evaluation|none}]. activity = 학생이 실제로 한 행동·활동, competency = 그 행동이 보여 주는 역량을 가리키는 말(예: 자기관리 역량, 의사소통 능력), evaluation = 교사의 판단·평가 표현(예: 매우 뛰어남, 성실한 학습자임), none = 이음말·조사 등. spans 의 text 를 순서대로 이어 붙이면 그 문장의 text 와 글자 하나까지 같아야 한다.",
 ].join("\n");
 
 export interface PromptPreset { key: string; label: string; text: string }
@@ -335,8 +336,12 @@ export const DRAFT_JSON_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        properties: { text: { type: "string" }, evidence: { type: "array", items: { type: "string" } } },
-        required: ["text", "evidence"], additionalProperties: false,
+        properties: {
+          text: { type: "string" },
+          evidence: { type: "array", items: { type: "string" } },
+          spans: { type: "array", items: { type: "object", properties: { text: { type: "string" }, kind: { type: "string", enum: ["activity", "competency", "evaluation", "none"] } }, required: ["text", "kind"], additionalProperties: false } },
+        },
+        required: ["text", "evidence", "spans"], additionalProperties: false,
       },
     },
     checks: { type: "array", items: { type: "string" } },
@@ -344,13 +349,54 @@ export const DRAFT_JSON_SCHEMA = {
   required: ["text", "sentences", "checks"], additionalProperties: false,
 } as const;
 
+const SPAN_KINDS = new Set(["activity", "competency", "evaluation", "none"]);
+/** AI 가 준 구간을 검증한다. 이어 붙인 글이 문장과 다르면 버리고 규칙 구분을 쓰게 한다. */
+export function cleanSpans(text: string, raw: unknown): DraftSpan[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const spans = raw.filter((x) => x && typeof x.text === "string" && SPAN_KINDS.has(x.kind)).map((x) => ({ text: String(x.text), kind: x.kind as SpanKind }));
+  return spans.length && spans.map((x) => x.text).join("").trim() === text.trim() ? spans : undefined;
+}
+
 /** 모델 응답 텍스트에서 JSON 추출·검증 */
 export function parseDraftResponse(raw: string): DraftResponse {
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("응답에 JSON이 없음");
   const obj = JSON.parse(m[0]) as Partial<DraftResponse>;
   if (typeof obj.text !== "string") throw new Error("text 누락");
-  const sentences = Array.isArray(obj.sentences) ? obj.sentences.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, evidence: Array.isArray(s.evidence) ? s.evidence.map(String) : [] })) : [];
+  const sentences = Array.isArray(obj.sentences) ? obj.sentences.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, evidence: Array.isArray(s.evidence) ? s.evidence.map(String) : [], spans: cleanSpans(s.text, (s as { spans?: unknown }).spans) })) : [];
   const checks = Array.isArray(obj.checks) ? obj.checks.map(String).map((x) => x.trim()).filter(Boolean) : [];
   return { text: obj.text.trim(), sentences, checks };
+}
+
+/* ---------------- AI 로 다시 구별하기 ---------------- */
+
+export const LABEL_SYSTEM_PROMPT = [
+  "너는 학교생활기록부 문장을 분석하는 도우미다. 각 문장을 구간으로 나누어 종류를 붙인다.",
+  "- activity: 학생이 실제로 한 행동·활동·수행 내용 (예: 수업 중 모르는 부분을 적극적으로 질문함, 글쓰기 과제에서 해결 방안을 자세히 작성함)",
+  "- competency: 그 행동이 보여 주는 역량을 가리키는 말 (예: 자기관리 역량, 의사소통 역량, 문제 해결 능력)",
+  "- evaluation: 교사의 판단·평가 표현 (예: 매우 뛰어난 학생임, 부족한 부분을 보충하고 해결해 나가는, 성실한 언어 학습자임)",
+  "- none: 이음말·조사 등 어느 것도 아닌 부분",
+  "문장을 고치지 말고 그대로 나눈다. 각 문장의 spans text 를 순서대로 이어 붙이면 원래 문장과 글자 하나까지 같아야 한다.",
+  "출력은 JSON 하나만: {\"sentences\": [{\"spans\": [{\"text\": 구간, \"kind\": 종류}]}]}. sentences 는 입력 문장 순서와 개수가 같아야 한다.",
+].join("\n");
+
+export const LABEL_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    sentences: { type: "array", items: { type: "object", properties: { spans: { type: "array", items: { type: "object", properties: { text: { type: "string" }, kind: { type: "string", enum: ["activity", "competency", "evaluation", "none"] } }, required: ["text", "kind"], additionalProperties: false } } }, required: ["spans"], additionalProperties: false } },
+  },
+  required: ["sentences"], additionalProperties: false,
+} as const;
+
+export function labelUserPrompt(sentences: string[]): string {
+  return sentences.map((s, i) => `${i + 1}. ${s}`).join("\n");
+}
+
+/** AI 구별 응답을 문장별 구간으로. 검증에 실패한 문장은 undefined (규칙으로 대신함) */
+export function parseLabelResponse(raw: string, sentences: string[]): (DraftSpan[] | undefined)[] {
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("응답에 JSON이 없음");
+  const obj = JSON.parse(m[0]) as { sentences?: { spans?: unknown }[] };
+  const arr = Array.isArray(obj.sentences) ? obj.sentences : [];
+  return sentences.map((s, i) => cleanSpans(s, arr[i]?.spans));
 }

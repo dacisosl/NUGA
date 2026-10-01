@@ -38,6 +38,7 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
 }) {
   const upsert = useStore((s) => s.upsertStudent);
   const doc = useStore((s) => s.doc);
+  const showBadge = doc.settings.options.showLevelBadge !== false;
   const cycle = (e: React.SyntheticEvent) => {
     e.stopPropagation(); e.preventDefault();
     const cur = doc.students.find((x) => x.class === student.class && x.no === student.no);
@@ -45,13 +46,13 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
   };
   const name = student.name || `${student.no}번`;
   return (
-    <span className={`stag ${student.level} ${size}`} title={title}>
+    <span className={`stag ${student.level} ${size} ${showBadge ? "" : "nob"}`} title={title}>
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}
-      <span role="button" tabIndex={0} className="stag-lv" aria-label={`수준 ${student.level}, 눌러서 변경`} title="수준 변경 (B → C → A)"
+      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`수준 ${student.level}, 눌러서 변경`} title="수준 변경 (B → C → A)"
         onClick={cycle} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") cycle(e); }}>{student.level}</span>
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") cycle(e); }}>{student.level}</span>}
     </span>
   );
 }

@@ -15,7 +15,7 @@ import { syncEngine } from "../lib/syncEngine";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
 const COMMON_TABS: { key: string; label: string }[] = [
-  { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" },
+  { key: "display", label: "화면" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" },
   { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
 ];
 /** 개별 설정: 지금 열린 영역에만 적용된다 */
@@ -60,6 +60,7 @@ export function SettingsPage() {
             {tab === "data" && <DataSection />}
             {tab === "privacy" && <PrivacySection />}
             {tab === "prompt" && <PromptSection />}
+            {tab === "display" && <DisplaySection />}
           </div>
         </div>
       </div>
@@ -719,4 +720,39 @@ function PromptSection() {
       {confirmPreset && <Confirm title="양식 불러오기" body="지금 프롬프트를 선택한 양식으로 바꿉니다." okLabel="불러오기" onOk={() => applyPreset(confirmPreset)} onClose={() => setConfirmPreset(null)} />}
     </>
   );
+}
+
+/* ---------- 화면 (모든 영역 공통) ---------- */
+function DisplaySection() {
+  const s = useStore((x) => x.doc.settings);
+  const setSettings = useStore((x) => x.setSettings);
+  const view = useStore((x) => x.view);
+  const setView = useStore((x) => x.setView);
+  const badge = s.options.showLevelBadge !== false;
+  return (
+    <>
+      <div className="card pad">
+        <h3>학생 이름표</h3>
+        <div className="col" style={{ gap: 12 }}>
+          <Switch on={badge} onChange={(v) => setSettings((x) => ({ ...x, options: { ...x.options, showLevelBadge: v } }))} label={badge ? "수준 배지 표시 — 이름표 오른쪽 위에 A·B·C, 눌러서 변경" : "수준 배지 숨김 — 이름표 바탕색으로만 수준 표시"} />
+          <span className="flex" style={{ gap: 18, paddingTop: 6 }}>
+            {(["A", "B", "C"] as const).map((l) => <StudentTagPreview key={l} level={l} badge={badge} />)}
+          </span>
+          <div className="muted small">배지를 숨기면 수준은 반·명단 설정에서 바꿀 수 있습니다.</div>
+        </div>
+      </div>
+      <div className="card pad">
+        <h3>초안 보기</h3>
+        <div className="col" style={{ gap: 12 }}>
+          <Switch on={view.split} onChange={(v) => setView({ split: v })} label="한 문장씩 나눠 보기" />
+          <Switch on={view.highlight} onChange={(v) => setView({ highlight: v })} label="구별하기 — 학생활동·역량·교사의 평가를 형광펜으로" />
+          <div className="muted small">초안 작성·검토 화면 위쪽의 스위치와 같은 설정입니다. 이 PC에만 저장됩니다.</div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StudentTagPreview({ level, badge }: { level: "A" | "B" | "C"; badge: boolean }) {
+  return <span className={`stag ${level} md ${badge ? "" : "nob"}`}><span className="stag-name">학생 {level}</span>{badge && <span className="stag-lv">{level}</span>}</span>;
 }

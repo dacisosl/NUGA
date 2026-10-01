@@ -3,7 +3,7 @@ import {
   buildPairingUri, parsePairingUri, generateSyncKey, keyIdOf, encryptEnvelope, decryptEnvelope, encryptBackup, decryptBackup,
   countChars, splitSentences, isNominalEnding, suggestNominal, similarity, josa,
   reviewText, generateLocalDraft, buildDraftRequest, parseDraftResponse,
-  resolveNow, lessonFor, syncProgressSkeleton, classSortKey, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson,
+  resolveNow, lessonFor, syncProgressSkeleton, classSortKey, classifySentence, cleanSpans, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson,
   type NugaRecord, type SyncMessage,
 } from "../src";
 
@@ -159,5 +159,31 @@ describe("progress skeleton & class names", () => {
   });
   it("sorts free-form class names after numeric ones", () => {
     expect(["동아리A", "2-10", "2-3", "1-1"].sort((a, b) => classSortKey(a) - classSortKey(b))).toEqual(["1-1", "2-3", "2-10", "동아리A"]);
+  });
+});
+
+describe("highlight (학생활동·역량·평가)", () => {
+  const kinds = (s: string) => classifySentence(s).filter((p) => p.kind !== "none").map((p) => `${p.kind}:${p.text}`);
+  it("splits activity, competency and evaluation", () => {
+    const k = kinds("수업 중 자신이 모르는 부분은 적극적으로 질문하고 자기관리 역량이 매우 뛰어난 학생임.");
+    expect(k).toContain("activity:수업 중 자신이 모르는 부분은 적극적으로 질문");
+    expect(k).toContain("competency:자기관리 역량");
+    expect(k).toContain("evaluation:매우 뛰어난 학생");
+  });
+  it("spans always rebuild the sentence", () => {
+    const s = "평가활동 후에도 스스로 더 개선할 부분을 찾아 학습하고 정리함으로써 꾸준히 발전하고자 노력하는 성실한 언어 학습자임.";
+    expect(classifySentence(s).map((p) => p.text).join("")).toBe(s);
+    expect(kinds(s).some((x) => x.startsWith("evaluation:") && x.includes("성실한 언어 학습자"))).toBe(true);
+  });
+  it("flags evaluation-heavy drafts in review", () => {
+    const ctx = { target: 500, lengthMode: "withSpaces" as const, level: "B" as const, recordCount: 1, lowRecordThreshold: 1, otherDrafts: [], similarityThreshold: 0.7 };
+    const heavy = "모든 활동에서 매우 뛰어난 학생임. 탁월한 의사소통 역량과 문제 해결 능력이 매우 뛰어남. 누구보다 모범적인 학생임. 배려심이 남다른 학생임.";
+    const light = "수업 중 모르는 부분을 적극적으로 질문하고 독해에서 부족한 부분을 보충함. 글쓰기 과제에서 해결 방안을 자세히 작성함.";
+    expect(reviewText(heavy, null, ctx).issues.some((i) => i.kind === "evalHeavy")).toBe(true);
+    expect(reviewText(light, null, ctx).issues.some((i) => i.kind === "evalHeavy")).toBe(false);
+  });
+  it("rejects AI spans that do not rebuild the sentence", () => {
+    expect(cleanSpans("질문함.", [{ text: "질문", kind: "activity" }, { text: "함.", kind: "none" }])).toHaveLength(2);
+    expect(cleanSpans("질문함.", [{ text: "발표", kind: "activity" }])).toBeUndefined();
   });
 });

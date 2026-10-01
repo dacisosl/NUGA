@@ -55,6 +55,8 @@ interface State {
   mode2p: "individual" | "batch";
   selected: { class: string; no: number } | null;
   settingsTab: string;
+  /** 초안 보기: 한 문장씩 · 구별하기(형광펜). 이 기기에만 저장 */
+  view: { split: boolean; highlight: boolean };
   toasts: Toast[];
   supplementQueue: string[];
   syncStatus: { state: "off" | "idle" | "busy" | "error"; message: string; lastAt?: string };
@@ -77,6 +79,7 @@ interface State {
   setMode2p(m: "individual" | "batch"): void;
   select(s: { class: string; no: number } | null): void;
   setSettingsTab(t: string): void;
+  setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
   toast(t: Omit<Toast, "id">): number;
   dismissToast(id: number): void;
   openSupplement(ids: string[]): void;
@@ -137,6 +140,7 @@ export const useStore = create<State>((set, get) => ({
   mode2p: "individual",
   selected: null,
   settingsTab: "subject",
+  view: (() => { try { return { split: false, highlight: false, ...JSON.parse(localStorage.getItem("nuga.view") || "{}") }; } catch { return { split: false, highlight: false }; } })(),
   toasts: [],
   supplementQueue: [],
   syncStatus: { state: "off", message: "연결 안 됨" },
@@ -272,6 +276,7 @@ export const useStore = create<State>((set, get) => ({
   setMode2p: (mode2p) => set({ mode2p }),
   select: (selected) => set({ selected }),
   setSettingsTab: (settingsTab) => set({ settingsTab }),
+  setView(p) { const view = { ...get().view, ...p }; set({ view }); try { localStorage.setItem("nuga.view", JSON.stringify(view)); } catch { /* 보기 설정 저장 실패는 무시 */ } },
   toast(t) {
     const id = toastSeq++;
     set((s) => ({ toasts: [...s.toasts, { ...t, id }] }));

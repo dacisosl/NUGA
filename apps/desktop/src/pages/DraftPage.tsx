@@ -6,12 +6,13 @@ import {
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catCounts, draftOf, fillLesson, isLowRecord, perfsOf, recordsOf, studentsOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
-import { generateDraft } from "../lib/ai";
+import { aiReady, generateDraft, labelDraft } from "../lib/ai";
 import { pickFile } from "../lib/platform";
 import { extractText, hasTextLayer, loadDocument, makeExcerpt, maskedThumb, scrubNames, suggestMasks, type DocPage, type ExtractProgress, type Rect } from "../lib/docOcr";
 import { MaskEditor } from "../components/MaskEditor";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
+import { DraftView, SpanLegend, SpanRatioBar, ViewToggles } from "../components/DraftView";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
 
@@ -72,7 +73,7 @@ export function DraftPage() {
   };
   return (
     <>
-      <TopBar title="초안 작성" onExcel={exportExcel} titleSlot={<span className="seg seg-title" role="tablist" aria-label="초안 작성 방식"><button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
+      <TopBar title="초안 작성" onExcel={exportExcel} right={<ViewToggles />} titleSlot={<span className="seg seg-title" role="tablist" aria-label="초안 작성 방식"><button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
       <ClassTabs extra={(c) => { const n = studentsOf(doc, c).length; const d = doc.drafts.filter((x) => x.class === c && x.text).length; return <span className="cnt num">{d}/{n}</span>; }} />
       {mode === "individual" ? <Individual /> : <Batch />}
     </>
@@ -148,7 +149,22 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
   };
   const onTextEdit = (t: string) => setW((x) => ({ ...x, text: t, sentences: resplit(x.sentences, t), dirty: true }));
 
-  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit };
+  const [labeling, setLabeling] = useState(false);
+  /** AI 로 학생활동·역량·평가를 다시 나눈다 (근거 연결은 그대로) */
+  const relabel = async () => {
+    if (!w.text.trim() || labeling) return;
+    const parts = splitSentences(w.text);
+    setLabeling(true);
+    try {
+      const spans = await labelDraft(parts, doc.settings.ai);
+      setW((x) => ({ ...x, dirty: true, sentences: parts.map((t, i) => { const old = x.sentences.find((s0) => s0.text === t); return { text: t, evidence: old?.evidence || [], spans: spans[i] }; }) }));
+      const failed = spans.filter((sp) => !sp).length;
+      toast({ text: failed ? `AI 구별 완료 · ${failed}문장은 규칙으로 표시` : "AI로 다시 구별함" });
+    } catch (e) { toast({ text: e instanceof Error ? e.message : "구별 실패" }); }
+    finally { setLabeling(false); }
+  };
+
+  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling };
 }
 
 const SUGGESTIONS = ["체크한 기록으로 세특 만들어줘", "협동 부분 줄이고 질문 쪽을 강조해줘", "더 간결하게 줄여줘", "마지막 문장 다시 써줘"];
@@ -169,7 +185,10 @@ function Individual() {
   const [addPerf, setAddPerf] = useState(false);
   const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
-  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
+  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
+  const view = useStore((s) => s.view);
+  const [editView, setEditView] = useState(false);
+  const aiOn = aiReady(doc.settings.ai);
 
   // 명단에서 ↑↓ 키로 학생 이동 (입력란에 포커스가 있을 때는 제외)
   useEffect(() => {
@@ -248,6 +267,8 @@ function Individual() {
               <LenBar len={len} target={target} mode={doc.settings.lengthMode} />
               <span className="flex small muted" title="이 학생의 목표 글자수 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(doc.settings.targetLength["세특"] || 500)} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />자</span>
               {review && w.text && <StatusChip result={review.result} />}
+              {view.highlight && w.text && <><SpanRatioBar text={w.text} sentences={w.sentences} /><SpanLegend /></>}
+              {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
               {w.dirty && <span className="muted small">저장 안 됨</span>}
               <span className="grow" />
               {busy && <span className="spin" />}
@@ -256,7 +277,9 @@ function Individual() {
             </div>
             {expanded && (
               <>
-                <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />
+                {(view.split || view.highlight) && w.text && !editView
+                  ? <DraftView className="draft dv-box" style={{ height: Math.max(90, dockH * 0.42) }} text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
+                  : <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />}
                 <div className="chatlog" ref={logRef}>
                   {w.history.length === 0 && <span className="muted small">아래 입력창에 요청을 쓰면 초안이 만들어집니다.</span>}
                   {w.history.map((h, i) => <div key={i} className={`msg ${h.role}`}>{h.text}</div>)}
@@ -293,7 +316,10 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
   const student = students.find((s) => s.no === no) || null;
   const idx = students.findIndex((s) => s.no === no);
   const ws = useDraftWorkspace(student);
-  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit } = ws;
+  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
+  const view = useStore((s) => s.view);
+  const [editView, setEditView] = useState(false);
+  const aiOn = aiReady(doc.settings.ai);
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, no]);
 
@@ -329,6 +355,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
         <StudentTag student={student} size="lg" />
         {w.dirty && <span className="chip check">저장 안 됨</span>}
         <span className="grow" />
+        <ViewToggles />
         <button className="btn sm" onClick={openPage}>개별 페이지로 열기</button>
       </div>
     } footer={
@@ -346,10 +373,15 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             <LenBar len={len} target={target} mode={doc.settings.lengthMode} />
             <span className="flex small muted" title="이 학생의 목표 글자수 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(doc.settings.targetLength["세특"] || 500)} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />자</span>
             {review && w.text && <StatusChip result={review.result} />}
+            {view.highlight && w.text && <SpanRatioBar text={w.text} sentences={w.sentences} />}
             <span className="grow" />
+            {view.highlight && w.text && <SpanLegend />}
+            {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
             {busy && <span className="flex small muted"><span className="spin" />생성 중</span>}
           </div>
-          <textarea className="dm-draft" value={w.text} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />
+          {(view.split || view.highlight) && w.text && !editView
+            ? <DraftView className="dm-draft dv-box" text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
+            : <textarea className="dm-draft" value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />}
           {issues.length > 0 && (
             <div className="dm-issues">
               {issues.slice(0, 5).map((i, k) => <span key={k} className={`chip ${["forbidden", "similar", "noEvidence", "name"].includes(i.kind) ? "fix" : "check"}`} title={i.span || ""}>{ISSUE_LABEL[i.kind]} · {truncate(i.message, 28)}</span>)}
@@ -536,6 +568,7 @@ function Batch() {
   const [running, setRunning] = useState(false);
   const [perfPanel, setPerfPanel] = useState(false);
   const [modalNo, setModalNo] = useState<number | null>(null);
+  const view = useStore((s) => s.view);
   // 초안 칸 행 높이: 자동(전체 글이 보이게) / 고정(N줄, 넘치면 칸 안에서 스크롤)
   const [rowMode, setRowMode] = useState<"auto" | "fixed">(() => { try { return localStorage.getItem("nuga.batchRowMode") === "fixed" ? "fixed" : "auto"; } catch { return "auto"; } });
   const [rowLines, setRowLines] = useState<number>(() => { try { return Number(localStorage.getItem("nuga.batchRowLines")) || 3; } catch { return 3; } });
@@ -622,7 +655,7 @@ function Batch() {
                   <td className={fold.recs ? "folded-cell" : ""} title={fold.recs ? `누가기록 ${recs.length}건` : undefined}>{fold.recs ? <span className="num small">{recs.length}</span> : <span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span>}</td>
                   <td className={fold.perfs ? "folded-cell" : ""} title={fold.perfs ? `PDF기록 ${perfs.length}건` : undefined}>{fold.perfs ? <span className="num small">{perfs.length || "–"}</span> : perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
                   <td className="draft-td" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <DraftCell text={d?.text || ""} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
+                    <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
                   </td>
                   <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : <span className="muted">—</span>}</td>
                   <td>
@@ -646,7 +679,7 @@ function Batch() {
 
 /** 일괄 표의 초안 칸. lines 가 없으면 전체 글을 보여 행이 늘어나고, 있으면 그 줄 수로 고정하고 칸 안에서 스크롤한다.
  *  누르면 같은 크기의 여러 줄 편집칸으로 바뀌고, 칸 밖을 누르거나 Ctrl+Enter 로 저장, Esc 로 취소한다. */
-function DraftCell({ text, lines, onSave }: { text: string; lines: number | null; onSave: (v: string) => void }) {
+function DraftCell({ text, sentences, split, highlight, lines, onSave }: { text: string; sentences?: DraftSentence[]; split: boolean; highlight: boolean; lines: number | null; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState(text);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -659,7 +692,14 @@ function DraftCell({ text, lines, onSave }: { text: string; lines: number | null
   useEffect(() => { const el = ref.current; if (editing && el && !lines) { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; } }, [v, editing, lines]);
   const style = lines ? { maxHeight: `${lines * 1.6}em` } : undefined;
   if (!text && !editing) return <span className="muted">—</span>;
-  if (!editing) return <div className={`draft-cell ${lines ? "fixed" : ""}`} style={style} onClick={() => setEditing(true)} title="눌러서 고치기">{text}</div>;
+  if (!editing) return (
+    <div>
+      {split || highlight
+        ? <DraftView className={`draft-cell ${lines ? "fixed" : ""}`} style={style} text={text} sentences={sentences} split={split} highlight={highlight} onClick={() => setEditing(true)} />
+        : <div className={`draft-cell ${lines ? "fixed" : ""}`} style={style} onClick={() => setEditing(true)} title="눌러서 고치기">{text}</div>}
+      {highlight && <SpanRatioBar text={text} sentences={sentences} compact />}
+    </div>
+  );
   const commit = () => { setEditing(false); if (v.trim() && v !== text) onSave(v.trim()); else setV(text); };
   return (
     <textarea ref={ref} className="draft-cell-edit" style={lines ? { height: `${lines * 1.6 + 0.9}em` } : undefined} value={v}

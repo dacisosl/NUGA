@@ -8,3 +8,4 @@ export * from "./draft";
 export * from "./sync";
 export * from "./sample";
 export * from "./export";
+export * from "./highlight";

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { DRAFT_JSON_SCHEMA, generateLocalDraft, parseDraftResponse, systemPrompt, userPrompt, type AiSettings, type DraftRequest, type DraftResponse } from "@nuga/core";
+import { DRAFT_JSON_SCHEMA, LABEL_JSON_SCHEMA, LABEL_SYSTEM_PROMPT, generateLocalDraft, labelUserPrompt, parseDraftResponse, parseLabelResponse, systemPrompt, userPrompt, type AiSettings, type DraftRequest, type DraftResponse, type DraftSpan } from "@nuga/core";
 
 export interface DraftProviderResult extends DraftResponse { provider: "anthropic" | "local"; model?: string }
 
@@ -45,4 +45,20 @@ export async function generateDraft(req: DraftRequest, ai: AiSettings, opts?: { 
 /** 전송될 내용 미리보기(설정 화면용) */
 export function previewPayload(req: DraftRequest, guide?: string): string {
   return `[system]\n${systemPrompt(guide)}\n\n[user]\n${userPrompt(req)}`;
+}
+
+export function aiReady(ai: AiSettings): boolean { return ai.enabled && ai.provider === "anthropic" && !!ai.apiKey.trim(); }
+
+/** 문장마다 학생활동·역량·교사의 평가 구간을 AI 로 다시 나눈다. 검증에 실패한 문장은 undefined. */
+export async function labelDraft(sentences: string[], ai: AiSettings): Promise<(DraftSpan[] | undefined)[]> {
+  if (!aiReady(ai)) throw new Error("AI가 꺼져 있어 규칙으로 구별합니다");
+  const client = new Anthropic({ apiKey: ai.apiKey.trim(), dangerouslyAllowBrowser: true, maxRetries: 2, timeout: 120_000 });
+  const res = await client.messages.create({
+    model: ai.model || "claude-opus-5-5", max_tokens: 4096, system: LABEL_SYSTEM_PROMPT,
+    messages: [{ role: "user", content: labelUserPrompt(sentences) }],
+    output_config: { format: { type: "json_schema", schema: LABEL_JSON_SCHEMA as unknown as Record<string, unknown> } },
+  } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+  if (res.stop_reason === "refusal") throw new Error("모델이 요청을 거절함");
+  const text = res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
+  return parseLabelResponse(text, sentences);
 }

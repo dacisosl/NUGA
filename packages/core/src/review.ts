@@ -1,5 +1,6 @@
 import type { Draft, Level, ReviewIssue, ReviewResult } from "./types";
 import { countChars, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
+import { draftSpans, spanRatio } from "./highlight";
 
 /** 기재 금지 사전. 정규식으로 매칭되며 사용자 설정으로 확장 가능. */
 export const FORBIDDEN_TERMS: { group: string; terms: string[] }[] = [
@@ -77,6 +78,13 @@ export function reviewText(text: string, sentences: Draft["sentences"] | null, c
     else if (ctx.recordCount > ctx.lowRecordThreshold) issues.push({ kind: "length", message: `글자수 미달 ${len}/${ctx.target} (허용 ${min}~${max})` });
   }
 
+  // 7. 평가 비중: 교사의 평가 표현이 많고 학생활동이 적으면 확인 필요
+  if (cc.withoutSpaces >= 40) {
+    const r = spanRatio(draftSpans(trimmed, sentences));
+    const ev = r.evaluation / Math.max(1, r.total); const act = r.activity / Math.max(1, r.total);
+    if (ev >= 0.3 && act < 0.4) issues.push({ kind: "evalHeavy", message: `평가 표현 비중이 높음 (활동 ${Math.round(act * 100)}% · 평가 ${Math.round(ev * 100)}%)` });
+  }
+
   return { result: summarize(issues), issues };
 }
 
@@ -90,5 +98,5 @@ export function summarize(issues: ReviewIssue[]): ReviewResult {
 export const RESULT_LABEL: Record<ReviewResult, string> = { pass: "통과", check: "확인 필요", fix: "수정 권장", none: "미작성" };
 
 export const ISSUE_LABEL: Record<ReviewIssue["kind"], string> = {
-  forbidden: "기재 금지", similar: "문장 유사", noEvidence: "근거 없음", length: "글자수", style: "어체", honorific: "존칭·감탄", subject: "주어", name: "이름", levelA: "A·기록 부족", empty: "미작성",
+  forbidden: "기재 금지", similar: "문장 유사", noEvidence: "근거 없음", length: "글자수", style: "어체", honorific: "존칭·감탄", subject: "주어", name: "이름", levelA: "A·기록 부족", empty: "미작성", evalHeavy: "평가 비중",
 };

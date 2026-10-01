@@ -4,6 +4,7 @@ import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { draftOf, recordsOf, studentsOf, useStore } from "../store";
 import { Empty, Icon, LenBar, StatusChip, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
+import { DraftView, ViewToggles } from "../components/DraftView";
 
 type Row = { s: Student; d: Draft | undefined; result: ReviewResult };
 
@@ -16,6 +17,7 @@ export function ReviewPage() {
   const select = useStore((s) => s.select);
   const setMode2p = useStore((s) => s.setMode2p);
   const toast = useStore((s) => s.toast);
+  const view = useStore((s) => s.view);
   const [filter, setFilter] = useState<ReviewResult | "all">("all");
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [cur, setCur] = useState<number | null>(null);
@@ -52,7 +54,7 @@ export function ReviewPage() {
 
   return (
     <>
-      <TopBar title="검토" onExcel={exportExcel} right={<button className="btn primary" onClick={runReview}><Icon name="check" />{sel.size ? `선택 ${sel.size}명 검토` : "전체 검토"}</button>} />
+      <TopBar title="검토" onExcel={exportExcel} right={<><ViewToggles /><button className="btn primary" onClick={runReview}><Icon name="check" />{sel.size ? `선택 ${sel.size}명 검토` : "전체 검토"}</button></>} />
       <ClassTabs extra={(c) => { const n = studentsOf(doc, c).filter((s) => { const d = draftOf(doc, c, s.no); return d?.text && d.review.result === "fix"; }).length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content noscroll">
         <div className="review-layout">
@@ -72,7 +74,7 @@ export function ReviewPage() {
                       <tr key={s.no} className={`row ${cur === s.no ? "selected" : ""}`} onClick={() => setCur(s.no)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                         <td className="num key">{s.no}</td><td className="key name"><StudentTag student={s} /></td>
-                        <td className="wrap"><div className="review-preview">{d?.text || <span className="muted">—</span>}</div></td>
+                        <td className="wrap">{d?.text ? (view.highlight || view.split ? <DraftView className={view.split ? "" : "review-preview"} text={d.text} sentences={d.sentences} split={view.split} highlight={view.highlight} /> : <div className="review-preview">{d.text}</div>) : <span className="muted">—</span>}</td>
                         <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : ""}</td>
                         <td><StatusChip result={result} /></td>
                       </tr>

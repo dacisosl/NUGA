@@ -40,10 +40,14 @@ export interface Performance {
   matched: boolean;
 }
 
-export interface DraftSentence { text: string; evidence: string[] }
+/** 형광펜 구분: 학생활동 · 역량 · 교사의 평가 · 이음말(none) */
+export type SpanKind = "activity" | "competency" | "evaluation" | "none";
+export interface DraftSpan { text: string; kind: SpanKind }
+/** spans 를 이어 붙이면 text 와 같다. AI 가 준 구분이며, 없으면 규칙으로 나눈다. */
+export interface DraftSentence { text: string; evidence: string[]; spans?: DraftSpan[] }
 
 export type IssueKind =
-  | "forbidden" | "similar" | "noEvidence" | "length" | "style" | "honorific" | "subject" | "name" | "levelA" | "empty";
+  | "forbidden" | "similar" | "noEvidence" | "length" | "style" | "honorific" | "subject" | "name" | "levelA" | "empty" | "evalHeavy";
 
 export interface ReviewIssue {
   kind: IssueKind;
@@ -114,7 +118,7 @@ export interface Settings {
   lengthOverride: boolean;
   /** 영역별 초안 지침. 비우면 기본 지침(교과 세특) */
   draftPrompt: string;
-  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean };
+  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean };
   sync: SyncSettings | null;
   ai: AiSettings;
   onboarded: boolean;
@@ -179,7 +183,7 @@ export function defaultSettings(): Settings {
     similarityThreshold: 0.7,
     lengthOverride: false,
     draftPrompt: "",
-    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false },
+    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true },
     sync: null,
     ai: { enabled: false, provider: "local", apiKey: "", model: "claude-opus-5-5" },
     onboarded: false,
