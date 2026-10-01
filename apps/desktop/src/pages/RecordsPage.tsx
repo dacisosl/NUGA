@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRecord, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, useStore } from "../store";
-import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LevelBadge, Modal, SearchBox } from "../components/ui";
+import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 
@@ -62,13 +62,12 @@ export function RecordsPage() {
         </div>
         {students.length === 0 ? <Empty title="명단 없음" desc="설정 → 반·명단에서 학생을 등록하세요" /> : (
           <table className="table">
-            <thead><tr><th style={{ width: 60 }}>번호</th><th style={{ width: 120 }}>이름</th><th style={{ width: 56 }}>수준</th><th>누가기록</th><th style={{ width: 110 }}>마지막</th></tr></thead>
+            <thead><tr><th style={{ width: 60 }}>번호</th><th style={{ width: 150 }}>이름</th><th>누가기록</th><th style={{ width: 110 }}>마지막</th></tr></thead>
             <tbody>
               {rows.map(({ s, recs, low, pending }) => (
                 <tr key={s.no} className="row" onClick={() => setOpen(s)}>
                   <td className="num key">{s.no}</td>
-                  <td className="key name"><span className="flex" style={{ gap: 6 }}>{s.name}{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
-                  <td><LevelBadge level={s.level} student={s} /></td>
+                  <td className="key name"><span className="flex" style={{ gap: 8 }}><StudentTag student={s} />{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
                   <td className="tight">
                     <div className="reclist">
                       {recs.length === 0 && <span className="muted small">—</span>}
@@ -109,7 +108,7 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
   const perfs = perfsOf(doc, student.class, student.no);
   const goDraft = () => { select({ class: student.class, no: student.no }); setMode2p("individual"); setPage("draft"); onClose(); };
   return (
-    <Modal onClose={onClose} width="wide" header={<div className="flex"><LevelBadge level={student.level} student={student} /><h2 style={{ margin: 0 }}>{student.name}</h2><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span><button className="btn sm" onClick={() => setEditing(true)}><Icon name="pen" size={13} />번호·이름 수정</button></div>}
+    <Modal onClose={onClose} width="wide" header={<div className="flex"><StudentTag student={student} size="lg" /><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span><button className="btn sm" onClick={() => setEditing(true)}><Icon name="pen" size={13} />번호·이름 수정</button></div>}
       footer={<><span className="muted small">항목을 클릭하면 수정</span><span className="grow" /><button className="btn primary" onClick={goDraft}><Icon name="pen" />초안 작성</button></>}>
       <div className="col" style={{ gap: 14 }}>
         {recs.length === 0 ? <Empty title="기록 없음" /> : (

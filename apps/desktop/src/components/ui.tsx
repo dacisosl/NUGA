@@ -28,6 +28,34 @@ export function LevelBadge({ level, student }: { level: Level; student?: { class
   return <span role="button" tabIndex={0} className={`lvl ${level} clickable`} onClick={onClick} onDoubleClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(e as unknown as React.MouseEvent); }} title="클릭: 수준 변경 (B → C → A)">{level}</span>;
 }
 
+/**
+ * 학생 이름표: 바탕색이 수준을 나타낸다 (A 검정 · B 흰색 · C 회색).
+ * 오른쪽 위 작은 배지에 A·B·C 를 표시하고, 배지를 누르면 B → C → A 순으로 바뀐다.
+ */
+export function StudentTag({ student, size = "md", onNameClick, title }: {
+  student: { class: string; no: number; name: string; level: Level };
+  size?: "sm" | "md" | "lg"; onNameClick?: () => void; title?: string;
+}) {
+  const upsert = useStore((s) => s.upsertStudent);
+  const doc = useStore((s) => s.doc);
+  const cycle = (e: React.SyntheticEvent) => {
+    e.stopPropagation(); e.preventDefault();
+    const cur = doc.students.find((x) => x.class === student.class && x.no === student.no);
+    if (cur) upsert({ ...cur, level: NEXT_LEVEL[cur.level] });
+  };
+  const name = student.name || `${student.no}번`;
+  return (
+    <span className={`stag ${student.level} ${size}`} title={title}>
+      {onNameClick
+        ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
+        : <span className="stag-name">{name}</span>}
+      <span role="button" tabIndex={0} className="stag-lv" aria-label={`수준 ${student.level}, 눌러서 변경`} title="수준 변경 (B → C → A)"
+        onClick={cycle} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") cycle(e); }}>{student.level}</span>
+    </span>
+  );
+}
+
 export function StatusChip({ result }: { result: ReviewResult }) {
   const icon = result === "pass" ? "✓" : result === "check" ? "!" : result === "fix" ? "✕" : "–";
   return <span className={`chip ${result}`}><span aria-hidden>{icon}</span>{RESULT_LABEL[result]}</span>;

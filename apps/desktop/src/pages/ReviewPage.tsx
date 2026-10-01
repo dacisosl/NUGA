@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ISSUE_LABEL, RESULT_LABEL, countChars, nowIso, reviewText, splitSentences, summarize, truncate, type Draft, type ReviewIssue, type ReviewResult, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { draftOf, recordsOf, studentsOf, useStore } from "../store";
-import { Empty, Icon, LenBar, LevelBadge, StatusChip } from "../components/ui";
+import { Empty, Icon, LenBar, StatusChip, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
 
 type Row = { s: Student; d: Draft | undefined; result: ReviewResult };
@@ -66,12 +66,12 @@ export function ReviewPage() {
             <div className="tablewrap grow" style={{ overflow: "auto" }}>
               {visible.length === 0 ? <Empty title="해당 없음" /> : (
                 <table className="table">
-                  <thead><tr><th style={{ width: 36 }}><input type="checkbox" className="checkbox" checked={visible.length > 0 && visible.every((r) => sel.has(r.s.no))} onChange={(e) => setSel(e.target.checked ? new Set(visible.map((r) => r.s.no)) : new Set())} /></th><th style={{ width: 50 }}>번호</th><th style={{ width: 90 }}>이름</th><th style={{ width: 50 }}>수준</th><th>세특</th><th style={{ width: 110 }}>글자수</th><th style={{ width: 110 }}>상태</th></tr></thead>
+                  <thead><tr><th style={{ width: 36 }}><input type="checkbox" className="checkbox" checked={visible.length > 0 && visible.every((r) => sel.has(r.s.no))} onChange={(e) => setSel(e.target.checked ? new Set(visible.map((r) => r.s.no)) : new Set())} /></th><th style={{ width: 50 }}>번호</th><th style={{ width: 120 }}>이름</th><th>세특</th><th style={{ width: 110 }}>글자수</th><th style={{ width: 110 }}>상태</th></tr></thead>
                   <tbody>
                     {visible.map(({ s, d, result }) => (
                       <tr key={s.no} className={`row ${cur === s.no ? "selected" : ""}`} onClick={() => setCur(s.no)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
-                        <td className="num key">{s.no}</td><td className="key name">{s.name}</td><td><LevelBadge level={s.level} student={s} /></td>
+                        <td className="num key">{s.no}</td><td className="key name"><StudentTag student={s} /></td>
                         <td className="wrap"><div className="review-preview">{d?.text || <span className="muted">—</span>}</div></td>
                         <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : ""}</td>
                         <td><StatusChip result={result} /></td>
@@ -94,7 +94,7 @@ export function ReviewPage() {
 function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target: number; onNext: () => void; onOpen: (s: Student, instruction?: string) => void; onUpdate: (d: Draft) => void }) {
   const doc = useStore((s) => s.doc);
   const { s, d } = row;
-  if (!d?.text) return <div className="card pad"><div className="flex"><LevelBadge level={s.level} student={s} /><b>{s.name}</b><StatusChip result="none" /></div><div className="muted" style={{ marginTop: 8 }}>저장된 초안이 없습니다.</div><button className="btn primary" style={{ marginTop: 12 }} onClick={() => onOpen(s)}>초안 작성</button></div>;
+  if (!d?.text) return <div className="card pad"><div className="flex"><StudentTag student={s} /><StatusChip result="none" /></div><div className="muted" style={{ marginTop: 8 }}>저장된 초안이 없습니다.</div><button className="btn primary" style={{ marginTop: 12 }} onClick={() => onOpen(s)}>초안 작성</button></div>;
   const sents = splitSentences(d.text);
   const issues = d.review.issues;
   const cc = countChars(d.text);
@@ -116,7 +116,7 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
   return (
     <>
       <div className="card pad">
-        <div className="flex"><LevelBadge level={s.level} student={s} /><b>{s.name}</b><span className="muted small">{s.class} · {s.no}번</span><span className="grow" /><StatusChip result={d.review.result} /></div>
+        <div className="flex"><StudentTag student={s} /><span className="muted small">{s.class} · {s.no}번</span><span className="grow" /><StatusChip result={d.review.result} /></div>
         <div className="reviewtext" style={{ marginTop: 10 }}>
           {sents.map((t, i) => { const hit = issues.filter((x) => x.sentenceIndex === i); return <span key={i}>{hit.length ? <mark className={hit.every((h) => h.kind === "style" || h.kind === "honorific" || h.kind === "subject") ? "style" : ""}>{t}</mark> : t}{" "}</span>; })}
         </div>

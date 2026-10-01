@@ -358,3 +358,24 @@ textarea { resize: vertical; }
 /* 초안 프롬프트 */
 .prompt-edit { width: 100%; font-family: ui-monospace, Consolas, "Malgun Gothic", monospace; font-size: 13px; line-height: 1.65; background: #FCFCFA; }
 .prompt-fixed { margin: 0; white-space: pre-wrap; font-size: 12.5px; line-height: 1.6; background: var(--bg); padding: 10px 12px; border-radius: 8px; color: var(--text2); }
+
+/* 학생 이름표: 바탕 = 수준 (A 검정 · B 흰색 · C 회색), 오른쪽 위 작은 배지 */
+.stag { position: relative; display: inline-flex; align-items: center; height: 30px; padding: 0 14px 0 11px; border-radius: 8px; border: 1px solid transparent; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; white-space: nowrap; max-width: 100%; vertical-align: middle; }
+.stag.sm { height: 26px; padding: 0 12px 0 9px; font-size: 14px; }
+.stag.lg { height: 38px; padding: 0 18px 0 14px; font-size: 18px; font-weight: 800; border-radius: 10px; }
+.stag.A { background: #1A1C21; color: #fff; }
+.stag.B { background: #fff; color: #1A1C21; border-color: #C9CBD2; }
+.stag.C { background: #D6D8DE; color: #1A1C21; }
+.stag-name { border: none; background: none; padding: 0; font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; }
+button.stag-name { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+button.stag-name:hover { text-decoration-color: currentColor; }
+.stag-lv { position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px; padding: 0 3px; border-radius: 6px; font-size: 10.5px; font-weight: 800; line-height: 15px; text-align: center; cursor: pointer; border: 1px solid; box-shadow: 0 1px 2px rgba(0,0,0,.15); user-select: none; }
+.stag.lg .stag-lv { min-width: 20px; height: 20px; line-height: 18px; font-size: 12px; top: -8px; right: -8px; }
+.stag.A .stag-lv { background: #fff; color: #1A1C21; border-color: #1A1C21; }
+.stag.B .stag-lv { background: #1A1C21; color: #fff; border-color: #1A1C21; }
+.stag.C .stag-lv { background: #fff; color: #4A4E5A; border-color: #9EA2AD; }
+.stag-lv:hover { transform: scale(1.12); }
+.table td.name { overflow: visible; padding-top: 10px; }
+.stu .n { overflow: visible; padding-top: 4px; }
+.stu { padding-right: 16px; }
+.profile { padding-top: 18px; }
