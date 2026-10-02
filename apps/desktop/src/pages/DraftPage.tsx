@@ -123,7 +123,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     setW((x) => ({ ...x, history }));
     try {
       const res = await runGenerate(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
-      const base = res.provider === "local" ? "규칙 기반으로 초안을 갱신함 (AI 꺼짐)" : `초안을 갱신함 (${res.model})`;
+      const base = res.provider === "rules" ? "규칙 기반으로 초안을 갱신함 (AI 꺼짐)" : `초안을 갱신함 (${res.model})`;
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));
     } catch (e) {
@@ -598,7 +598,7 @@ function Batch() {
     setState((x) => ({ ...x, [s.no]: { st: "running" } }));
     try {
       const res = await runGenerate(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined);
-      const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "local" ? "규칙 기반 생성" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
+      const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "규칙 기반 생성" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
       const others = d.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
       const review = reviewText(w.text, w.sentences, reviewCtxOf(d, s, target, recs.length, others));

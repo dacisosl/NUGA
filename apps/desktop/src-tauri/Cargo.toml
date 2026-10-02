@@ -1,6 +1,6 @@
 [package]
 name = "nuga"
-version = "0.2.0"
+version = "0.3.0"
 description = "누가 — 생기부 누가기록 PC 앱"
 authors = ["nuga"]
 license = "MIT"
@@ -24,6 +24,7 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
+keyring = { version = "3", features = ["windows-native", "apple-native"] }
 
 [profile.release]
 codegen-units = 1

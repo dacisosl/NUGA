@@ -4,6 +4,8 @@ import {
   type Achievement, type Category, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
 } from "@nuga/core";
 import { getPersist } from "./lib/persist";
+import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
+import { isTauri } from "./lib/platform";
 
 export type Page = "records" | "draft" | "review" | "settings";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
@@ -28,7 +30,7 @@ function normalizeDoc(doc: NugaDoc): NugaDoc {
 }
 function pickGlobal(doc: NugaDoc, _prev: GlobalSettings | null): GlobalSettings {
   const s = doc.settings;
-  return { sync: s.sync, ai: s.ai, options: s.options, supplementEnabled: s.supplementEnabled };
+  return { sync: s.sync, ai: { ...s.ai, apiKey: "" }, options: s.options, supplementEnabled: s.supplementEnabled };
 }
 function applyGlobal(doc: NugaDoc, g: GlobalSettings | null): NugaDoc {
   if (!g) return doc;
@@ -42,8 +44,10 @@ export async function readAreaDoc(id: string): Promise<NugaDoc | null> {
   if (!raw) return null;
   return applyGlobal(normalizeDoc(raw), lastGlobal ?? (await p.loadAux<GlobalSettings>("global")));
 }
-export async function writeAreaDoc(id: string, doc: NugaDoc): Promise<void> {
+export async function writeAreaDoc(id: string, doc0: NugaDoc): Promise<void> {
   const p = await getPersist();
+  // API 키는 문서 파일에 쓰지 않는다 (보안 저장소에만)
+  const doc = doc0.settings.ai.apiKey ? { ...doc0, settings: { ...doc0.settings, ai: { ...doc0.settings.ai, apiKey: "" } } } : doc0;
   if (id === DEFAULT_AREA) await p.save(doc); else await p.saveAux(`doc:${id}`, doc);
 }
 
@@ -163,12 +167,25 @@ export const useStore = create<State>((set, get) => ({
     if (!areas.some((a) => a.id === areaId)) areaId = areas[0].id;
     set({ areas, areaId });
     lastGlobal = await p.loadAux<GlobalSettings>("global");
+    await loadSecrets();
     const doc = (await readAreaDoc(areaId)) || applyGlobal(emptyDoc(), lastGlobal);
+    // 0.2.0 이하: 문서에 저장돼 있던 Claude API 키를 보안 저장소로 옮기고 문서에서 지운다
+    let movedKey = false;
+    const legacyKey = (lastGlobal?.ai.apiKey || doc.settings.ai.apiKey || "").trim();
+    if (legacyKey) {
+      try {
+        // 웹 버전에서 키를 계속 기억하던 사용자는 그대로 기억하게 둔다 (설정 → AI 에서 끌 수 있음)
+        if (!isTauri) setWebRemember(true);
+        if (!hasKey("anthropic")) await setKey("anthropic", legacyKey);
+        movedKey = true;
+      } catch { /* 옮기지 못하면 다음 실행 때 다시 시도 */ }
+    }
     const outbox = (await p.loadAux<Outbox>("outbox")) || { messages: [], tombstones: [] };
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
     const classes = [...doc.settings.classes].sort((a, b) => classSortKey(a.class) - classSortKey(b.class));
     set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "records" : "settings" });
+    if (movedKey) get().setSettings((x) => ({ ...x, ai: { ...x.ai, apiKey: "" } }));
   },
 
   async flush() { if (saveTimer) clearTimeout(saveTimer); if (pendingSave) await pendingSave(); },

@@ -455,3 +455,5 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .level-card.big { min-width: 0; padding: 16px 18px; gap: 6px; }
 .level-card.big b { font-size: 18px; }
+.provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.provider-grid .level-card { min-width: 0; }

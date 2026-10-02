@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
-  LEGACY_LEVEL_SCORE, LENGTH_PRESET, defaultGuideFor, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
-  type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
+  LEGACY_LEVEL_SCORE, LENGTH_PRESET, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
+  type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
 import { TopBar } from "../App";
 import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup } from "../store";
@@ -11,7 +11,10 @@ import { ACH_COLORS, Confirm, EditableCell, Icon, Modal, StudentTag, Switch } fr
 import { AreaModal } from "../components/AreaSwitcher";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
 import { pickFile, readFileAsText, saveFile, hostName, openExternal } from "../lib/platform";
-import { previewPayload } from "../lib/ai";
+import { aiLabel, aiReady, previewPayload } from "../lib/ai";
+import { modelOf, testProvider } from "../lib/providers";
+import { hasKey, keyStoreLabel, onSecretsChange, setKey, setWebRemember, webRemember } from "../lib/secrets";
+import { isTauri } from "../lib/platform";
 import { syncEngine } from "../lib/syncEngine";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
@@ -704,28 +707,83 @@ function BackupSection() {
 function AiSection() {
   const doc = useStore((s) => s.doc);
   const setSettings = useStore((s) => s.setSettings);
+  const toast = useStore((s) => s.toast);
   const ai = doc.settings.ai;
+  const [, bump] = useState(0);
+  useEffect(() => onSecretsChange(() => bump((x) => x + 1)), []);
   const [preview, setPreview] = useState<string | null>(null);
+  const [test, setTest] = useState<{ busy?: boolean; ok?: boolean; message?: string; ms?: number }>({});
+  const provider: AiProvider = ai.provider === "rules" ? "anthropic" : ai.provider;
+  const info = PROVIDER_INFO[provider];
+  const [keyDraft, setKeyDraft] = useState("");
+  useEffect(() => { setKeyDraft(""); setTest({}); }, [provider]);
   const up = (p: Partial<typeof ai>) => setSettings((s) => ({ ...s, ai: { ...s.ai, ...p } }));
+  const model = modelOf(ai, provider);
+  const setModel = (m: string) => up({ models: { ...(ai.models || {}), [provider]: m }, ...(provider === "anthropic" ? { model: m } : {}) });
+  const saveKey = async () => {
+    try { await setKey(provider, keyDraft); setKeyDraft(""); toast({ text: keyDraft.trim() ? `${info.label} 키 저장 · ${keyStoreLabel()}` : `${info.label} 키 지움` }); }
+    catch (e) { toast({ text: `키 저장 실패: ${e instanceof Error ? e.message : e}` }); }
+  };
+  const runTest = async () => { setTest({ busy: true }); setTest(await testProvider(ai, provider)); };
   const showPreview = () => {
     const s = doc.students.find((x) => recordsOf(doc, x.class, x.no).length > 0) || doc.students[0];
     const recs = s ? recordsOf(doc, s.class, s.no) : [];
     const req = buildDraftRequest({ achievement: s ? achievementOf(doc, s).value : null, targetLength: limitOf(doc), lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand, styleGuide: schoolStyle(doc.settings.schoolLevel).styleGuide, subject: doc.settings.school.subject, school: doc.settings.school, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
     setPreview(previewPayload(req, guideOf(doc)));
   };
+  const ready = aiReady(ai);
   return (
     <>
       <div className="card pad">
-        <h3>AI 초안 생성</h3>
-        <div className="col" style={{ gap: 12 }}>
-          <Switch on={ai.enabled} onChange={(v) => up({ enabled: v, provider: v ? "anthropic" : "local" })} label="Claude API 사용 (끄면 규칙 기반 로컬 생성기로 동작)" />
+        <div className="flex between">
+          <h3 style={{ margin: 0 }}>AI 초안 생성</h3>
+          <span className={`chip ${ready ? "pass" : "none"}`}>{aiLabel(ai)}</span>
+        </div>
+        <div className="col" style={{ gap: 14, marginTop: 12 }}>
+          <Switch on={ai.enabled} onChange={(v) => up({ enabled: v, provider })} label={ai.enabled ? "AI 사용" : "AI 끔 — 규칙 기반 생성기로 동작 (교사 메모를 문장으로 옮김)"} />
           {ai.enabled && (
-            <div className="grid2">
-              <div className="field"><label>API 키</label><input type="password" value={ai.apiKey} onChange={(e) => up({ apiKey: e.target.value })} placeholder="sk-ant-…" /><span className="muted small">이 PC에만 저장되며 JSON 내보내기에서 제외됩니다.</span></div>
-              <div className="field"><label>모델</label><select className="select" value={ai.model} onChange={(e) => up({ model: e.target.value })}><option value="claude-opus-5-5">claude-opus-5-5 (권장)</option><option value="claude-sonnet-5-5">claude-sonnet-5-5</option><option value="claude-haiku-4-5">claude-haiku-4-5</option></select></div>
-            </div>
+            <>
+              <div className="field"><label>제공자</label>
+                <div className="provider-grid">
+                  {PROVIDER_ORDER.map((p) => (
+                    <button key={p} className={`level-card ${provider === p ? "active" : ""}`} onClick={() => up({ provider: p })}>
+                      <b>{PROVIDER_INFO[p].label}</b><span>{PROVIDER_INFO[p].desc}</span>
+                      <span>{PROVIDER_INFO[p].needsKey ? (hasKey(p) ? "✓ 키 저장됨" : "키 필요") : "키 필요 없음"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid2">
+                {info.needsKey ? (
+                  <div className="field"><label>{info.label} API 키 {hasKey(provider) && <span className="chip pass" style={{ marginLeft: 6 }}>저장됨</span>}</label>
+                    <span className="flex">
+                      <input type="password" value={keyDraft} onChange={(e) => setKeyDraft(e.target.value)} placeholder={hasKey(provider) ? "새 키로 바꾸려면 입력" : info.keyHint} autoComplete="off" style={{ flex: 1 }} onKeyDown={(e) => { if (e.key === "Enter" && keyDraft.trim()) saveKey(); }} />
+                      <button className="btn sm primary" disabled={!keyDraft.trim()} onClick={saveKey}>저장</button>
+                      {hasKey(provider) && <button className="btn sm ghost" onClick={() => setKey(provider, "").then(() => toast({ text: `${info.label} 키 지움` }))}>지우기</button>}
+                    </span>
+                    <span className="muted small">보관 위치: {keyStoreLabel()}. 문서·백업·내보내기에는 들어가지 않습니다.{info.keyUrl && <> <a href={info.keyUrl} onClick={(e) => { e.preventDefault(); openExternal(info.keyUrl!); }}>키 발급</a></>}</span>
+                    {!isTauri && <Switch on={webRemember()} onChange={(v) => { setWebRemember(v); bump((x) => x + 1); }} label="이 브라우저에 기억 (공용 PC에서는 끄세요)" />}
+                  </div>
+                ) : (
+                  <div className="field"><label>로컬 LLM 주소 (llama-server)</label>
+                    <input value={ai.localUrl || DEFAULT_LOCAL_URL} onChange={(e) => up({ localUrl: e.target.value })} placeholder={DEFAULT_LOCAL_URL} />
+                    <span className="muted small">이 PC에서 llama-server 를 실행해 두면 인터넷 없이 초안을 만듭니다. 8GB 메모리 PC는 3~4B 모델(4비트)을 권장합니다.</span>
+                  </div>
+                )}
+                <div className="field"><label>모델</label>
+                  <input list={`models-${provider}`} value={model} onChange={(e) => setModel(e.target.value)} />
+                  <datalist id={`models-${provider}`}>{info.models.map((m) => <option key={m} value={m} />)}</datalist>
+                  <span className="muted small">목록에서 고르거나 직접 입력합니다. 기본값 {info.defaultModel}</span>
+                </div>
+              </div>
+              <div className="flex wrap">
+                <button className="btn" onClick={runTest} disabled={test.busy}>{test.busy ? "확인 중…" : "연결 테스트"}</button>
+                {test.message && <span className="small" style={{ color: test.ok ? "var(--accent)" : "var(--warn)" }}>{test.ok ? "✓ " : "✕ "}{test.message}{test.ms ? ` · ${(test.ms / 1000).toFixed(1)}초` : ""}</span>}
+              </div>
+              <div className="muted small">데이터가 가는 곳: {info.where}</div>
+            </>
           )}
-          <div className="flex"><button className="btn" onClick={showPreview}>전송 내용 미리보기</button><span className="muted small">반·번호·이름은 전송되지 않습니다. 기록 내용·단원·수준·목표 글자수만 전송.</span></div>
+          <div className="flex"><button className="btn" onClick={showPreview}>전송 내용 미리보기</button><span className="muted small">반·번호·이름은 보내지 않습니다. 기록 내용, 수업 주제, 분량 한도, 표현 방향(도달 정도에 맞는 어휘)만 보냅니다.</span></div>
         </div>
       </div>
       {preview !== null && <Modal title="AI에 전송되는 내용 (예시 학생)" onClose={() => setPreview(null)} width="wide"><pre className="small" style={{ whiteSpace: "pre-wrap", background: "var(--bg)", padding: 12, borderRadius: 8, maxHeight: "60vh", overflow: "auto" }}>{preview}</pre></Modal>}

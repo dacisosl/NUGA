@@ -280,3 +280,21 @@ describe("presets & byte length", () => {
     expect(countChars(out.text).neisBytes).toBeLessThanOrEqual(300);
   });
 });
+
+describe("llm provider layer", () => {
+  it("builds gemini/openai bodies and parses replies", async () => {
+    const { geminiBody, openAiBody, geminiText, openAiText, toGeminiSchema, extractJson, DRAFT_JSON_SCHEMA, httpError } = await import("../src");
+    const req = { system: "S", user: "U", schema: DRAFT_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "draft" };
+    const g = geminiBody(req) as { generationConfig: { responseSchema: Record<string, unknown>; responseMimeType: string } };
+    expect(g.generationConfig.responseMimeType).toBe("application/json");
+    expect(JSON.stringify(g.generationConfig.responseSchema)).not.toContain("additionalProperties");
+    expect(toGeminiSchema({ type: "object", properties: { a: { type: "string" } } })).toEqual({ type: "OBJECT", properties: { a: { type: "STRING" } } });
+    const o = openAiBody(req, "m") as { response_format: { json_schema: { name: string } }; messages: unknown[] };
+    expect(o.response_format.json_schema.name).toBe("draft"); expect(o.messages).toHaveLength(2);
+    expect(geminiText({ candidates: [{ content: { parts: [{ text: "생각", thought: true }, { text: '{"a":1}' }] }, finishReason: "STOP" }] })).toBe('{"a":1}');
+    expect(() => geminiText({ promptFeedback: { blockReason: "SAFETY" } })).toThrow();
+    expect(openAiText({ choices: [{ message: { content: "x" } }] })).toBe("x");
+    expect(extractJson('```json\n{"a":1}\n```')).toBe('{"a":1}');
+    expect(httpError(401, "{}", "gemini").kind).toBe("auth");
+  });
+});
