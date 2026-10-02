@@ -30,10 +30,13 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          # llama.cpp 는 빌드마다 b<번호> 사전 릴리스를 낸다. 재현 가능하도록 버전을 고정한다.
+          LLAMA_TAG: b11339
         run: |
+          $ErrorActionPreference = "Stop"
           $dest = "apps/desktop/src-tauri/binaries/llama"
           New-Item -ItemType Directory -Force $dest | Out-Null
-          gh release download --repo ggml-org/llama.cpp --pattern "llama-*-bin-win-cpu-x64.zip" --dir tmp-llama
+          gh release download $env:LLAMA_TAG --repo ggml-org/llama.cpp --pattern "llama-$($env:LLAMA_TAG)-bin-win-cpu-x64.zip" --dir tmp-llama
           $zip = Get-ChildItem tmp-llama -Filter *.zip | Select-Object -First 1
           Expand-Archive $zip.FullName -DestinationPath tmp-llama/x -Force
           $exe = Get-ChildItem tmp-llama/x -Recurse -Filter llama-server.exe | Select-Object -First 1
