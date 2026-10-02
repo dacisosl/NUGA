@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ISSUE_LABEL, RESULT_LABEL, countChars, nowIso, reviewText, splitSentences, summarize, truncate, type Draft, type ReviewIssue, type ReviewResult, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
-import { draftOf, lengthOfText, limitOf, recordsOf, reviewCtxOf, studentsOf, useStore } from "../store";
+import { adherenceOf, draftOf, lengthOfText, limitOf, recordsOf, reviewCtxOf, studentsOf, useStore } from "../store";
+import { AdherenceChecklist, CategoryCompare, MetricBars, SemesterTimeline, SentenceEvidenceGraph } from "../components/Charts";
 import { Empty, Icon, LenBar, StatusChip, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
 import { DraftView, ViewToggles } from "../components/DraftView";
+import { AdherenceChip } from "./DraftPage";
 
 type Row = { s: Student; d: Draft | undefined; result: ReviewResult };
 
@@ -32,7 +34,7 @@ export function ReviewPage() {
   const reviewOne = (s: Student, d: Draft): Draft => {
     const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
     const r = reviewText(d.text, d.sentences.length ? d.sentences : null, reviewCtxOf(doc, s, d.targetLength || target, recordsOf(doc, s.class, s.no).filter((x) => x.status !== "skipped").length, others));
-    return { ...d, review: { result: r.result, issues: r.issues, at: nowIso() } };
+    return { ...d, review: { result: r.result, issues: r.issues, at: nowIso() }, adherence: adherenceOf(doc, s, d.text, d.sentences.length ? d.sentences : null, d.targetLength || target) };
   };
   const runReview = () => {
     const targets = rows.filter((r) => r.d?.text && (sel.size === 0 || sel.has(r.s.no)));
@@ -68,14 +70,15 @@ export function ReviewPage() {
             <div className="tablewrap grow" style={{ overflow: "auto" }}>
               {visible.length === 0 ? <Empty title="해당 없음" /> : (
                 <table className="table">
-                  <thead><tr><th style={{ width: 36 }}><input type="checkbox" className="checkbox" checked={visible.length > 0 && visible.every((r) => sel.has(r.s.no))} onChange={(e) => setSel(e.target.checked ? new Set(visible.map((r) => r.s.no)) : new Set())} /></th><th style={{ width: 50 }}>번호</th><th style={{ width: 120 }}>이름</th><th>세특</th><th style={{ width: 110 }}>글자수</th><th style={{ width: 110 }}>상태</th></tr></thead>
+                  <thead><tr><th style={{ width: 36 }}><input type="checkbox" className="checkbox" checked={visible.length > 0 && visible.every((r) => sel.has(r.s.no))} onChange={(e) => setSel(e.target.checked ? new Set(visible.map((r) => r.s.no)) : new Set())} /></th><th style={{ width: 50 }}>번호</th><th style={{ width: 120 }}>이름</th><th>세특</th><th style={{ width: 130 }}>분량</th><th style={{ width: 84 }}>반영도</th><th style={{ width: 110 }}>상태</th></tr></thead>
                   <tbody>
                     {visible.map(({ s, d, result }) => (
                       <tr key={s.no} className={`row ${cur === s.no ? "selected" : ""}`} onClick={() => setCur(s.no)}>
                         <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                         <td className="num key">{s.no}</td><td className="key name"><StudentTag student={s} /></td>
                         <td className="wrap">{d?.text ? (view.highlight || view.split ? <DraftView className={view.split ? "" : "review-preview"} text={d.text} sentences={d.sentences} split={view.split} highlight={view.highlight} /> : <div className="review-preview">{d.text}</div>) : <span className="muted">—</span>}</td>
-                        <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : ""}</td>
+                        <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} mode={doc.settings.lengthMode} band={doc.settings.lengthBand} /> : ""}</td>
+                        <td>{d?.text && d.adherence ? <AdherenceChip rep={d.adherence} /> : ""}</td>
                         <td><StatusChip result={result} /></td>
                       </tr>
                     ))}
@@ -95,6 +98,10 @@ export function ReviewPage() {
 
 function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target: number; onNext: () => void; onOpen: (s: Student, instruction?: string) => void; onUpdate: (d: Draft) => void }) {
   const doc = useStore((s) => s.doc);
+  const [tab, setTab] = useState<"issues" | "charts">(() => { try { return (localStorage.getItem("nuga.reviewTab") as "issues" | "charts") || "issues"; } catch { return "issues"; } });
+  const pickTab = (t: "issues" | "charts") => { setTab(t); try { localStorage.setItem("nuga.reviewTab", t); } catch { /* 무시 */ } };
+  const [focus, setFocus] = useState<number[] | null>(null);
+  const rep = useMemo(() => (row.d?.text ? adherenceOf(doc, row.s, row.d.text, row.d.sentences.length ? row.d.sentences : null, row.d.targetLength || target) : null), [doc, row.s, row.d, target]);
   const { s, d } = row;
   if (!d?.text) return <div className="card pad"><div className="flex"><StudentTag student={s} /><StatusChip result="none" /></div><div className="muted" style={{ marginTop: 8 }}>저장된 초안이 없습니다.</div><button className="btn primary" style={{ marginTop: 12 }} onClick={() => onOpen(s)}>초안 작성</button></div>;
   const sents = splitSentences(d.text);
@@ -120,16 +127,28 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
       <div className="card pad">
         <div className="flex"><StudentTag student={s} /><span className="muted small">{s.class} · {s.no}번</span><span className="grow" /><StatusChip result={d.review.result} /></div>
         <div className="reviewtext" style={{ marginTop: 10 }}>
-          {sents.map((t, i) => { const hit = issues.filter((x) => x.sentenceIndex === i); return <span key={i}>{hit.length ? <mark className={hit.every((h) => h.kind === "style" || h.kind === "honorific" || h.kind === "subject") ? "style" : ""}>{t}</mark> : t}{" "}</span>; })}
+          {sents.map((t, i) => { const hit = issues.filter((x) => x.sentenceIndex === i); const f = focus?.includes(i); return <span key={i} className={f ? "focus-sent" : ""}>{hit.length ? <mark className={hit.every((h) => h.kind === "style" || h.kind === "honorific" || h.kind === "subject") ? "style" : ""}>{t}</mark> : t}{" "}</span>; })}
         </div>
         <div className="flex wrap small muted" style={{ marginTop: 10, gap: 12 }}>
           <span className="num">{doc.settings.lengthMode === "bytes" ? `${cc.neisBytes.toLocaleString("ko-KR")} / ${(d.targetLength || target).toLocaleString("ko-KR")} B · 약 ${cc.withSpaces}자 (공백 제외 ${cc.withoutSpaces})` : `${cc.withSpaces}자 (공백 제외 ${cc.withoutSpaces} · NEIS ${cc.neisBytes}B) / ${d.targetLength || target}`}</span>
           <span>{evid}</span>
           <span>어체 {styleOk ? "✓" : "!"}</span>
+          {rep && <span>반영도 {rep.passed}/{rep.total}</span>}
         </div>
       </div>
-      {issues.length === 0 && <div className="card pad" style={{ color: "var(--accent)" }}>✓ 문제 없음</div>}
-      {issues.map((iss, k) => (
+      <span className="seg" style={{ alignSelf: "flex-start" }}>
+        <button className={tab === "issues" ? "active" : ""} onClick={() => pickTab("issues")}>문제 {issues.length}</button>
+        <button className={tab === "charts" ? "active" : ""} onClick={() => pickTab("charts")}>근거·반영도</button>
+      </span>
+      {tab === "charts" && rep && <>
+        <AdherenceChecklist rep={rep} onPick={(ix) => setFocus(ix)} />
+        <MetricBars rep={rep} />
+        <SentenceEvidenceGraph doc={doc} s={s} d={d} support={rep.sentenceSupport} focus={focus} onFocus={setFocus} />
+        <CategoryCompare doc={doc} s={s} d={d} />
+        <SemesterTimeline doc={doc} s={s} d={d} />
+      </>}
+      {tab === "issues" && issues.length === 0 && <div className="card pad" style={{ color: "var(--accent)" }}>✓ 문제 없음</div>}
+      {tab === "issues" && issues.map((iss, k) => (
         <div key={k} className="card issue">
           <div className="flex"><span className={`chip ${["forbidden", "similar", "noEvidence", "name"].includes(iss.kind) ? "fix" : "check"}`}>{ISSUE_LABEL[iss.kind]}</span><span className="small">{iss.message}</span></div>
           {iss.sentenceIndex !== undefined && sents[iss.sentenceIndex] && (

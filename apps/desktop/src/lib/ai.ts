@@ -1,4 +1,6 @@
 import {
+  ACH_JSON_SCHEMA, ACH_SYSTEM_PROMPT, achUserPrompt, parseAchResponse, achievementFromSignals, anonymizeRecords,
+  type NugaRecord, type Standard,
   SUGGEST_JSON_SCHEMA, SUGGEST_SYSTEM_PROMPT, parseSuggestResponse, ruleSuggestions, scrubTranscriptNames, suggestUserPrompt, topicKeywords,
   type CategoryDef, type Suggestion, type Transcript,
   DRAFT_JSON_SCHEMA, LABEL_JSON_SCHEMA, LABEL_SYSTEM_PROMPT, PROVIDER_INFO, generateLocalDraft, labelUserPrompt, parseDraftResponse, parseLabelResponse, systemPrompt, userPrompt,
@@ -60,4 +62,17 @@ export async function suggestFromTranscript(tr: Transcript, opts: { ai: AiSettin
   } catch (e) {
     return { items: rules, by: "규칙", error: e instanceof Error ? e.message : "AI 추천 실패" };
   }
+}
+
+/** AI 로 기록별 도달 신호를 추정해 학생 도달 정도(자동값)를 만든다. 반·번호·이름은 보내지 않는다. */
+export async function estimateAchievementAI(records: NugaRecord[], standards: Standard[], categories: CategoryDef[], ai: AiSettings) {
+  const prov = providerFor(ai);
+  if (!prov) throw new Error("AI가 꺼져 있습니다");
+  const anon = anonymizeRecords(records.filter((r) => r.status !== "skipped"), categories);
+  if (!anon.length) return { value: null, confidence: "none" as const, byStandard: {} };
+  const signals = await generateJson(prov, {
+    system: ACH_SYSTEM_PROMPT, user: achUserPrompt(anon, standards), schema: ACH_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "signals", maxTokens: 4096,
+  }, (t) => parseAchResponse(t, anon.map((r) => r.id)));
+  const timeOf = new Map(records.map((r) => [r.id, r.time]));
+  return achievementFromSignals(signals.map((x) => ({ ...x, time: timeOf.get(x.id) || "" })));
 }

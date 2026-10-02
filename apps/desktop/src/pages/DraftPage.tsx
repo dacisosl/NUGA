@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
+  ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, regenerationInstruction, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
   type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
 } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
-import { achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
+import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
 import { aiReady, generateDraft, labelDraft } from "../lib/ai";
 import { pickFile } from "../lib/platform";
@@ -36,6 +36,7 @@ async function runGenerate(student: Student, records: NugaRecord[], perfs: Perfo
   const req = buildDraftRequest({
     achievement: achievementOf(doc, student).value, targetLength: w.target || limitOf(doc), lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand,
     styleGuide: schoolStyle(doc.settings.schoolLevel).styleGuide, subject: doc.settings.school.subject,
+    guide: doc.settings.guide, standards: standardsFor(doc, records),
     school: doc.settings.school,
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
@@ -43,9 +44,34 @@ async function runGenerate(student: Student, records: NugaRecord[], perfs: Perfo
   return generateDraft(req, doc.settings.ai, { guide: guideOf(doc) });
 }
 
+/**
+ * 생성 + 반영도 점검. AI 로 만들었고 반영도가 95% 미만이면 어긴 문장만 다시 쓰게 한다(최대 2회, 가장 좋은 결과).
+ */
+async function generateChecked(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined) {
+  const { doc } = useStore.getState();
+  const limit = w.target || limitOf(doc);
+  let res = await runGenerate(student, records, perfs, w, instruction);
+  let rep = adherenceOf(doc, student, res.text, res.sentences, limit);
+  const first = rep.score;
+  let tries = 0;
+  while (res.provider !== "rules" && rep.score < 0.95 && tries < 2) {
+    const ask = regenerationInstruction(rep, splitSentences(res.text));
+    if (!ask) break;
+    tries++;
+    try {
+      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, ask);
+      const nrep = adherenceOf(doc, student, next.text, next.sentences, limit);
+      if (nrep.score >= rep.score) { res = next; rep = nrep; }
+    } catch { break; }
+  }
+  return { res, rep, first, tries };
+}
+
 function makeDraft(student: Student, w: Working, review: ReturnType<typeof reviewText>, prev?: Draft): Draft {
   const { doc } = useStore.getState();
   return {
+    adherence: adherenceOf(doc, student, w.text, w.sentences.length ? w.sentences : null, w.target || limitOf(doc)),
+    achievementUsed: achievementOf(doc, student).value,
     id: prev?.id || uuid(), class: student.class, no: student.no, field: "세특", text: w.text,
     length: lengthOfText(doc, w.text),
     sentences: w.sentences, evidence: [...new Set(w.sentences.flatMap((s) => s.evidence))], status: "saved", targetLength: w.target,
@@ -108,6 +134,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
 
   const target = w.target || limitOf(doc);
   const review = useDraftReview(student, w.text, w.sentences.length ? w.sentences : null, target);
+  const adherence = useMemo(() => (student && w.text.trim() ? adherenceOf(doc, student, w.text, w.sentences.length ? w.sentences : null, target) : null), [doc, student?.class, student?.no, w.text, w.sentences, target]);
   const len = lengthOfText(doc, w.text);
   const chars = countChars(w.text).withSpaces;
   const toggle = (id: string) => setChecked((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -122,8 +149,9 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     const history: DraftHistory[] = [...w.history, { role: "user", text: msg, at: nowIso() }];
     setW((x) => ({ ...x, history }));
     try {
-      const res = await runGenerate(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
-      const base = res.provider === "rules" ? "규칙 기반으로 초안을 갱신함 (AI 꺼짐)" : `초안을 갱신함 (${res.model})`;
+      const { res, rep, first, tries } = await generateChecked(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
+      const adh = `반영도 ${Math.round(rep.score * 100)}% (${rep.passed}/${rep.total})${tries ? ` · 어긴 문장 다시 쓰기 ${tries}회 (처음 ${Math.round(first * 100)}%)` : ""}`;
+      const base = res.provider === "rules" ? `규칙 기반으로 초안을 갱신함 (AI 꺼짐) · ${adh}` : `초안을 갱신함 (${res.model}) · ${adh}`;
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));
     } catch (e) {
@@ -161,7 +189,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     finally { setLabeling(false); }
   };
 
-  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling };
+  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling };
 }
 
 const SUGGESTIONS = ["체크한 기록으로 세특 만들어줘", "협동 부분 줄이고 질문 쪽을 강조해줘", "더 간결하게 줄여줘", "마지막 문장 다시 써줘"];
@@ -182,7 +210,7 @@ function Individual() {
   const [addPerf, setAddPerf] = useState(false);
   const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
-  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
+  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
   const aiOn = aiReady(doc.settings.ai);
@@ -264,6 +292,7 @@ function Individual() {
               <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
               <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
               {review && w.text && <StatusChip result={review.result} />}
+              {adherence && <AdherenceChip rep={adherence} />}
               {view.highlight && w.text && <><SpanRatioBar text={w.text} sentences={w.sentences} /><SpanLegend /></>}
               {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
               {w.dirty && <span className="muted small">저장 안 됨</span>}
@@ -313,7 +342,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
   const student = students.find((s) => s.no === no) || null;
   const idx = students.findIndex((s) => s.no === no);
   const ws = useDraftWorkspace(student);
-  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
+  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
   const aiOn = aiReady(doc.settings.ai);
@@ -370,6 +399,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
             <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
             {review && w.text && <StatusChip result={review.result} />}
+            {adherence && <AdherenceChip rep={adherence} />}
             {view.highlight && w.text && <SpanRatioBar text={w.text} sentences={w.sentences} />}
             <span className="grow" />
             {view.highlight && w.text && <SpanLegend />}
@@ -597,7 +627,7 @@ function Batch() {
     if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return; }
     setState((x) => ({ ...x, [s.no]: { st: "running" } }));
     try {
-      const res = await runGenerate(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined);
+      const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined);
       const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "규칙 기반 생성" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
       const others = d.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
@@ -639,7 +669,7 @@ function Batch() {
         <table className="table">
           <thead><tr>
             <th style={{ width: 40 }}><input type="checkbox" className="checkbox" checked={allSel} onChange={() => setSel(allSel ? new Set() : new Set(students.map((s) => s.no)))} /></th>
-            <th style={{ width: 56 }}>번호</th><th style={{ width: 130 }}>이름</th><th className={`foldable ${fold.recs ? "folded" : ""}`} style={{ width: fold.recs ? 44 : 120 }}>{foldHead("recs", "누가기록")}</th><th className={`foldable ${fold.perfs ? "folded" : ""}`} style={{ width: fold.perfs ? 44 : 90 }}>{foldHead("perfs", "PDF기록")}</th><th>초안</th><th style={{ width: 90 }}>글자수</th><th style={{ width: 110 }}>상태</th>
+            <th style={{ width: 56 }}>번호</th><th style={{ width: 130 }}>이름</th><th className={`foldable ${fold.recs ? "folded" : ""}`} style={{ width: fold.recs ? 44 : 120 }}>{foldHead("recs", "누가기록")}</th><th className={`foldable ${fold.perfs ? "folded" : ""}`} style={{ width: fold.perfs ? 44 : 90 }}>{foldHead("perfs", "PDF기록")}</th><th>초안</th><th style={{ width: 130 }}>분량</th><th style={{ width: 84 }} title="프롬프트 반영도: 통과한 규칙 / 점검한 규칙">반영도</th><th style={{ width: 110 }}>상태</th>
           </tr></thead>
           <tbody>
             {students.map((s) => {
@@ -654,7 +684,8 @@ function Batch() {
                   <td className="draft-td" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                     <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, reviewCtxOf(doc, s, d.targetLength || target, recs.length, others)); saveDraft(makeDraft(s, w, review, d)); }} />
                   </td>
-                  <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : <span className="muted">—</span>}</td>
+                  <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} mode={doc.settings.lengthMode} band={doc.settings.lengthBand} /> : <span className="muted">—</span>}</td>
+                  <td>{d?.text && d.adherence ? <AdherenceChip rep={d.adherence} /> : <span className="muted">—</span>}</td>
                   <td>
                     {st?.st === "running" ? <span className="flex small"><span className="spin" />생성 중</span>
                       : st?.st === "error" ? <span className="flex small" style={{ color: "var(--warn)" }}>{st.msg} <button className="btn sm" onClick={() => runOne(s)}>재시도</button></span>
@@ -824,4 +855,12 @@ function PerfBatchPanel({ onClose }: { onClose: () => void }) {
       )}
     </>
   );
+}
+
+/** 반영도 칩: 통과/전체, 마우스를 올리면 어긴 규칙 */
+export function AdherenceChip({ rep }: { rep: import("@nuga/core").AdherenceReport }) {
+  const bad = rep.rules.filter((r) => r.checkable && !r.pass);
+  const cls = rep.score >= 0.95 ? "pass" : rep.score >= 0.8 ? "check" : "fix";
+  const tip = bad.length ? ["어긴 규칙", ...bad.map((r) => `· ${r.label}: ${r.detail}`)].join("\n") : "모든 규칙 통과";
+  return <span className={`chip ${cls}`} title={tip}>반영 {rep.passed}/{rep.total}</span>;
 }

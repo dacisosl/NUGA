@@ -519,3 +519,20 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .ds-nums { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-height: 150px; overflow: auto; }
 .ds-nums button { height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 700; cursor: pointer; }
 .ds-nums button:hover { border-color: #2448C9; color: #2448C9; }
+
+/* 3p 근거·반영도 차트 */
+.chart-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.checklist li { display: grid; grid-template-columns: 18px 1fr; gap: 2px 6px; font-size: 13px; padding: 4px 6px; border-radius: 6px; }
+.checklist li .det { grid-column: 2; color: var(--text2); font-size: 12px; }
+.checklist li.bad { background: #FDEEE3; } .checklist li.bad .mark { color: var(--warn); font-weight: 800; }
+.checklist li.ok .mark { color: #2448C9; font-weight: 800; } .checklist li.na { color: var(--text3); }
+.metric { display: grid; grid-template-columns: 76px 1fr 40px; align-items: center; gap: 8px; font-size: 13px; }
+.mbar, .stack { position: relative; height: 8px; border-radius: 4px; background: #EEF0F3; overflow: visible; display: flex; }
+.mbar i { display: block; height: 100%; border-radius: 4px; }
+.mbar b { position: absolute; top: -3px; bottom: -3px; width: 1.5px; background: #1A1C21; opacity: .45; }
+.stack { overflow: hidden; } .stack i { display: block; height: 100%; }
+.mv { text-align: right; color: var(--text2); }
+.legend-row { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text2); }
+.legend-row i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.focus-sent { background: #E8EDFB; border-radius: 3px; }

@@ -17,6 +17,7 @@ import { hasKey, keyStoreLabel, onSecretsChange, setKey, setWebRemember, webReme
 import { isTauri } from "../lib/platform";
 import { syncEngine } from "../lib/syncEngine";
 import { RecordingSection } from "./RecordingSettings";
+import { StandardsSection } from "./StandardsSettings";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
 const COMMON_TABS: { key: string; label: string }[] = [
@@ -26,7 +27,7 @@ const COMMON_TABS: { key: string; label: string }[] = [
 /** 개별 설정: 지금 열린 영역에만 적용된다 */
 const AREA_TABS: { key: string; label: string }[] = [
   { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" },
-  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" }, { key: "length", label: "항목·분량" },
+  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" }, { key: "length", label: "항목·분량" }, { key: "standards", label: "성취기준·지침" },
   { key: "prompt", label: "초안 프롬프트" },
 ];
 
@@ -66,6 +67,7 @@ export function SettingsPage() {
             {tab === "data" && <DataSection />}
             {tab === "privacy" && <PrivacySection />}
             {tab === "prompt" && <PromptSection />}
+            {tab === "standards" && <StandardsSection />}
             {tab === "display" && <DisplaySection />}
           </div>
         </div>

@@ -97,6 +97,15 @@ export function makeSampleDoc(seed = 42): NugaDoc {
       for (let k = 0; k < 2 && i < lessonDays.length; k++, i++) progress.push({ date: lessonDays[i], class: c.class, unit: u.unit, lesson: li + 1, title: u.lessons[li] });
     }
   }
+  // 예시 성취기준 (실제 교육과정 원문이 아님) — 단원에 연결
+  doc.settings.standards = [
+    { code: "[예시-화학-01]", text: "화학의 유용성과 몰 개념을 이해하고 화학 반응식으로 양적 관계를 설명할 수 있다." },
+    { code: "[예시-화학-02]", text: "원자의 구조와 전자 배치를 이해하고 주기적 성질을 설명할 수 있다." },
+    { code: "[예시-화학-03]", text: "화학 결합의 종류에 따라 물질의 성질이 달라짐을 설명할 수 있다." },
+    { code: "[예시-화학-04]", text: "동적 평형과 산·염기 중화, 산화·환원 반응을 실험과 일상의 예로 설명할 수 있다." },
+  ];
+  const unitCode: Record<string, string> = { "1단원": "[예시-화학-01]", "2단원": "[예시-화학-02]", "3단원": "[예시-화학-03]", "4단원": "[예시-화학-04]" };
+  for (const p of progress) if (unitCode[p.unit]) p.standards = [unitCode[p.unit]];
   doc.settings.progress = progress;
 
   // 누가기록: 학생별 0~7건 (수준 A 많이, C 적게), 오늘 이전 날짜만. 몇 건은 pending.

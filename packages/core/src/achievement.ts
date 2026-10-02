@@ -159,3 +159,68 @@ export function withAutoAchievement(s: Student, records: Parameters<typeof estim
   if (prev && prev.auto === est.value && prev.confidence === est.confidence) return migrateStudent(s);
   return { ...migrateStudent(s), achievement: { auto: est.value, manual: prev?.manual ?? null, confidence: est.confidence, byStandard: prev?.byStandard, updatedAt: new Date().toISOString() } };
 }
+
+/* ---------------- AI 도달 신호 추정 (v3 15.2) ---------------- */
+
+export const ACH_SYSTEM_PROMPT = [
+  "너는 교사의 학생 관찰 기록을 성취기준에 비추어 읽는 보조자다.",
+  "- 각 기록이 성취기준 도달을 얼마나 보여 주는지 0~1 신호로 추정한다. 0.2 참여만, 0.4 이해, 0.6 적용·설명, 0.8 분석·연결, 1.0 확장·심화·새로운 사례 적용.",
+  "- 기록에 적힌 행동만 근거로 삼는다. 짐작으로 올리거나 내리지 않는다. 내용이 없으면 신호를 0.3 으로 두고 이유에 '내용 부족'이라고 쓴다.",
+  "- standard 에는 가장 관련 있는 성취기준 코드를 쓰고, 없으면 빈 문자열.",
+  "- reason 은 근거 한 줄(30자 안팎, 명사형).",
+].join("\n");
+
+export const ACH_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    records: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { id: { type: "string" }, signal: { type: "number" }, standard: { type: "string" }, reason: { type: "string" } },
+        required: ["id", "signal", "standard", "reason"], additionalProperties: false,
+      },
+    },
+  },
+  required: ["records"], additionalProperties: false,
+} as const;
+
+export interface AchSignal { id: string; signal: number; standard: string; reason: string }
+
+/** 반·번호·이름 없이 기록 내용과 성취기준만 보낸다 */
+export function achUserPrompt(records: { id: string; date: string; category: string; topic: string; text: string }[], standards: { code: string; text: string }[]): string {
+  return [
+    "[성취기준]", ...(standards.length ? standards.map((s) => `- ${s.code} ${s.text}`) : ["(등록 안 됨 — 교과 일반 기준으로 판단)"]), "",
+    "[기록] (id | 날짜 | 분류 | 수업 주제 | 관찰 내용)",
+    ...records.map((r) => `- ${r.id} | ${r.date} | ${r.category} | ${r.topic || "-"} | ${r.text || "(내용 없음)"}`),
+  ].join("\n");
+}
+
+export function parseAchResponse(raw: string, ids: string[]): AchSignal[] {
+  let data: { records?: Partial<AchSignal>[] };
+  try { data = JSON.parse(raw); } catch { throw new Error("도달 신호 응답을 읽을 수 없음"); }
+  const ok = new Set(ids);
+  return (data.records || []).filter((r) => r.id && ok.has(String(r.id))).map((r) => ({
+    id: String(r.id), signal: Math.max(0, Math.min(1, Number(r.signal) || 0)), standard: String(r.standard || ""), reason: String(r.reason || "").slice(0, 80),
+  }));
+}
+
+/**
+ * 기록별 신호 → 학생 도달 정도. 최근 기록 가중치↑. 성취기준별 값의 평균이 학생 값.
+ * 신호가 minRecords 미만이면 low, 없으면 none.
+ */
+export function achievementFromSignals(signals: (AchSignal & { time: string })[], minRecords = 3): { value: number | null; confidence: Achievement["confidence"]; byStandard: Record<string, number> } {
+  if (!signals.length) return { value: null, confidence: "none", byStandard: {} };
+  const sorted = [...signals].sort((a, b) => a.time.localeCompare(b.time));
+  const groups = new Map<string, { v: number; w: number }[]>();
+  sorted.forEach((s, i) => { const k = s.standard || "_"; const w = 1 + i / sorted.length; groups.set(k, [...(groups.get(k) || []), { v: s.signal, w }]); });
+  const byStandard: Record<string, number> = {};
+  const vals: number[] = [];
+  for (const [k, xs] of groups) {
+    const v = clampScore((xs.reduce((a, x) => a + x.v * x.w, 0) / xs.reduce((a, x) => a + x.w, 0)) * 100);
+    if (k !== "_") byStandard[k] = v;
+    vals.push(v);
+  }
+  const value = clampScore(vals.reduce((a, b) => a + b, 0) / vals.length);
+  return { value, confidence: signals.length >= minRecords ? "ok" : "low", byStandard };
+}

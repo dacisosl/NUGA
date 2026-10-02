@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
-  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc, migrateDoc, estimateAchievement, migrateStudent, clampScore, LEGACY_LEVEL_SCORE, lengthIn, presetLimitIn, schoolStyle, defaultGuideFor,
-  type Achievement, type Category, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
+  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc, migrateDoc, estimateAchievement, migrateStudent, clampScore, LEGACY_LEVEL_SCORE, lengthIn, presetLimitIn, schoolStyle, defaultGuideFor, checkAdherence,
+  type Achievement, type Category, type Standard, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
 } from "@nuga/core";
 import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
@@ -105,6 +105,8 @@ interface State {
   editStudent(cls: string, oldNo: number, patch: { no?: number; name?: string; manual?: number | null }): { ok: boolean; message?: string; student?: Student };
   /** 도달 정도 교사 조정값 (null = 자동값으로 되돌리기) */
   setAchievement(cls: string, no: number, manual: number | null): void;
+  /** AI 추정 자동값 저장 (교사 조정값은 그대로) */
+  setAutoAchievement(cls: string, no: number, auto: { value: number | null; confidence: Achievement["confidence"]; byStandard: Record<string, number> }): void;
   removeStudent(cls: string, no: number): void;
   setSettings(patch: Partial<Settings> | ((s: Settings) => Settings)): void;
   saveDraft(d: Draft): void;
@@ -383,6 +385,15 @@ export const useStore = create<State>((set, get) => ({
       d.students = d.students.map((x) => (x.class === cls && x.no === no ? { ...migrateStudent(x), achievement: withManual(migrateStudent(x).achievement, manual) } : x));
     });
   },
+  setAutoAchievement(cls, no, a) {
+    get().update((d) => {
+      d.students = d.students.map((x) => {
+        if (x.class !== cls || x.no !== no) return x;
+        const m = migrateStudent(x);
+        return { ...m, achievement: { auto: a.value, manual: m.achievement?.manual ?? null, confidence: a.confidence, byStandard: a.byStandard, updatedAt: nowIso() } };
+      });
+    });
+  },
   upsertStudent(s) {
     const students = get().doc.students.filter((x) => !(x.class === s.class && x.no === s.no));
     get().setStudents([...students, s].sort((a, b) => classSortKey(a.class) - classSortKey(b.class) || a.no - b.no));
@@ -520,3 +531,45 @@ export function reviewCtxOf(doc: NugaDoc, s: Student, target: number, recordCoun
 
 /** 이 영역의 초안 지침 (직접 쓴 프롬프트 → 작성 항목 기본 양식) */
 export function guideOf(doc: NugaDoc): string { return doc.settings.draftPrompt.trim() || defaultGuideFor(doc.settings.writeItem); }
+
+/* ---------- 반영도·성취기준 ---------- */
+
+const hasNote = (r: NugaRecord) => !!(r.note || r.memo || r.voiceMemo?.transcript || "").trim();
+
+/** 학생의 근거 후보(기록·PDF기록) 내용과 카테고리 */
+export function evidenceOf(doc: NugaDoc, s: Pick<Student, "class" | "no">): { evidence: Record<string, string>; evidenceCategory: Record<string, string> } {
+  const evidence: Record<string, string> = {}; const evidenceCategory: Record<string, string> = {};
+  for (const r of doc.records) {
+    if (r.class !== s.class || r.no !== s.no || r.status === "skipped" || !hasNote(r)) continue;
+    evidence[r.id] = (r.note || r.memo || r.voiceMemo?.transcript || "").trim();
+    evidenceCategory[r.id] = catLabel(doc, r.category);
+  }
+  for (const p of doc.performances) {
+    if (p.class !== s.class || p.no !== s.no) continue;
+    evidence[p.id] = `${p.title} ${p.excerpt || ""} ${p.ocrText.slice(0, 600)}`;
+    evidenceCategory[p.id] = "PDF기록";
+  }
+  return { evidence, evidenceCategory };
+}
+
+/** 초안 반영도 점검 */
+export function adherenceOf(doc: NugaDoc, s: Student, text: string, sentences: Draft["sentences"] | null, limit: number) {
+  return checkAdherence({
+    text, sentences, ...evidenceOf(doc, s), lengthMode: doc.settings.lengthMode, limit, band: doc.settings.lengthBand,
+    achievement: achievementOf(doc, s).value, guide: doc.settings.guide, extraForbidden: schoolForbidden(doc), studentName: s.name,
+  });
+}
+
+/** 기록이 걸린 수업(진도표)의 성취기준 */
+export function standardsFor(doc: NugaDoc, records: NugaRecord[]): Standard[] {
+  const list = doc.settings.standards || [];
+  if (!list.length) return [];
+  const codes = new Set<string>();
+  for (const r of records) {
+    const day = r.time.slice(0, 10);
+    const row = doc.settings.progress.find((p) => p.class === r.class && p.date === day) ||
+      doc.settings.progress.filter((p) => p.class === r.class && p.date <= day && (p.standards?.length ?? 0) > 0).sort((a, b) => b.date.localeCompare(a.date))[0];
+    for (const c of row?.standards || []) codes.add(c);
+  }
+  return list.filter((x) => codes.has(x.code));
+}

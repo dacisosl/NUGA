@@ -1,4 +1,4 @@
-import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, LengthMode, NugaRecord, Performance, SpanKind } from "./types";
+import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, LengthMode, NugaRecord, Performance, SpanKind, Standard, TeacherGuide } from "./types";
 import { approxCharsForBytes, isNominalEnding, josa, lengthIn, lengthWindow, modeLabel } from "./text";
 import { achievementGuide } from "./achievement";
 import { fmtMD } from "./ids";
@@ -20,6 +20,10 @@ export interface DraftRequest {
   lengthBand?: [number, number];
   /** 학교급 문체 지침 (프리셋) */
   styleGuide?: string;
+  /** 교사 지침 (선택형 항목 + 자유 문장) */
+  guide?: TeacherGuide;
+  /** 이 학생 기록과 연결된 성취기준 */
+  standards?: Standard[];
   subject: string;
   school?: { grade: number; year: number; semester: number };
   records: AnonRecord[];
@@ -45,7 +49,7 @@ export function anonymizePerformances(perfs: Performance[]): AnonPerf[] {
 
 export function buildDraftRequest(args: {
   achievement: number | null; targetLength: number; lengthMode: LengthMode; lengthBand?: [number, number]; subject: string;
-  styleGuide?: string;
+  styleGuide?: string; guide?: TeacherGuide; standards?: Standard[];
   school?: { grade: number; year: number; semester: number };
   records: NugaRecord[]; performances: Performance[]; categories: CategoryDef[];
   draft?: string; history?: DraftHistory[]; instruction?: string;
@@ -53,6 +57,8 @@ export function buildDraftRequest(args: {
   return {
     achievement: args.achievement ?? null, targetLength: args.targetLength, lengthMode: args.lengthMode, lengthBand: args.lengthBand, subject: args.subject,
     styleGuide: args.styleGuide || undefined,
+    guide: args.guide && Object.values(args.guide).some((v) => (Array.isArray(v) ? v.length : v)) ? args.guide : undefined,
+    standards: args.standards?.length ? args.standards : undefined,
     school: args.school ? { grade: args.school.grade, year: args.school.year, semester: args.school.semester } : undefined,
     records: anonymizeRecords(args.records, args.categories),
     performance: anonymizePerformances(args.performances),
@@ -183,6 +189,21 @@ export function userPrompt(req: DraftRequest): string {
   lines.push("");
   lines.push("[표현 방향] (교사가 확인한 성취기준 도달 정도에 따른 내부 기준, 문장에 숫자나 등급을 쓰지 않음)");
   lines.push(...achievementGuide(req.achievement));
+  if (req.standards?.length) {
+    lines.push("");
+    lines.push("[관련 성취기준] (기록과 연결된 것만. 성취기준 문장을 그대로 옮기지 말고, 기록이 보여 주는 만큼만 연결함)");
+    for (const st of req.standards) lines.push(`- ${st.code} ${st.text}`);
+  }
+  const g = req.guide;
+  if (g) {
+    lines.push("");
+    lines.push("[교사 지침] (지켜야 함)");
+    if (g.sentenceLength) lines.push(`- 한 문장은 ${g.sentenceLength}자 안팎`);
+    if (g.emphasize?.length) lines.push(`- 강조할 카테고리: ${g.emphasize.join(", ")} (해당 기록이 있을 때 먼저·자세히 씀)`);
+    if (g.mustInclude?.length) lines.push(`- 꼭 넣을 표현: ${g.mustInclude.join(", ")} (기록과 맞을 때)`);
+    if (g.avoid?.length) lines.push(`- 쓰지 말 표현: ${g.avoid.join(", ")}`);
+    if (g.note?.trim()) lines.push(`- ${g.note.trim()}`);
+  }
   lines.push("");
   lines.push("[누가기록] (날짜 | 분류 | 수업 주제 | 교사 관찰 내용)");
   if (!req.records.length) lines.push("(없음)");

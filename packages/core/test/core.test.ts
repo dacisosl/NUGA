@@ -372,3 +372,45 @@ describe("suggest (추천 카드)", () => {
     expect(out).toHaveLength(1); expect(out[0].category).toBe(1); expect(out[0].source).toBe("llm");
   });
 });
+
+describe("adherence (반영도)", () => {
+  it("scores rules and builds a regeneration request", async () => {
+    const { checkAdherence, regenerationInstruction } = await import("../src");
+    const evidence = { r1: "중화 적정 실험에서 오차 원인을 눈금 읽기와 변색 시점으로 나누어 발표", r2: "전자 배치 규칙을 사례와 함께 질문", p1: "탐구보고서 동적 평형 오개념 사례" };
+    const cat = { r1: "발표", r2: "질문", p1: "PDF기록" };
+    const good = "중화 적정 실험에서 오차 원인을 눈금 읽기와 변색 시점으로 나누어 발표함. 전자 배치 규칙을 사례와 함께 질문함.";
+    const sentences = [{ text: "중화 적정 실험에서 오차 원인을 눈금 읽기와 변색 시점으로 나누어 발표함.", evidence: ["r1"] }, { text: "전자 배치 규칙을 사례와 함께 질문함.", evidence: ["r2"] }];
+    const base = { evidence, evidenceCategory: cat, lengthMode: "withSpaces" as const, limit: 70, achievement: 60 };
+    const a = checkAdherence({ ...base, text: good, sentences });
+    expect(a.rules.find((r) => r.key === "outside")!.pass).toBe(true);
+    expect(a.metrics.linkRate).toBe(1);
+    expect(a.metrics.useRate).toBeCloseTo(2 / 3);
+    const bad = good + " 서울대 진학을 위해 탁월한 리더십으로 학급을 이끌었다.";
+    const b = checkAdherence({ ...base, text: bad, sentences: [...sentences, { text: "서울대 진학을 위해 탁월한 리더십으로 학급을 이끌었다.", evidence: [] }], achievement: 30, guide: { avoid: ["리더십"], mustInclude: ["오개념"], note: "탐구 중심" } });
+    const failed = b.rules.filter((r) => !r.pass).map((r) => r.key);
+    for (const k of ["style", "forbidden", "limit", "evidence", "outside", "direction", "avoid:리더십", "must:오개념"]) expect(failed).toContain(k);
+    expect(b.rules.find((r) => r.key === "note")!.checkable).toBe(false);
+    expect(b.score).toBeLessThan(a.score);
+    const ins = regenerationInstruction(b, [sentences[0].text, sentences[1].text, "서울대 진학을 위해 탁월한 리더십으로 학급을 이끌었다."])!;
+    expect(ins).toContain("3) 서울대"); expect(ins).toContain("기재 금지어");
+  });
+  it("puts teacher guide and standards in the prompt", async () => {
+    const { userPrompt, buildDraftRequest } = await import("../src");
+    const p = userPrompt(buildDraftRequest({ achievement: 60, targetLength: 1500, lengthMode: "bytes", subject: "화학Ⅰ", records: [], performances: [], categories: [], guide: { sentenceLength: 60, avoid: ["열심히"] }, standards: [{ code: "[예시-01]", text: "동적 평형을 설명할 수 있다." }] }));
+    expect(p).toContain("[교사 지침]"); expect(p).toContain("60자 안팎"); expect(p).toContain("쓰지 말 표현: 열심히"); expect(p).toContain("[예시-01]");
+  });
+});
+
+describe("achievement signals (AI 추정)", () => {
+  it("parses and aggregates per standard", async () => {
+    const { parseAchResponse, achievementFromSignals } = await import("../src");
+    const sig = parseAchResponse(JSON.stringify({ records: [
+      { id: "r1", signal: 0.9, standard: "[A]", reason: "개념 확장" }, { id: "r2", signal: 0.5, standard: "[B]", reason: "설명" },
+      { id: "r3", signal: 1.7, standard: "[A]", reason: "x" }, { id: "zz", signal: 0.1, standard: "", reason: "" },
+    ] }), ["r1", "r2", "r3"]);
+    expect(sig).toHaveLength(3); expect(sig[2].signal).toBe(1);
+    const a = achievementFromSignals(sig.map((s, i) => ({ ...s, time: `2026-04-0${i + 1}` })));
+    expect(a.confidence).toBe("ok"); expect(a.byStandard["[A]"]).toBeGreaterThan(a.byStandard["[B]"]);
+    expect(a.value).toBeGreaterThan(60); expect(achievementFromSignals([]).confidence).toBe("none");
+  });
+});

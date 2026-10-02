@@ -143,6 +143,11 @@ export interface Draft {
   status: "draft" | "saved";
   targetLength?: number;
   review: { result: ReviewResult; issues: ReviewIssue[]; at?: string };
+  /** 반영도 점검 (생성·저장 때 계산) */
+  adherence?: AdherenceReport;
+  /** 생성에 쓴 도달 정도 (내부 값) */
+  achievementUsed?: number | null;
+  engine?: { provider: string; model?: string };
   history: DraftHistory[];
   updatedAt: string;
 }
@@ -151,7 +156,38 @@ export interface CategoryDef { key: Category; label: string }
 export interface ClassDef { class: string; size: number }
 export interface PeriodDef { no: number; start: string; end: string }
 export interface TimetableCell { weekday: number; period: number; class: string }
-export interface ProgressRow { date: string; class: string; unit: string; lesson: number; title: string }
+export interface ProgressRow { date: string; class: string; unit: string; lesson: number; title: string; standards?: string[] }
+
+/** 교육과정 성취기준 (교사가 넣음, 데모는 예시 코드) */
+export interface Standard { code: string; text: string }
+
+/**
+ * 교사 지침 (영역별). 점검할 수 있는 항목은 선택형으로 받고, 자유 문장(note)은 프롬프트에만 넣는다.
+ */
+export interface TeacherGuide {
+  /** 한 문장 목표 길이(공백 포함 글자) */
+  sentenceLength?: number;
+  /** 강조할 카테고리 라벨 */
+  emphasize?: string[];
+  /** 꼭 넣을 표현 */
+  mustInclude?: string[];
+  /** 쓰지 말 표현 */
+  avoid?: string[];
+  /** 자유 지침 (자동 점검 불가) */
+  note?: string;
+}
+
+/** 프롬프트 반영도 점검 결과 (v3 16·17.4) */
+export interface AdherenceRule { key: string; label: string; pass: boolean; detail: string; sentences?: number[]; checkable: boolean }
+export interface AdherenceReport {
+  score: number; passed: number; total: number;
+  rules: AdherenceRule[];
+  /** 근거 연결률 · 기록 사용률 · 근거 일치도 · 반영도 */
+  metrics: { linkRate: number; useRate: number; support: number; adherence: number };
+  /** 문장별 근거 일치도 (0~1) */
+  sentenceSupport: number[];
+  at: string;
+}
 
 export interface SyncSettings {
   keyB64: string;
@@ -195,6 +231,10 @@ export interface Settings {
   schoolLevel?: SchoolLevel;
   /** 이 영역에서 쓰는 생기부 항목 */
   writeItem?: WriteItem;
+  /** 성취기준 목록 */
+  standards?: Standard[];
+  /** 교사 지침 (선택형 항목 + 자유 문장) */
+  guide?: TeacherGuide;
   lowRecordThreshold: number;
   lowRecordEnabled: boolean;
   supplementEnabled: boolean;

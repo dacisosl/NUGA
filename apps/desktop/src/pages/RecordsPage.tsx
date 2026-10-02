@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRecord, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
-import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, useStore } from "../store";
+import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, standardsFor, useStore } from "../store";
+import { aiReady, estimateAchievementAI } from "../lib/ai";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
@@ -16,6 +17,22 @@ export function RecordsPage() {
   const recordsFilter = useStore((s) => s.recordsFilter);
   const setRecordsFilter = useStore((s) => s.setRecordsFilter);
   const [filter, setFilter] = useState<Filter>((recordsFilter as Filter) || "all");
+  const aiOn = aiReady(doc.settings.ai);
+  const setAutoAchievement = useStore((s) => s.setAutoAchievement);
+  const [estimating, setEstimating] = useState<number | null>(null);
+  const estimate = async () => {
+    setEstimating(0); let done = 0; let fail = 0;
+    for (const st of students) {
+      const recs = recordsOf(doc, st.class, st.no).map((r) => fillLesson(doc, r));
+      try {
+        const a = await estimateAchievementAI(recs, standardsFor(doc, recs), doc.settings.categories, doc.settings.ai);
+        setAutoAchievement(st.class, st.no, a);
+      } catch { fail++; }
+      setEstimating(++done);
+    }
+    setEstimating(null);
+    toast({ text: fail ? `도달 정도 추정 완료 · 실패 ${fail}명` : `도달 정도 추정 완료 · ${done}명 (교사 조정값은 그대로)` });
+  };
   useEffect(() => { if (recordsFilter) { setFilter(recordsFilter as Filter); setRecordsFilter(null); } }, [recordsFilter]);
   const weekStartMs = useMemo(() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); }, []);
   const [open, setOpen] = useState<Student | null>(null);
@@ -52,7 +69,7 @@ export function RecordsPage() {
 
   return (
     <>
-      <TopBar title="누가기록" onExcel={exportExcel} right={<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button>} />
+      <TopBar title="누가기록" onExcel={exportExcel} right={<>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
       <ClassTabs extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content">
         <div className="flex" style={{ marginBottom: 12 }}>

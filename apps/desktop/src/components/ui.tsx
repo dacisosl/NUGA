@@ -48,6 +48,9 @@ export function AchievementControl({ student, compact }: { student: TagStudent; 
         {ach.auto !== null && <i className="ach-auto" style={{ left: `${ach.auto}%` }} title={`자동값 ${ach.auto}`} />}
         <div className="ach-scale">{ACH_COLORS.map((c) => <span key={c} style={{ background: c }} />)}</div>
       </div>
+      {student.achievement?.byStandard && Object.keys(student.achievement.byStandard).length > 0 && (
+        <div className="small muted" style={{ marginTop: 6 }}>성취기준별(AI 추정): {Object.entries(student.achievement.byStandard).map(([k, v]) => `${k} ${v}`).join(" · ")}</div>
+      )}
       <div className="flex" style={{ gap: 6, marginTop: 6 }}>
         {ach.edited && <button className="btn sm" onClick={() => setAchievement(student.class, student.no, null)}>자동값으로 되돌리기</button>}
         {!compact && <span className="muted small">생기부·내보내기에는 나오지 않는 내부 값입니다. 초안의 표현 방향(서술어 강도)만 바꿉니다.</span>}
