@@ -1,5 +1,6 @@
 import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, routeRecordArea, type NugaRecord, type SyncMessage, type TranscriptPart } from "@nuga/core";
 import { useTranscripts } from "./transcripts";
+import { runSuggestions } from "./suggestFlow";
 import { readAreaDoc, useStore, writeAreaDoc } from "../store";
 import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
@@ -165,6 +166,8 @@ class SyncEngine {
     }
     if (done.length) {
       await client.send({ v: 1, type: "transcriptAck", deviceId: st.deviceId, sentAt: nowIso(), payload: { ids: done } }, "pc");
+      // 도착한 스크립트마다 추천 카드를 만든다 (실패해도 동기화는 계속)
+      for (const id of done) runSuggestions(id).catch(() => {});
       const metas = useTranscripts.getState().index.filter((m) => done.includes(m.id));
       const text = `수업 스크립트 ${done.length}건 도착 — ${metas.map((m) => `${m.class} ${m.period ? `${m.period}교시` : ""}`.trim()).join(", ")}`;
       notify("누가 스크립트 도착", text);

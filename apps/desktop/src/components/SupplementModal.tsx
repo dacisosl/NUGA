@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { fmtHM, fmtMD, lessonLabel, type Category } from "@nuga/core";
+import { DEFAULT_RECORDING, alignCandidates, fmtHM, fmtMD, lessonLabel, type AlignCandidate, type Category, type Transcript } from "@nuga/core";
 import { catLabel, fillLesson, studentName, useStore } from "../store";
+import { useTranscripts } from "../lib/transcripts";
 import { Chip, Icon, Modal } from "./ui";
 
 /** 단원·카테고리 기반 추천 문구 (후순위 기능의 1차 구현: 규칙 템플릿) */
@@ -26,12 +27,33 @@ export function SupplementModal() {
   const [note, setNote] = useState("");
   const [cat, setCat] = useState<Category>(1);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const tIndex = useTranscripts((s) => s.index);
+  const tLoaded = useTranscripts((s) => s.loaded);
+  const tLoad = useTranscripts((s) => s.load);
+  const tGet = useTranscripts((s) => s.get);
+  const [cands, setCands] = useState<AlignCandidate[]>([]);
+  useEffect(() => { if (!tLoaded) tLoad(); }, [tLoaded]);
 
   const ids = queue.filter((id) => doc.records.some((r) => r.id === id));
   const rec = useMemo(() => { const r = doc.records.find((x) => x.id === ids[idx]); return r ? fillLesson(doc, r) : null; }, [doc, ids, idx]);
 
   useEffect(() => { if (rec) { setNote(rec.note || ""); setCat(rec.category); setTimeout(() => ref.current?.focus(), 30); } }, [rec?.id]);
   useEffect(() => { if (ids.length === 0) openSupplement([]); else if (idx >= ids.length) setIdx(ids.length - 1); }, [ids.length, idx]);
+
+  // 수업 스크립트 후보: 1차 기록 시각 앞 60초 ~ 뒤 15초의 학생 발언 (v3 7.4). 화자와 학생은 연결하지 않는다.
+  useEffect(() => {
+    let alive = true;
+    if (!rec) { setCands([]); return; }
+    const t = new Date(rec.time).getTime();
+    const near = tIndex.filter((m) => m.class === rec.class && t >= new Date(m.startedAt).getTime() - 120_000 && t <= new Date(m.endedAt).getTime() + 120_000);
+    if (!near.length) { setCands([]); return; }
+    const win = (doc.settings.recording || DEFAULT_RECORDING).alignWindowSec || [-60, 15];
+    Promise.all(near.map((m) => tGet(m.id))).then((trs) => {
+      if (!alive) return;
+      setCands(alignCandidates(rec, trs.filter((x): x is Transcript => !!x), catLabel(doc, cat), win as [number, number], 4));
+    });
+    return () => { alive = false; };
+  }, [rec?.id, cat, tIndex.length]);
 
   if (!rec) return null;
   const close = () => openSupplement([]);
@@ -69,6 +91,14 @@ export function SupplementModal() {
         </div>
         {memo && <div className="supp-memo">{rec.voiceMemo ? <><Icon name="mic" size={12} /> 음성 </> : "메모 "}<b>{memo}</b></div>}
         <textarea ref={ref} rows={3} value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={onKey} placeholder="관찰 내용 (예: 온도와 평형 이동을 르샤틀리에 원리와 연결)" />
+        {cands.length > 0 && (
+          <div className="col" style={{ gap: 6 }}>
+            <div className="small muted">수업 스크립트 후보 · 기록 시각 전후 발언 (눌러서 넣기)</div>
+            <div className="supp-cands">
+              {cands.map((c) => <button key={c.transcriptId + c.segment.id} className="supp-cand" onClick={() => { setNote(c.segment.text); ref.current?.focus(); }}><span className="meta">{String(c.at.getHours()).padStart(2, "0")}:{String(c.at.getMinutes()).padStart(2, "0")}:{String(c.at.getSeconds()).padStart(2, "0")} · {c.segment.speaker} · {c.reason}</span>{c.segment.text}</button>)}
+            </div>
+          </div>
+        )}
         <div className="recs">
           {suggestions(cat, rec.lesson?.title || "", memo).map((s) => <button key={s} onClick={() => { setNote(s); ref.current?.focus(); }}>{s}</button>)}
         </div>

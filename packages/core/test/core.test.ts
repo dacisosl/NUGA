@@ -336,3 +336,39 @@ describe("transcript (수업 스크립트)", () => {
     expect(scrubTranscriptNames(named, ["이서연"]).segments[0].text).toBe("○○○아 이거 맞아? ○○○ 대답해 봐");
   });
 });
+
+describe("suggest (추천 카드)", () => {
+  it("picks student utterances from the demo lesson by rules", async () => {
+    const { parseTranscription, ruleSuggestions, DEFAULT_CATEGORIES, topicKeywords, mergeSuggestions } = await import("../src");
+    const fs = await import("node:fs");
+    const demo = JSON.parse(fs.readFileSync(new URL("../demo/lesson-equilibrium.json", import.meta.url), "utf8"));
+    const tr = parseTranscription(JSON.stringify({ segments: demo.segments }), { id: "d1", class: "2-3", period: 3, startedAt: "2026-05-08T10:00:00", endedAt: "2026-05-08T10:10:00", provider: "demo", model: "x" });
+    expect(tr.teacherSpeaker.auto).toBe("화자1");
+    const cats = [...DEFAULT_CATEGORIES.slice(0, 3), { key: 4 as const, label: "탐구" }];
+    const s = ruleSuggestions(tr, { categories: cats, topicKeywords: topicKeywords("화학 평형"), max: 10 });
+    expect(s.length).toBeGreaterThanOrEqual(4); expect(s.length).toBeLessThanOrEqual(10);
+    const speakers = s.map((x) => tr.segments.find((g) => g.id === x.segmentIds[0])!.speaker);
+    expect(speakers).not.toContain("화자1");
+    const texts = s.map((x) => tr.segments.find((g) => g.id === x.segmentIds[0])!.text).join("\n");
+    expect(texts).toContain("흡열 방향"); // 근거를 든 예측
+    expect(texts).toContain("잘못 생각"); // 자기 성찰
+    const q = s.find((x) => x.criteria === "깊이 있는 질문");
+    expect(q?.category).toBe(1);
+    const merged = mergeSuggestions([{ ...s[0], status: "dismissed" }], s);
+    expect(merged.filter((x) => x.segmentIds[0] === s[0].segmentIds[0])).toHaveLength(1);
+    expect(merged.find((x) => x.segmentIds[0] === s[0].segmentIds[0])!.status).toBe("dismissed");
+  });
+  it("parses llm suggestions and drops teacher/unknown ids", async () => {
+    const { parseTranscription, parseSuggestResponse, DEFAULT_CATEGORIES } = await import("../src");
+    const tr = parseTranscription(JSON.stringify({ segments: [
+      { start: "00:01", end: "00:30", speaker: "화자1", text: "오늘은 평형을 배웁니다. 교과서를 펴세요. 그래프를 같이 봅시다. 잘 들어 보세요." },
+      { start: "00:31", end: "00:40", speaker: "화자2", text: "온도를 올리면 왜 색이 진해지나요?" },
+    ] }), { id: "t", class: "2-3", period: 1, startedAt: "2026-05-08T10:00:00", endedAt: "2026-05-08T10:01:00", provider: "x", model: "y" });
+    const out = parseSuggestResponse(JSON.stringify({ items: [
+      { segmentIds: ["s2"], criteria: "깊이 있는 질문", reason: "색 변화의 원인을 질문함", category: "질문", score: 0.9 },
+      { segmentIds: ["s1"], criteria: "근거 제시", reason: "x", category: "발표", score: 0.5 },
+      { segmentIds: ["s9"], criteria: "근거 제시", reason: "x", category: "발표", score: 0.5 },
+    ] }), tr, DEFAULT_CATEGORIES, 10);
+    expect(out).toHaveLength(1); expect(out[0].category).toBe(1); expect(out[0].source).toBe("llm");
+  });
+});

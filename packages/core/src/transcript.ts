@@ -142,7 +142,7 @@ export function scrubTranscriptNames(tr: Transcript, names: string[]): Transcrip
 
 export interface AlignCandidate { transcriptId: string; segment: TranscriptSegment; at: Date; score: number; reason: string }
 
-const QUESTION = /(\?|까요|나요|가요|니까|ㄹ까|을까|를까|는지|은지|왜|어떻게|무엇|뭐가|뭘|언제|어디)/;
+const QUESTION = /(\?|까요|나요|가요|을까|를까|는지|은지|왜|어떻게|무엇|뭐가|뭘|언제|어디)/;
 
 /**
  * 1차 기록 시각 앞 60초~뒤 15초(기본) 발언 중 보완 문구 후보를 고른다.

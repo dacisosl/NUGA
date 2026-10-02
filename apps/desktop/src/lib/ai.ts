@@ -1,4 +1,6 @@
 import {
+  SUGGEST_JSON_SCHEMA, SUGGEST_SYSTEM_PROMPT, parseSuggestResponse, ruleSuggestions, scrubTranscriptNames, suggestUserPrompt, topicKeywords,
+  type CategoryDef, type Suggestion, type Transcript,
   DRAFT_JSON_SCHEMA, LABEL_JSON_SCHEMA, LABEL_SYSTEM_PROMPT, PROVIDER_INFO, generateLocalDraft, labelUserPrompt, parseDraftResponse, parseLabelResponse, systemPrompt, userPrompt,
   type AiProvider, type AiSettings, type DraftRequest, type DraftResponse, type DraftSpan,
 } from "@nuga/core";
@@ -38,4 +40,24 @@ export async function labelDraft(sentences: string[], ai: AiSettings): Promise<(
   return generateJson(prov, {
     system: LABEL_SYSTEM_PROMPT, user: labelUserPrompt(sentences), schema: LABEL_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "labels", maxTokens: 8192,
   }, (t) => parseLabelResponse(t, sentences));
+}
+
+/**
+ * 수업 스크립트에서 추천 카드 만들기. AI 가 켜져 있으면 LLM 판별(이름은 ○○○로 가려 보냄), 아니면 규칙.
+ * LLM 이 실패하면 규칙 결과를 돌려준다.
+ */
+export async function suggestFromTranscript(tr: Transcript, opts: { ai: AiSettings; categories: CategoryDef[]; topic?: string; names: string[]; max: number }): Promise<{ items: Suggestion[]; by: string; error?: string }> {
+  const rules = ruleSuggestions(tr, { categories: opts.categories, topicKeywords: topicKeywords(opts.topic || ""), max: opts.max });
+  const prov = providerFor(opts.ai);
+  if (!prov) return { items: rules, by: "규칙" };
+  try {
+    const safe = scrubTranscriptNames(tr, opts.names);
+    const items = await generateJson(prov, {
+      system: SUGGEST_SYSTEM_PROMPT, user: suggestUserPrompt(safe, { topic: opts.topic, categories: opts.categories, max: opts.max }),
+      schema: SUGGEST_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "suggestions", maxTokens: 4096,
+    }, (t) => parseSuggestResponse(t, tr, opts.categories, opts.max));
+    return { items, by: `${PROVIDER_INFO[prov.id].label} · ${prov.model}` };
+  } catch (e) {
+    return { items: rules, by: "규칙", error: e instanceof Error ? e.message : "AI 추천 실패" };
+  }
 }

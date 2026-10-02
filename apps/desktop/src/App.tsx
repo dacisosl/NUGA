@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
 import { RecordsPage } from "./pages/RecordsPage";
+import { TodayPage } from "./pages/TodayPage";
 import { DraftPage } from "./pages/DraftPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -25,7 +26,7 @@ export default function App() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const map: Record<string, Page> = { "1": "records", "2": "draft", "3": "review", "4": "settings" };
+      const map: Record<string, Page> = { "0": "today", "1": "records", "2": "draft", "3": "review", "4": "settings" };
       if (map[e.key]) { e.preventDefault(); setPage(map[e.key]); }
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -38,6 +39,7 @@ export default function App() {
     <div className="app">
       <Sidebar />
       <main className="main">
+        {page === "today" && <TodayPage />}
         {page === "records" && <RecordsPage />}
         {page === "draft" && <DraftPage />}
         {page === "review" && <ReviewPage />}
@@ -60,6 +62,7 @@ function Sidebar() {
   const openSupplement = useStore((s) => s.openSupplement);
   const supp = doc.settings.supplementEnabled;
   const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"] }[] = [
+    { key: "today", label: "오늘", icon: "sun" },
     { key: "records", label: "누가기록", icon: "list" },
     { key: "draft", label: "초안 작성", icon: "pen" },
     { key: "review", label: "검토", icon: "check" },

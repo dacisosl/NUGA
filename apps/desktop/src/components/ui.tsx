@@ -208,8 +208,10 @@ export function EditableCell({ value, onSave, type = "text", options, placeholde
   return <input ref={ref as React.RefObject<HTMLInputElement>} className="cell-edit" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setV(value); setEditing(false); } }} />;
 }
 
-export function Icon({ name, size = 16 }: { name: "list" | "pen" | "check" | "gear" | "sync" | "excel" | "json" | "plus" | "left" | "right" | "trash" | "mic" | "qr" | "watch" | "phone" | "warn" | "info"; size?: number }) {
+export function Icon({ name, size = 16 }: { name: "list" | "pen" | "check" | "gear" | "sync" | "excel" | "json" | "plus" | "left" | "right" | "trash" | "mic" | "qr" | "watch" | "phone" | "warn" | "info" | "sun" | "spark"; size?: number }) {
   const p: Record<string, React.ReactNode> = {
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    spark: <><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8Z" /></>,
     list: <><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="3.5" cy="6" r="1" /><circle cx="3.5" cy="12" r="1" /><circle cx="3.5" cy="18" r="1" /></>,
     pen: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
     check: <><path d="M20 6 9 17l-5-5" /></>,

@@ -7,7 +7,7 @@ import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
 
-export type Page = "records" | "draft" | "review" | "settings";
+export type Page = "today" | "records" | "draft" | "review" | "settings";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
 
 export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
@@ -61,6 +61,9 @@ interface State {
   mode2p: "individual" | "batch";
   selected: { class: string; no: number } | null;
   settingsTab: string;
+  /** 다른 페이지에서 누가기록 필터를 정해 들어올 때 (예: 오늘 → 이번 주 0건) */
+  recordsFilter: string | null;
+  setRecordsFilter(f: string | null): void;
   /** 초안 보기: 한 문장씩 · 구별하기(형광펜). 이 기기에만 저장 */
   view: { split: boolean; highlight: boolean };
   toasts: Toast[];
@@ -152,6 +155,8 @@ export const useStore = create<State>((set, get) => ({
   toasts: [],
   supplementQueue: [],
   syncStatus: { state: "off", message: "연결 안 됨" },
+  recordsFilter: null,
+  setRecordsFilter: (f) => set({ recordsFilter: f }),
   outbox: { messages: [], tombstones: [] },
   deviceId: "",
 
@@ -184,7 +189,7 @@ export const useStore = create<State>((set, get) => ({
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
     const classes = [...doc.settings.classes].sort((a, b) => classSortKey(a.class) - classSortKey(b.class));
-    set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "records" : "settings" });
+    set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "today" : "settings" });
     if (movedKey) get().setSettings((x) => ({ ...x, ai: { ...x.ai, apiKey: "" } }));
   },
 

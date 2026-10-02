@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { formatClock, segmentDate, teacherOf, type Transcript, type TranscriptSegment } from "@nuga/core";
 import { useTranscripts } from "../lib/transcripts";
 import { Modal } from "./ui";
+import { AssignModal } from "./AssignModal";
 
 const SPEAKER_COLORS = ["#2448C9", "#0D6660", "#6C33A3", "#B4470B", "#4A4E5A", "#1F7A3A", "#8A2B5B", "#5B6B00"];
 export function speakerColor(tr: Transcript, speaker: string): string {
@@ -24,7 +25,8 @@ export function SegmentLine({ tr, seg, highlight, action }: { tr: Transcript; se
 }
 
 /** 스크립트 보기 창: 화자별 색, 교사 추정 화자 확인·변경, 교사 발언 숨기기 */
-export function TranscriptModal({ id, onClose, focusSegment }: { id: string; onClose: () => void; focusSegment?: string }) {
+export function TranscriptModal({ id, onClose, focusSegment, recordable }: { id: string; onClose: () => void; focusSegment?: string; recordable?: boolean }) {
+  const [assign, setAssign] = useState<TranscriptSegment | null>(null);
   const getT = useTranscripts((s) => s.get);
   const setTeacher = useTranscripts((s) => s.setTeacher);
   const meta = useTranscripts((s) => s.index.find((m) => m.id === id));
@@ -58,9 +60,10 @@ export function TranscriptModal({ id, onClose, focusSegment }: { id: string; onC
         <span className="muted small">화자 라벨은 이 수업 안에서만 의미가 있고, 학생과 연결해 저장하지 않습니다.</span>
       </div>
       <div className="seg-list">
-        {tr.segments.filter((s) => !(hideTeacher && s.speaker === teacher)).map((s) => <div key={s.id} id={`seg-${s.id}`}><SegmentLine tr={tr} seg={s} highlight={s.id === focusSegment} /></div>)}
+        {tr.segments.filter((s) => !(hideTeacher && s.speaker === teacher)).map((s) => <div key={s.id} id={`seg-${s.id}`}><SegmentLine tr={tr} seg={s} highlight={s.id === focusSegment} action={recordable && s.speaker !== teacher ? <button className="btn ghost sm seg-act" onClick={() => setAssign(s)}>기록으로</button> : undefined} /></div>)}
         {!tr.segments.length && <div className="muted">받아쓴 발언이 없습니다.</div>}
       </div>
+      {assign && <AssignModal tr={tr} segs={[assign]} category={4} reason="" onClose={() => setAssign(null)} />}
     </Modal>
   );
 }

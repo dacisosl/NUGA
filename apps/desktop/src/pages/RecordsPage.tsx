@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRecord, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, useStore } from "../store";
@@ -6,14 +6,18 @@ import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, St
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 
-type Filter = "all" | "low" | "pending";
+type Filter = "all" | "low" | "pending" | "week0";
 
 export function RecordsPage() {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const students = useClassStudents();
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const recordsFilter = useStore((s) => s.recordsFilter);
+  const setRecordsFilter = useStore((s) => s.setRecordsFilter);
+  const [filter, setFilter] = useState<Filter>((recordsFilter as Filter) || "all");
+  useEffect(() => { if (recordsFilter) { setFilter(recordsFilter as Filter); setRecordsFilter(null); } }, [recordsFilter]);
+  const weekStartMs = useMemo(() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); }, []);
   const [open, setOpen] = useState<Student | null>(null);
   const [adding, setAdding] = useState(false);
   const toast = useStore((s) => s.toast);
@@ -26,6 +30,7 @@ export function RecordsPage() {
     if (q && !(r.s.name.includes(q) || String(r.s.no) === q)) return false;
     if (filter === "low") return r.low;
     if (filter === "pending") return r.pending > 0;
+    if (filter === "week0") return !r.recs.some((x) => x.status !== "skipped" && new Date(x.time).getTime() >= weekStartMs);
     return true;
   }), [students, doc, q, filter]);
 
@@ -56,6 +61,7 @@ export function RecordsPage() {
             <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 {students.length}</button>
             {lowOn && <button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><span className="dot warn" style={{ marginRight: 6 }} />기록 부족 {counts.low}</button>}
             {supp && <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>보완 대기 {counts.pending}</button>}
+            {filter === "week0" && <button className="active" onClick={() => setFilter("all")} title="눌러서 해제">이번 주 0건 ×</button>}
           </span>
           <span className="grow" />
           {lowOn && <span className="muted small">기록 부족 = {doc.settings.lowRecordThreshold}건 이하</span>}

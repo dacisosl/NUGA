@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { mergeTranscriptParts, type Transcript, type TranscriptPart } from "@nuga/core";
+import { mergeSuggestions, mergeTranscriptParts, type Suggestion, type SuggestionStatus, type Transcript, type TranscriptPart } from "@nuga/core";
 import { getPersist } from "./persist";
 
 /**
@@ -18,6 +18,9 @@ export interface TranscriptMeta {
   areaId: string;
   receivedAt: string;
   engine: string;
+  /** 처리하지 않은 추천 카드 수 */
+  suggestNew?: number;
+  suggestBy?: string;
 }
 
 interface TState {
@@ -30,11 +33,18 @@ interface TState {
   save(tr: Transcript, areaId?: string): Promise<void>;
   setTeacher(id: string, speaker: string | null): Promise<void>;
   remove(id: string): Promise<void>;
+  /** 추천 카드 (수업별) */
+  suggestions: Record<string, Suggestion[]>;
+  loadSuggestions(id: string): Promise<Suggestion[]>;
+  /** 새 추천을 기존 카드와 합쳐 저장 (교사가 처리한 카드는 유지) */
+  putSuggestions(id: string, items: Suggestion[], by: string): Promise<void>;
+  setSuggestionStatus(transcriptId: string, suggestionId: string, status: SuggestionStatus, recordId?: string | null): Promise<void>;
 }
 
 const INDEX = "transcripts";
 const fileKey = (id: string) => `tr-${id}`;
 const partKey = (id: string) => `trp-${id}`;
+const sgKey = (id: string) => `sg-${id}`;
 const cache = new Map<string, Transcript>();
 
 function metaOf(tr: Transcript, areaId: string, receivedAt: string): TranscriptMeta {
@@ -48,6 +58,35 @@ function metaOf(tr: Transcript, areaId: string, receivedAt: string): TranscriptM
 export const useTranscripts = create<TState>((set, get) => ({
   loaded: false,
   index: [],
+  suggestions: {},
+
+  async loadSuggestions(id) {
+    const have = get().suggestions[id];
+    if (have) return have;
+    const p = await getPersist();
+    const list = (await p.loadAux<Suggestion[]>(sgKey(id))) || [];
+    set({ suggestions: { ...get().suggestions, [id]: list } });
+    return list;
+  },
+
+  async putSuggestions(id, items, by) {
+    const prev = await get().loadSuggestions(id);
+    const list = mergeSuggestions(prev, items);
+    const p = await getPersist();
+    await p.saveAux(sgKey(id), list);
+    const index = get().index.map((m) => (m.id === id ? { ...m, suggestNew: list.filter((x) => x.status === "new" || x.status === "later").length, suggestBy: by } : m));
+    await p.saveAux(INDEX, index);
+    set({ suggestions: { ...get().suggestions, [id]: list }, index });
+  },
+
+  async setSuggestionStatus(transcriptId, suggestionId, status, recordId) {
+    const list = (await get().loadSuggestions(transcriptId)).map((x) => (x.id === suggestionId ? { ...x, status, recordId: recordId ?? x.recordId } : x));
+    const p = await getPersist();
+    await p.saveAux(sgKey(transcriptId), list);
+    const index = get().index.map((m) => (m.id === transcriptId ? { ...m, suggestNew: list.filter((x) => x.status === "new" || x.status === "later").length } : m));
+    await p.saveAux(INDEX, index);
+    set({ suggestions: { ...get().suggestions, [transcriptId]: list }, index });
+  },
 
   async load() {
     const p = await getPersist();
@@ -82,7 +121,7 @@ export const useTranscripts = create<TState>((set, get) => ({
     await p.saveAux(fileKey(tr.id), tr);
     cache.set(tr.id, tr);
     const prev = get().index.find((m) => m.id === tr.id);
-    const meta = metaOf(tr, areaId ?? prev?.areaId ?? "default", prev?.receivedAt ?? new Date().toISOString());
+    const meta = { ...metaOf(tr, areaId ?? prev?.areaId ?? "default", prev?.receivedAt ?? new Date().toISOString()), suggestNew: prev?.suggestNew, suggestBy: prev?.suggestBy };
     const index = [meta, ...get().index.filter((m) => m.id !== tr.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     await p.saveAux(INDEX, index);
     set({ index });
@@ -97,7 +136,10 @@ export const useTranscripts = create<TState>((set, get) => ({
   async remove(id) {
     const p = await getPersist();
     await p.saveAux(fileKey(id), null);
+    await p.saveAux(sgKey(id), null);
     cache.delete(id);
+    const { [id]: _drop, ...rest } = get().suggestions;
+    set({ suggestions: rest });
     const index = get().index.filter((m) => m.id !== id);
     await p.saveAux(INDEX, index);
     set({ index });
