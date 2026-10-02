@@ -62,13 +62,40 @@ payload = `[{ "id": "uuid", "deletedAt": "ISO" }]` — 삭제 전파. 받은 쪽
   "progress": [ { "date": "2026-05-08", "class": "2-3", "unit": "3단원", "lesson": 2, "title": "화학 평형" } ],
   "roster": null | [ { "class": "2-3", "no": 2, "name": "이서연" } ],
   "options": { "autoLaunchWatch": true, "reelStart": "one" | "last" },
+  "recording": null | { "enabled": true, "approvedChecklist": true, "mode": "tap" | "standby", "audioTTLHours": 24,
+                        "speech": { "provider": "gemini", "model": "gemini-2.5-flash" }, "wifiOnly": true },
   "updatedAt": "ISO" }
 ```
 - `weekday`: 1=월 … 5=금. `period`: 1..N. `size`: 그 반 최대 번호.
 - `roster` 는 PC 설정 "폰에 이름 표시" 를 켠 경우에만 포함. 기본 null. 워치에는 절대 보내지 않는다.
+- `recording` 은 PC 설정 → 녹음에서 사용 조건을 모두 확인하고 켠 경우에만 포함. 키는 들어가지 않는다(§3.8).
 
 ### 3.4 `ping`
 payload = `{ "name": "기기 이름" }` — 연결 확인·기기 목록용.
+
+### 3.5 수업 녹음 흐름 (v3 7.3~7.6)
+1. 폰이 마이크 포그라운드 서비스로 녹음한다. Android 14 이상 제약 때문에 교사의 1탭(수업 시작 알림 [녹음 시작], 위젯, 앱, 아침 [오늘 녹음 대기])으로만 시작한다.
+2. 음성(AAC ADTS, 16kHz 모노 32kbps)은 폰 앱 전용 저장소에만 두고 `audioTTLHours`(기본 24) 뒤 지운다. PC·릴레이로 보내지 않는다.
+3. 수업이 끝나면 Wi-Fi(설정)에서 Gemini Files API 로 녹음 1개를 통째로 올려 받아쓰기·화자 구분을 하고, 업로드 파일은 곧바로 지운다. 지시문은 `TRANSCRIBE_PROMPT`(core) = `TranscriptParser.PROMPT`(Kotlin).
+4. 스크립트를 `transcript` 메시지로 PC 에 보내고, PC 가 `transcriptAck` 를 보내면 폰의 스크립트 사본을 지운다.
+
+### 3.6 `transcript` (폰 → PC)
+```json
+{ "transcript": { "id": "uuid", "class": "2-3", "period": 3, "startedAt": "ISO", "endedAt": "ISO",
+                  "segments": [ { "id": "s41", "t0": 712, "t1": 723, "speaker": "화자3", "text": "…" } ],
+                  "teacherSpeaker": { "auto": "화자1", "confirmed": null },
+                  "engine": { "provider": "gemini", "model": "…" }, "createdAt": "ISO" },
+  "part": 1, "total": 2 }
+```
+- `t0`·`t1` 은 녹음 시작부터 지난 초. 화자는 `화자N` 라벨뿐이며 학생과 연결하는 필드는 없다.
+- 메시지 하나의 스크립트 JSON 은 120KB 이하로 나눈다(릴레이 본문 256KB). PC 는 `id` 로 조각을 모아 `total` 개가 다 오면 합친다.
+- PC 는 기록 시각과 같은 규칙(§6, `routeRecordArea`)으로 `class`·`startedAt` 을 보고 영역을 정한다.
+
+### 3.7 `transcriptAck` (PC → 폰)
+payload = `{ "ids": ["uuid"] }` — 다 받아 저장한 스크립트. 폰은 스크립트 사본을 지운다(음성은 보존 기간까지 남음).
+
+### 3.8 `secrets` (PC → 폰)
+payload = `{ "gemini"?: "키", "openrouter"?: "키" }` — 교사가 PC 설정 → 녹음 → [폰으로 키 보내기]를 눌렀을 때만. 동기화 키로 E2E 암호화되며, 폰은 Android Keystore 기반 저장소에 둔다. 빈 문자열은 지우기.
 
 ## 4. 릴레이 서버 HTTP API
 Base: 릴레이 URL. 모든 응답 JSON, CORS 전체 허용(`*`). 서버는 `keyId`·봉투·수신시각만 저장, 24시간(TTL) 후 삭제. `keyId` 를 아는 쪽만 접근 가능(키 보유 증명 = keyId 자체).
@@ -108,5 +135,8 @@ Base: 릴레이 URL. 모든 응답 JSON, CORS 전체 허용(`*`). 서버는 `key
   "devices": [ { "deviceId", "name", "lastSeen" } ] }
 ```
 
-## 7. AI 요청 (PC → Claude API) — 식별 정보 제거
-기획서 11.1 그대로. `class`·`no`·`name` 은 절대 포함하지 않는다. 응답 JSON: `{ "text": "…", "sentences": [ { "text": "…", "evidence": ["r1"] } ] }`.
+## 7. AI 요청 (PC → Claude·Gemini·OpenRouter·로컬 LLM) — 식별 정보 제거
+`class`·`no`·`name` 은 절대 포함하지 않는다. 도달 정도는 숫자·등급이 아니라 표현 방향(서술어 강도·어휘)으로만 들어간다.
+응답 JSON: `{ "text": "…", "sentences": [ { "text": "…", "evidence": ["r1"], "spans": [ { "text", "kind" } ] } ], "checks": [] }`.
+제공자별 형식 강제: Anthropic `output_config.format`, Gemini `responseSchema`, OpenAI 호환 `response_format.json_schema`. OpenRouter 는 `provider.data_collection = "deny"`.
+스크립트 발언을 외부 LLM 으로 보낼 때는 명단 이름을 `○○○` 로 가린다(`scrubTranscriptNames`).

@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 수업 녹음: 마이크 포그라운드 서비스 (교사 1탭으로만 시작) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -65,6 +68,19 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/nuga_widget_info" />
         </receiver>
+
+        <!-- 수업 녹음 -->
+        <service
+            android:name=".record.RecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <activity
+            android:name=".record.RecordStartActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <!-- Lesson-start alarm -->
         <receiver android:name=".alarm.LessonAlarmReceiver" android:exported="false" />

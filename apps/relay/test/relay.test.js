@@ -202,6 +202,17 @@ describe('body size limit', () => {
       await api.close();
     }
   });
+
+  test('a 120KB transcript part (encrypted + base64) fits the default 256KB limit', async () => {
+    const api = await boot();
+    try {
+      // 스크립트 조각 JSON 120KB → AES-GCM(+16B) → base64(×4/3) ≈ 160KB 봉투
+      const res = await api.post(KEY, envelope('phone', { ct: b64(120_000 + 16) }));
+      assert.equal(res.status, 201);
+    } finally {
+      await api.close();
+    }
+  });
 });
 
 describe('TTL', () => {

@@ -12,6 +12,9 @@ import kr.nuga.app.data.RecordRepository
 import kr.nuga.app.data.SecureStore
 import kr.nuga.app.data.db.NugaDatabase
 import kr.nuga.app.data.db.OutboxKind
+import kr.nuga.app.record.RecordingStatus
+import kr.nuga.app.record.RecordingStore
+import kr.nuga.shared.transcript.TranscriptParser
 import kr.nuga.shared.model.EnvelopeFrom
 import kr.nuga.shared.model.Message
 import kr.nuga.shared.model.MessageType
@@ -31,6 +34,7 @@ class SyncRepository(
     private val relay: RelayApi,
     private val configRepo: ConfigRepository,
     private val recordRepo: RecordRepository,
+    private val recordings: RecordingStore,
 ) {
     sealed interface Result {
         data object Unpaired : Result
@@ -92,7 +96,22 @@ class SyncRepository(
             sentTotal += records.size + tombstones.size
             if (batch.size < BATCH) break
         }
-        return sentTotal
+        return sentTotal + pushTranscripts(p, deviceId)
+    }
+
+    /** 변환이 끝난 스크립트를 PC 로 (큰 것은 나눠서). PC 가 transcriptAck 를 보내면 폰 사본을 지운다. */
+    private suspend fun pushTranscripts(p: SecureStore.PairingInfo, deviceId: String): Int {
+        var n = 0
+        for (item in recordings.items.value.filter { it.status == RecordingStatus.TRANSCRIBED }) {
+            val tr = recordings.transcript(item.id) ?: continue
+            for (part in TranscriptParser.split(tr)) {
+                val now = NugaTime.nowIso()
+                relay.post(p.relayUrl, p.keyId, SyncCrypto.seal(p.key, EnvelopeFrom.PHONE, Message.transcript(deviceId, now, part), now))
+            }
+            recordings.update(item.id) { it.copy(status = RecordingStatus.SENT, sentAt = NugaTime.nowIso()) }
+            n++
+        }
+        return n
     }
 
     /** relay → phone: config (forwarded to the watch by ConfigRepository), records, tombstones; then ack. */
@@ -128,6 +147,11 @@ class SyncRepository(
             MessageType.RECORDS -> runCatching { message.recordsPayload() }.getOrNull()?.let { recordRepo.applyRemoteRecords(it) }
             MessageType.TOMBSTONES -> runCatching { message.tombstonesPayload() }.getOrNull()?.let { recordRepo.applyRemoteTombstones(it) }
             MessageType.PING -> Unit
+            MessageType.TRANSCRIPT_ACK -> runCatching { message.transcriptAckPayload() }.getOrNull()?.let { recordings.markDelivered(it.ids, NugaTime.nowIso()) }
+            MessageType.SECRETS -> runCatching { message.secretsPayload() }.getOrNull()?.let {
+                secure.saveSpeechKeys(it.gemini, it.openrouter)
+                kr.nuga.app.record.TranscribeWorker.enqueue(context)
+            }
             else -> Log.i(TAG, "unknown message type ${message.type}")
         }
     }

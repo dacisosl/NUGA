@@ -1,4 +1,5 @@
-import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, routeRecordArea, type NugaRecord, type SyncMessage } from "@nuga/core";
+import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, routeRecordArea, type NugaRecord, type SyncMessage, type TranscriptPart } from "@nuga/core";
+import { useTranscripts } from "./transcripts";
 import { readAreaDoc, useStore, writeAreaDoc } from "../store";
 import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
@@ -117,19 +118,22 @@ class SyncEngine {
     if (!items.length) return;
     const incoming: NugaRecord[] = [];
     const tombs: { id: string; deletedAt: string }[] = [];
+    const parts: TranscriptPart[] = [];
     let lastId = after;
     for (const { item, message } of items) {
       lastId = item.id;
-      if (message) this.handle(message, incoming, tombs);
+      if (message) this.handle(message, incoming, tombs, parts);
       await client.ack(item.id);
     }
     await this.apply(incoming, tombs);
+    await this.applyTranscripts(client, parts);
     useStore.getState().setSettings((s) => ({ ...s, sync: s.sync ? { ...s.sync, lastPulledId: lastId, lastSyncAt: nowIso() } : null }));
   }
 
-  private handle(m: SyncMessage, incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[]) {
+  private handle(m: SyncMessage, incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[], parts: TranscriptPart[]) {
     const st = useStore.getState();
     if (m.type === "records") incoming.push(...m.payload);
+    else if (m.type === "transcript") parts.push(m.payload);
     else if (m.type === "tombstones") tombs.push(...m.payload);
     else if (m.type === "ping") {
       st.update((d) => {
@@ -139,6 +143,42 @@ class SyncEngine {
       // 새 기기가 인사하면 설정을 강제로 내려보낸다
       this.lastConfigJson = "";
     }
+  }
+
+  /** 수업 스크립트: 조각을 모아 저장하고, 다 받은 스크립트는 폰에 transcriptAck 를 보내 사본을 지우게 한다 */
+  private async applyTranscripts(client: RelayClient, parts: TranscriptPart[]) {
+    if (!parts.length) return;
+    const st = useStore.getState();
+    const docs = await this.allDocs();
+    const routes = docs.map(({ id, doc: d }) => ({
+      id, timetable: d.settings.timetable, periods: d.settings.periods,
+      classes: [...new Set([...d.settings.classes.map((c) => c.class), ...d.students.map((s) => s.class)])],
+    }));
+    const done: string[] = [];
+    const store = useTranscripts.getState();
+    if (!store.loaded) await store.load();
+    for (const part of parts) {
+      const tr = part.transcript;
+      const areaId = routeRecordArea(routes, { class: tr.class, time: tr.startedAt }, st.areaId);
+      const merged = await store.addPart(part, areaId);
+      if (merged) done.push(merged.id);
+    }
+    if (done.length) {
+      await client.send({ v: 1, type: "transcriptAck", deviceId: st.deviceId, sentAt: nowIso(), payload: { ids: done } }, "pc");
+      const metas = useTranscripts.getState().index.filter((m) => done.includes(m.id));
+      const text = `수업 스크립트 ${done.length}건 도착 — ${metas.map((m) => `${m.class} ${m.period ? `${m.period}교시` : ""}`.trim()).join(", ")}`;
+      notify("누가 스크립트 도착", text);
+      st.toast({ text, kind: "notice", ttl: 10000 });
+    }
+  }
+
+  /** 음성 변환 키를 폰으로 (E2E 암호화). 빈 값이면 폰에서 지운다. */
+  async sendSecrets(payload: { gemini?: string; openrouter?: string }): Promise<boolean> {
+    const client = this.getClient();
+    if (!client) return false;
+    const { deviceId } = useStore.getState();
+    await client.send({ v: 1, type: "secrets", deviceId, sentAt: nowIso(), payload }, "pc");
+    return true;
   }
 
   private async apply(incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[]) {

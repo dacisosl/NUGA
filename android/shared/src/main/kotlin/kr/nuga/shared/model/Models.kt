@@ -135,6 +135,32 @@ data class ConfigOptions(
     val reelStart: String = ReelStart.ONE,
 )
 
+/** PC 가 정한 수업 녹음 설정 (PROTOCOL.md §3.3). API 키는 들어가지 않는다. */
+@Serializable
+data class SpeechConfig(
+    val provider: String = "gemini",
+    val model: String = "gemini-2.5-flash",
+)
+
+object RecordingMode {
+    /** 수업 시작 알림·위젯에서 1탭 */
+    const val TAP = "tap"
+    /** 아침 1탭으로 하루 대기, 시간표대로 자동 녹음 */
+    const val STANDBY = "standby"
+}
+
+@Serializable
+data class RecordingConfig(
+    val enabled: Boolean = false,
+    val approvedChecklist: Boolean = false,
+    val mode: String = RecordingMode.TAP,
+    val audioTTLHours: Int = 24,
+    val speech: SpeechConfig = SpeechConfig(),
+    val wifiOnly: Boolean = true,
+) {
+    val active: Boolean get() = enabled && approvedChecklist
+}
+
 @Serializable
 data class Config(
     val school: SchoolInfo? = null,
@@ -145,8 +171,11 @@ data class Config(
     val progress: List<ProgressEntry> = emptyList(),
     val roster: List<RosterEntry>? = null,
     val options: ConfigOptions = ConfigOptions(),
+    val recording: RecordingConfig? = null,
     val updatedAt: String = "",
 ) {
+    val recordingActive: Boolean get() = recording?.active == true
+
     /** Config as it may be forwarded to the watch: never carries names. */
     fun withoutRoster(): Config = if (roster == null) this else copy(roster = null)
 
@@ -173,6 +202,47 @@ data class Config(
     }
 }
 
+// ---------------------------------------------------------------- Transcript (3.6)
+
+/** 발언 한 구간. t0·t1 = 녹음 시작부터 지난 초. 화자는 "화자1" 라벨만 (학생과 연결하지 않음). */
+@Serializable
+data class TranscriptSegment(
+    val id: String,
+    val t0: Double,
+    val t1: Double,
+    val speaker: String,
+    val text: String,
+)
+
+@Serializable
+data class TeacherSpeaker(val auto: String? = null, val confirmed: String? = null)
+
+@Serializable
+data class SpeechEngine(val provider: String, val model: String)
+
+@Serializable
+data class Transcript(
+    val id: String,
+    @SerialName("class") val classLabel: String,
+    val period: Int,
+    val startedAt: String,
+    val endedAt: String,
+    val segments: List<TranscriptSegment>,
+    val teacherSpeaker: TeacherSpeaker = TeacherSpeaker(),
+    val engine: SpeechEngine,
+    val createdAt: String,
+)
+
+@Serializable
+data class TranscriptPart(val transcript: Transcript, val part: Int, val total: Int)
+
+@Serializable
+data class TranscriptAck(val ids: List<String>)
+
+/** PC → 폰: 음성 변환용 키. 빈 문자열이면 지운다. */
+@Serializable
+data class SecretsPayload(val gemini: String? = null, val openrouter: String? = null)
+
 // ---------------------------------------------------------------- Ping (3.4)
 
 @Serializable
@@ -185,6 +255,9 @@ object MessageType {
     const val TOMBSTONES = "tombstones"
     const val CONFIG = "config"
     const val PING = "ping"
+    const val TRANSCRIPT = "transcript"
+    const val TRANSCRIPT_ACK = "transcriptAck"
+    const val SECRETS = "secrets"
 }
 
 @Serializable
@@ -199,6 +272,9 @@ data class Message(
     fun tombstonesPayload(): List<Tombstone> = NugaJson.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(Tombstone.serializer()), payload)
     fun configPayload(): Config = NugaJson.decodeFromJsonElement(Config.serializer(), payload)
     fun pingPayload(): PingPayload = NugaJson.decodeFromJsonElement(PingPayload.serializer(), payload)
+    fun transcriptPayload(): TranscriptPart = NugaJson.decodeFromJsonElement(TranscriptPart.serializer(), payload)
+    fun transcriptAckPayload(): TranscriptAck = NugaJson.decodeFromJsonElement(TranscriptAck.serializer(), payload)
+    fun secretsPayload(): SecretsPayload = NugaJson.decodeFromJsonElement(SecretsPayload.serializer(), payload)
 
     companion object {
         fun records(deviceId: String, sentAt: String, records: List<Record>) = Message(
@@ -214,6 +290,11 @@ data class Message(
         fun config(deviceId: String, sentAt: String, config: Config) = Message(
             type = MessageType.CONFIG, deviceId = deviceId, sentAt = sentAt,
             payload = NugaJson.encodeToJsonElement(Config.serializer(), config),
+        )
+
+        fun transcript(deviceId: String, sentAt: String, part: TranscriptPart) = Message(
+            type = MessageType.TRANSCRIPT, deviceId = deviceId, sentAt = sentAt,
+            payload = NugaJson.encodeToJsonElement(TranscriptPart.serializer(), part),
         )
 
         fun ping(deviceId: String, sentAt: String, name: String) = Message(

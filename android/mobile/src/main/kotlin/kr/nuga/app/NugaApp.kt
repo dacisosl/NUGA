@@ -15,6 +15,8 @@ import kr.nuga.app.data.Prefs
 import kr.nuga.app.data.RecordRepository
 import kr.nuga.app.data.SecureStore
 import kr.nuga.app.data.db.NugaDatabase
+import kr.nuga.app.record.CleanupWorker
+import kr.nuga.app.record.RecordingStore
 import kr.nuga.app.sync.RelayApi
 import kr.nuga.app.sync.SyncRepository
 import kr.nuga.app.sync.SyncScheduler
@@ -31,7 +33,8 @@ class AppGraph(val app: Application) {
     val configRepo: ConfigRepository by lazy { ConfigRepository(app, db.configDao(), prefs, wearBridge, scope) }
     val recordRepo: RecordRepository by lazy { RecordRepository(app, db, prefs, configRepo, scope) }
     val relay: RelayApi by lazy { RelayApi() }
-    val syncRepo: SyncRepository by lazy { SyncRepository(app, db, prefs, secure, relay, configRepo, recordRepo) }
+    val recordings: RecordingStore by lazy { RecordingStore(app) }
+    val syncRepo: SyncRepository by lazy { SyncRepository(app, db, prefs, secure, relay, configRepo, recordRepo, recordings) }
 }
 
 class NugaApp : Application(), Configuration.Provider {
@@ -46,6 +49,7 @@ class NugaApp : Application(), Configuration.Provider {
         graph = AppGraph(this)
         createChannels()
         SyncScheduler.ensurePeriodic(this)
+        CleanupWorker.ensurePeriodic(this)
         graph.scope.launch {
             LessonAlarmScheduler.reschedule(this@NugaApp)
             WidgetUpdater.updateAll(this@NugaApp)
@@ -63,11 +67,18 @@ class NugaApp : Application(), Configuration.Provider {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_SYNC, getString(R.string.channel_sync), NotificationManager.IMPORTANCE_LOW),
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_RECORDING, "수업 녹음", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "녹음 중 표시와 스크립트 변환 상태"
+                setShowBadge(false)
+            },
+        )
     }
 
     companion object {
         const val CHANNEL_LESSON = "lesson"
         const val CHANNEL_SYNC = "sync"
+        const val CHANNEL_RECORDING = "recording"
     }
 }
 

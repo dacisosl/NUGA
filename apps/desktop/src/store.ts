@@ -15,7 +15,7 @@ export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
 /** 영역 = 독립 문서(명단·기록·초안·시간표). 동기화·AI·표시 옵션은 모든 영역이 공유한다. */
 export interface AreaMeta { id: string; name: string; createdAt: string }
 /** 공통 설정: 모든 영역이 같은 값을 쓴다 (동기화·AI·표시 옵션·보완 대기). 글자수·기준과 초안 프롬프트는 영역별. */
-export interface GlobalSettings { sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; supplementEnabled: boolean }
+export interface GlobalSettings { sync: Settings["sync"]; ai: Settings["ai"]; options: Settings["options"]; supplementEnabled: boolean; recording?: Settings["recording"] }
 let lastGlobal: GlobalSettings | null = null;
 export interface AreaStats { id: string; name: string; students: number; records: number; drafts: number; performances: number }
 export interface MultiBackup { format: "nuga-multi"; version: 1; exportedAt: string; global: GlobalSettings | null; currentArea: string; areas: { meta: AreaMeta; doc: NugaDoc }[] }
@@ -30,11 +30,11 @@ function normalizeDoc(doc: NugaDoc): NugaDoc {
 }
 function pickGlobal(doc: NugaDoc, _prev: GlobalSettings | null): GlobalSettings {
   const s = doc.settings;
-  return { sync: s.sync, ai: { ...s.ai, apiKey: "" }, options: s.options, supplementEnabled: s.supplementEnabled };
+  return { sync: s.sync, ai: { ...s.ai, apiKey: "" }, options: s.options, supplementEnabled: s.supplementEnabled, recording: s.recording };
 }
 function applyGlobal(doc: NugaDoc, g: GlobalSettings | null): NugaDoc {
   if (!g) return doc;
-  doc.settings = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, supplementEnabled: g.supplementEnabled ?? doc.settings.supplementEnabled };
+  doc.settings = { ...doc.settings, sync: g.sync, ai: g.ai, options: g.options, supplementEnabled: g.supplementEnabled ?? doc.settings.supplementEnabled, recording: g.recording ?? doc.settings.recording };
   return doc;
 }
 export function currentGlobal(): GlobalSettings | null { return lastGlobal; }

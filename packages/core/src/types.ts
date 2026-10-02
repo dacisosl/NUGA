@@ -10,7 +10,7 @@ export type LengthMode = "withSpaces" | "withoutSpaces" | "bytes";
 export type WriteItem = "setuk" | "elemSubject" | "behavior" | "autonomy" | "club" | "career";
 export type AiProvider = "anthropic" | "gemini" | "openrouter" | "local";
 export type RecordStatus = "pending" | "confirmed" | "skipped";
-export type RecordSource = "watch" | "phone" | "widget" | "pc";
+export type RecordSource = "watch" | "phone" | "widget" | "pc" | "suggestion" | "demo";
 export type DraftField = "세특" | "행특" | "창체";
 
 export interface Lesson { unit: string; lesson: number; title: string }
@@ -34,6 +34,50 @@ export interface NugaRecord {
 }
 
 export interface Tombstone { id: string; deletedAt: string }
+
+/* ---------------- 수업 녹음 스크립트 (v3 7.3, 11.6) ---------------- */
+
+/** 발언 한 구간. t0·t1 = 녹음 시작부터 지난 초. 화자는 "화자1"처럼 라벨만 (학생과 연결하지 않음) */
+export interface TranscriptSegment { id: string; t0: number; t1: number; speaker: string; text: string }
+
+/** 수업 1회 스크립트. 폰이 음성 API 로 만들어 PC 로 보낸다. 음성 파일은 보내지 않는다. */
+export interface Transcript {
+  id: string;
+  /** 반 (초등 담임형이면 반 이름) */
+  class: string;
+  period: number;
+  /** 녹음 시작·끝 (ISO, 기기 현지 시각) */
+  startedAt: string;
+  endedAt: string;
+  segments: TranscriptSegment[];
+  /** 발화량이 가장 많은 화자 = 교사 추정. confirmed 는 교사가 확인·변경한 값 */
+  teacherSpeaker: { auto: string | null; confirmed: string | null };
+  engine: { provider: string; model: string };
+  createdAt: string;
+}
+
+/** 메시지 하나가 256KB 를 넘지 않도록 스크립트를 나눠 보낸다 */
+export interface TranscriptPart { transcript: Transcript; part: number; total: number }
+
+/** 폰 녹음 설정 (PC 에서 정해 config 로 내려보냄) */
+export interface RecordingSettings {
+  enabled: boolean;
+  /** 사용 조건(학교 승인·고지·동의·외부 전송 검토)을 교사가 확인했는지 */
+  approvedChecklist: boolean;
+  /** tap = 수업 시작 알림에서 1탭, standby = 아침 1탭으로 하루 대기 후 시간표대로 자동 */
+  mode: "tap" | "standby";
+  audioTTLHours: number;
+  speech: { provider: "gemini" | "openrouter"; model: string };
+  /** Wi-Fi 에서만 변환 */
+  wifiOnly: boolean;
+  maxSuggestions: number;
+  alignWindowSec: [number, number];
+}
+
+export const DEFAULT_RECORDING: RecordingSettings = {
+  enabled: false, approvedChecklist: false, mode: "tap", audioTTLHours: 24,
+  speech: { provider: "gemini", model: "gemini-2.5-flash" }, wifiOnly: true, maxSuggestions: 10, alignWindowSec: [-60, 15],
+};
 
 /**
  * 성취기준 도달 정도 (PC 전용 내부 값, 0~100).
@@ -160,6 +204,8 @@ export interface Settings {
   /** 영역별 초안 지침. 비우면 기본 지침(교과 세특) */
   draftPrompt: string;
   options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean };
+  /** 수업 녹음 (공통 설정) */
+  recording?: RecordingSettings;
   sync: SyncSettings | null;
   ai: AiSettings;
   onboarded: boolean;
@@ -186,6 +232,8 @@ export interface ConfigMessage {
   progress: ProgressRow[];
   roster: { class: string; no: number; name: string }[] | null;
   options: { autoLaunchWatch: boolean; reelStart: "one" | "last" };
+  /** 녹음 설정 (없으면 꺼짐). 키는 들어가지 않는다 */
+  recording?: Omit<RecordingSettings, "maxSuggestions" | "alignWindowSec"> | null;
   updatedAt: string;
 }
 
@@ -193,7 +241,13 @@ export type SyncMessage =
   | { v: 1; type: "records"; deviceId: string; sentAt: string; payload: NugaRecord[] }
   | { v: 1; type: "tombstones"; deviceId: string; sentAt: string; payload: Tombstone[] }
   | { v: 1; type: "config"; deviceId: string; sentAt: string; payload: ConfigMessage }
-  | { v: 1; type: "ping"; deviceId: string; sentAt: string; payload: { name: string } };
+  | { v: 1; type: "ping"; deviceId: string; sentAt: string; payload: { name: string } }
+  /** 폰 → PC: 수업 스크립트 (나눠 보낼 수 있음) */
+  | { v: 1; type: "transcript"; deviceId: string; sentAt: string; payload: TranscriptPart }
+  /** PC → 폰: 스크립트를 받았음. 폰은 사본을 지운다 */
+  | { v: 1; type: "transcriptAck"; deviceId: string; sentAt: string; payload: { ids: string[] } }
+  /** PC → 폰: 음성 변환용 API 키 (교사가 녹음을 켜고 [폰으로 보내기]를 눌렀을 때만). 빈 값이면 폰에서 지움 */
+  | { v: 1; type: "secrets"; deviceId: string; sentAt: string; payload: { gemini?: string; openrouter?: string } };
 
 export interface Envelope { from: "phone" | "pc"; iv: string; ct: string; ts: string }
 export interface RelayItem extends Envelope { id: string }

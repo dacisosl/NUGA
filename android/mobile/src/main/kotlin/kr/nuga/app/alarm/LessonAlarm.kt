@@ -21,7 +21,10 @@ import kr.nuga.app.graph
 import kr.nuga.app.sync.SyncScheduler
 import kr.nuga.app.ui.MainActivity
 import kr.nuga.app.widget.WidgetUpdater
+import kr.nuga.app.record.RecordStartActivity
+import kr.nuga.app.record.RecordingService
 import kr.nuga.shared.model.Config
+import kr.nuga.shared.model.RecordingMode
 import kr.nuga.shared.timetable.TimetableResolver
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -33,6 +36,8 @@ object LessonAlarmScheduler {
     const val EXTRA_HEADLINE = "headline"
     const val EXTRA_SUBLINE = "subline"
     const val EXTRA_CLASS = "classLabel"
+    const val EXTRA_PERIOD = "period"
+    const val EXTRA_END_MS = "endMs"
 
     suspend fun reschedule(context: Context) {
         val g = context.graph
@@ -40,8 +45,9 @@ object LessonAlarmScheduler {
         val pending = pendingIntent(context, null, null, null, PendingIntent.FLAG_NO_CREATE)
         if (pending != null) am.cancel(pending)
         val settings = g.prefs.current()
-        if (!settings.autoOpenNotify) return
         val config = g.configRepo.current() ?: return
+        // 수업 녹음(1탭 방식)을 켰으면 "자동 열기"가 꺼져 있어도 수업 시작 알림을 띄운다
+        if (!settings.autoOpenNotify && !(config.recordingActive && config.recording?.mode == RecordingMode.TAP)) return
         schedule(context, config)
     }
 
@@ -49,7 +55,8 @@ object LessonAlarmScheduler {
         val am = context.getSystemService(AlarmManager::class.java)
         val next = TimetableResolver.upcomingStarts(config, LocalDateTime.now(), limit = 1).firstOrNull() ?: return
         val at = next.startDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val pi = pendingIntent(context, next.headline, next.subline, next.classLabel, PendingIntent.FLAG_UPDATE_CURRENT)!!
+        val endMs = next.endDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val pi = pendingIntent(context, next.headline, next.subline, next.classLabel, PendingIntent.FLAG_UPDATE_CURRENT, next.period.no, endMs)!!
         val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
         if (canExact) {
             am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
@@ -59,9 +66,11 @@ object LessonAlarmScheduler {
         Log.i(TAG, "next lesson alarm ${next.headline} at ${next.startDateTime} exact=$canExact")
     }
 
-    private fun pendingIntent(context: Context, headline: String?, subline: String?, classLabel: String?, flags: Int): PendingIntent? {
+    private fun pendingIntent(context: Context, headline: String?, subline: String?, classLabel: String?, flags: Int, period: Int = -1, endMs: Long = 0L): PendingIntent? {
         val intent = Intent(context, LessonAlarmReceiver::class.java).apply {
             action = "kr.nuga.app.LESSON_START"
+            putExtra(EXTRA_PERIOD, period)
+            putExtra(EXTRA_END_MS, endMs)
             headline?.let { putExtra(EXTRA_HEADLINE, it) }
             subline?.let { putExtra(EXTRA_SUBLINE, it) }
             classLabel?.let { putExtra(EXTRA_CLASS, it) }
@@ -75,11 +84,13 @@ class LessonAlarmReceiver : BroadcastReceiver() {
         val headline = intent.getStringExtra(LessonAlarmScheduler.EXTRA_HEADLINE) ?: return
         val subline = intent.getStringExtra(LessonAlarmScheduler.EXTRA_SUBLINE)
         val classLabel = intent.getStringExtra(LessonAlarmScheduler.EXTRA_CLASS)
+        val period = intent.getIntExtra(LessonAlarmScheduler.EXTRA_PERIOD, -1)
+        val endMs = intent.getLongExtra(LessonAlarmScheduler.EXTRA_END_MS, 0L)
         val result = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val config = context.graph.configRepo.current()
-                LessonNotifier.notifyLessonStart(context, headline, subline, classLabel, config ?: Config.EMPTY)
+                LessonNotifier.notifyLessonStart(context, headline, subline, classLabel, config ?: Config.EMPTY, period, endMs)
                 WidgetUpdater.updateAll(context)
                 LessonAlarmScheduler.reschedule(context)
             } finally {
@@ -112,7 +123,7 @@ object LessonNotifier {
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     /** "2-3 · 3교시 시작" with one action per category; each deep-links into the number sheet. */
-    fun notifyLessonStart(context: Context, headline: String, subline: String?, classLabel: String?, config: Config) {
+    fun notifyLessonStart(context: Context, headline: String, subline: String?, classLabel: String?, config: Config, period: Int = -1, endMs: Long = 0L) {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, NugaApp.CHANNEL_LESSON)
             .setSmallIcon(R.drawable.ic_stat_nuga)
@@ -124,7 +135,16 @@ object LessonNotifier {
             .setTimeoutAfter(55 * 60 * 1000L)
             .setContentIntent(deepLink(context, null, classLabel, 0))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-        config.categories.take(4).forEachIndexed { index, cat ->
+        // 알림 버튼은 3개까지 보인다: 녹음을 켰으면 [● 녹음 시작] + 카테고리 2개
+        val recordTap = config.recordingActive && config.recording?.mode == RecordingMode.TAP && RecordingService.state.value.recording == null
+        if (recordTap) {
+            val start = PendingIntent.getActivity(
+                context, 9100, RecordStartActivity.intent(context, RecordingService.ACTION_START, classLabel, period, endMs),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "● 녹음 시작", start)
+        }
+        config.categories.take(if (recordTap) 2 else 4).forEachIndexed { index, cat ->
             builder.addAction(0, cat.label, deepLink(context, cat.key, classLabel, index + 1))
         }
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())

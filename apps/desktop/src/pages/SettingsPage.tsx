@@ -16,10 +16,11 @@ import { modelOf, testProvider } from "../lib/providers";
 import { hasKey, keyStoreLabel, onSecretsChange, setKey, setWebRemember, webRemember } from "../lib/secrets";
 import { isTauri } from "../lib/platform";
 import { syncEngine } from "../lib/syncEngine";
+import { RecordingSection } from "./RecordingSettings";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
 const COMMON_TABS: { key: string; label: string }[] = [
-  { key: "display", label: "화면" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" },
+  { key: "display", label: "화면" }, { key: "sync", label: "동기화" }, { key: "backup", label: "백업" }, { key: "ai", label: "AI" }, { key: "recording", label: "녹음" },
   { key: "data", label: "데이터" }, { key: "privacy", label: "개인정보 처리방침" },
 ];
 /** 개별 설정: 지금 열린 영역에만 적용된다 */
@@ -61,6 +62,7 @@ export function SettingsPage() {
             {tab === "sync" && <SyncSection />}
             {tab === "backup" && <BackupSection />}
             {tab === "ai" && <AiSection />}
+            {tab === "recording" && <RecordingSection />}
             {tab === "data" && <DataSection />}
             {tab === "privacy" && <PrivacySection />}
             {tab === "prompt" && <PromptSection />}

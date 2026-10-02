@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kr.nuga.app.ui.home.HomeScreen
 import kr.nuga.app.ui.records.RecordsScreen
+import kr.nuga.app.ui.recordings.RecordingsScreen
 import kr.nuga.app.ui.settings.SettingsScreen
 import kr.nuga.app.ui.sheet.NumberSheet
 import kr.nuga.app.ui.theme.NugaColors
@@ -40,6 +42,7 @@ import kr.nuga.shared.model.Config
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("홈", Icons.Filled.Home),
     Records("기록", Icons.Filled.List),
+    Recordings("녹음", Icons.Filled.Mic),
     Settings("설정", Icons.Filled.Settings),
 }
 
@@ -52,6 +55,11 @@ fun NugaRoot(vm: MainViewModel) {
     val config by vm.config.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val sheet by vm.sheet.collectAsStateWithLifecycle()
+    val tabRequest by vm.tabRequest.collectAsStateWithLifecycle()
+    LaunchedEffect(tabRequest) {
+        if (tabRequest == "recordings") tab = Tab.Recordings.ordinal
+        if (tabRequest != null) vm.consumeTabRequest()
+    }
 
     LaunchedEffect(Unit) {
         vm.events.collect { event ->
@@ -105,6 +113,7 @@ fun NugaRoot(vm: MainViewModel) {
         when (Tab.entries[tab]) {
             Tab.Home -> HomeScreen(vm = vm, modifier = modifier)
             Tab.Records -> RecordsScreen(vm = vm, modifier = modifier)
+            Tab.Recordings -> RecordingsScreen(vm = vm, modifier = modifier)
             Tab.Settings -> SettingsScreen(vm = vm, modifier = modifier)
         }
     }

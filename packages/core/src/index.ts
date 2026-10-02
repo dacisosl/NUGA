@@ -13,3 +13,4 @@ export * from "./achievement";
 export * from "./presets";
 export * from "./migrate";
 export * from "./llm";
+export * from "./transcript";

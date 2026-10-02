@@ -23,6 +23,11 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent)
     }
 
+    companion object {
+        /** 알림에서 특정 탭으로 열기: "recordings" */
+        const val EXTRA_TAB = "tab"
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -31,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
     /** nuga://record?category=N&class=2-3&src=widget|notify */
     private fun handleDeepLink(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_TAB)?.let { vm.requestTab(it); intent.removeExtra(EXTRA_TAB) }
         val data = intent?.data ?: return
         if (data.scheme != "nuga" || data.host != "record") return
         val category = data.getQueryParameter("category")?.toIntOrNull()

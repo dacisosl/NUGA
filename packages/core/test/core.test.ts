@@ -298,3 +298,41 @@ describe("llm provider layer", () => {
     expect(httpError(401, "{}", "gemini").kind).toBe("auth");
   });
 });
+
+describe("transcript (수업 스크립트)", () => {
+  const meta = { id: "t1", class: "2-3", period: 3, startedAt: "2026-05-08T10:00:00", endedAt: "2026-05-08T10:50:00", provider: "gemini", model: "m" };
+  const raw = JSON.stringify({ segments: [
+    { start: "00:05", end: "00:40", speaker: "Speaker 1", text: "오늘은 화학 평형을 배웁니다. 온도가 바뀌면 평형이 어떻게 될지 생각해 봅시다. 교과서 52쪽을 펴세요." },
+    { start: "11:52", end: "12:03", speaker: "화자 3", text: "온도를 올리면 흡열 방향으로 가니까 평형이 오른쪽으로 이동하나요?" },
+    { start: "12:05", end: "12:20", speaker: "1", text: "좋은 질문이에요. 르샤틀리에 원리로 설명해 볼까요. 이건 아주 중요한 부분이니 잘 들어 두세요." },
+    { start: "1:02:00", end: "1:02:01", speaker: "S2", text: "" },
+  ] });
+  it("parses clocks, speakers, teacher guess", async () => {
+    const { parseTranscription, parseClock } = await import("../src");
+    expect(parseClock("1:02:03")).toBe(3723); expect(parseClock("12:03")).toBe(723); expect(parseClock("bad")).toBeNull();
+    const tr = parseTranscription(raw, meta);
+    expect(tr.segments.map((s) => s.speaker)).toEqual(["화자1", "화자3", "화자1"]);
+    expect(tr.segments[1].t0).toBe(712); expect(tr.segments[2].id).toBe("s3");
+    expect(tr.teacherSpeaker.auto).toBe("화자1");
+  });
+  it("splits and merges large transcripts", async () => {
+    const { parseTranscription, splitTranscript, mergeTranscriptParts } = await import("../src");
+    const tr = parseTranscription(raw, meta);
+    const big = { ...tr, segments: Array.from({ length: 600 }, (_, i) => ({ id: `s${i + 1}`, t0: i * 5, t1: i * 5 + 4, speaker: `화자${(i % 4) + 1}`, text: "가나다라마바사아자차카타파하 ".repeat(8) })) };
+    const parts = splitTranscript(big, 60_000);
+    expect(parts.length).toBeGreaterThan(1);
+    for (const p of parts) expect(new TextEncoder().encode(JSON.stringify(p.transcript)).length).toBeLessThanOrEqual(60_000);
+    expect(mergeTranscriptParts(parts.slice(1))).toBeNull();
+    expect(mergeTranscriptParts([...parts].reverse())!.segments.length).toBe(600);
+  });
+  it("aligns a question record with the student's question, not the teacher", async () => {
+    const { parseTranscription, alignCandidates, scrubTranscriptNames } = await import("../src");
+    const tr = parseTranscription(raw, meta);
+    const c = alignCandidates({ class: "2-3", time: "2026-05-08T10:12:10" }, [tr], "질문");
+    expect(c[0].segment.speaker).toBe("화자3");
+    expect(c.every((x) => x.segment.speaker !== "화자1")).toBe(true);
+    expect(alignCandidates({ class: "2-5", time: "2026-05-08T10:12:10" }, [tr], "질문")).toEqual([]);
+    const named = { ...tr, segments: [{ ...tr.segments[1], text: "서연아 이거 맞아? 이서연 대답해 봐" }] };
+    expect(scrubTranscriptNames(named, ["이서연"]).segments[0].text).toBe("○○○아 이거 맞아? ○○○ 대답해 봐");
+  });
+});

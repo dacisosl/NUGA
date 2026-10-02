@@ -32,6 +32,9 @@ export function buildConfigMessage(settings: Settings, students: Student[]): Con
     progress: settings.progress,
     roster: settings.options.showPhoneNames && settings.sync?.shareRoster ? students.map((s) => ({ class: s.class, no: s.no, name: s.name })) : null,
     options: { autoLaunchWatch: settings.options.autoLaunchWatch, reelStart: settings.options.reelStart },
+    recording: settings.recording?.enabled && settings.recording.approvedChecklist
+      ? { enabled: true, approvedChecklist: true, mode: settings.recording.mode, audioTTLHours: settings.recording.audioTTLHours, speech: settings.recording.speech, wifiOnly: settings.recording.wifiOnly }
+      : null,
     updatedAt: nowIso(),
   };
 }

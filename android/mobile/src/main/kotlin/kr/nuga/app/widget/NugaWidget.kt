@@ -16,6 +16,9 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
+import androidx.glance.appwidget.action.actionStartService
+import kr.nuga.app.record.RecordStartActivity
+import kr.nuga.app.record.RecordingService
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
@@ -65,6 +68,8 @@ class NugaWidget : GlanceAppWidget() {
         val inClass: Boolean,
         val todayCount: Int,
         val categories: List<Pair<Int, String>>,
+        /** null = 녹음 꺼짐, "idle" / "recording" / "paused" / "standby" */
+        val rec: String? = null,
     )
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -81,17 +86,24 @@ class NugaWidget : GlanceAppWidget() {
         if (config == null) {
             return State("설정 없음", "PC 연결 또는 샘플 설정", false, todayCount, categories)
         }
+        val rs = RecordingService.state.value
+        val rec = if (!config.recordingActive) null else when {
+            rs.recording != null && rs.paused -> "paused"
+            rs.recording != null -> "recording"
+            rs.standby -> "standby"
+            else -> "idle"
+        }
         val now = LocalDateTime.now()
         val lesson = TimetableResolver.resolve(config, now)
         val current = lesson.current
         val next = lesson.next
         return when {
-            current != null -> State(current.headline, current.subline ?: "${current.period.start}–${current.period.end}", true, todayCount, categories)
+            current != null -> State(current.headline, current.subline ?: "${current.period.start}–${current.period.end}", true, todayCount, categories, rec)
             next != null -> {
                 val dayPrefix = if (next.date == now.toLocalDate()) "" else "${NugaTime.koreanDate(next.date)} "
-                State("예정 · ${next.headline}", "$dayPrefix${next.period.start} 시작" + (next.subline?.let { " · $it" } ?: ""), false, todayCount, categories)
+                State("예정 · ${next.headline}", "$dayPrefix${next.period.start} 시작" + (next.subline?.let { " · $it" } ?: ""), false, todayCount, categories, rec)
             }
-            else -> State("수업 없음", "시간표 없음", false, todayCount, categories)
+            else -> State("수업 없음", "시간표 없음", false, todayCount, categories, rec)
         }
     }
 }
@@ -121,6 +133,10 @@ private fun WidgetContent(state: NugaWidget.State) {
                     maxLines = 1,
                 )
             }
+            if (state.rec != null) {
+                RecordButton(state.rec)
+                Spacer(modifier = GlanceModifier.width(10.dp))
+            }
             Column(horizontalAlignment = Alignment.End) {
                 Text(text = "${state.todayCount}", style = TextStyle(color = text, fontSize = 20.sp, fontWeight = FontWeight.Bold))
                 Text(text = "오늘", style = TextStyle(color = text2, fontSize = 11.sp))
@@ -133,6 +149,25 @@ private fun WidgetContent(state: NugaWidget.State) {
                 CategoryButton(key = key, label = label, modifier = GlanceModifier.defaultWeight().fillMaxSize())
             }
         }
+    }
+}
+
+/** 녹음 상태 표시 겸 버튼: 꺼짐이면 [● 녹음](1탭 시작), 녹음 중이면 [■ 중단] */
+@Composable
+private fun RecordButton(rec: String) {
+    val context = LocalContext.current
+    val red = ColorProvider(androidx.compose.ui.graphics.Color(0xFFC62828))
+    val (label, action) = when (rec) {
+        "recording" -> "● 녹음 중" to actionStartService(Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_STOP))
+        "paused" -> "일시정지" to actionStartService(Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_RESUME))
+        "standby" -> "녹음 대기" to actionStartActivity(RecordStartActivity.intent(context))
+        else -> "● 녹음" to actionStartActivity(RecordStartActivity.intent(context))
+    }
+    Box(
+        modifier = GlanceModifier.background(ImageProvider(R.drawable.widget_cat4_bg)).padding(horizontal = 10.dp, vertical = 6.dp).clickable(action),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = label, style = TextStyle(color = if (rec == "recording") red else ColorProvider(NugaColors.Text), fontSize = 13.sp, fontWeight = FontWeight.Bold), maxLines = 1)
     }
 }
 

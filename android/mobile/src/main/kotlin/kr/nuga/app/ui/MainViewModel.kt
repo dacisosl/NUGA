@@ -21,6 +21,11 @@ import kr.nuga.app.data.Prefs
 import kr.nuga.app.data.SecureStore
 import kr.nuga.app.data.db.RecordEntity
 import kr.nuga.app.graph
+import kr.nuga.app.record.RecorderState
+import kr.nuga.app.record.RecordingItem
+import kr.nuga.app.record.RecordingService
+import kr.nuga.app.record.RecordingStatus
+import kr.nuga.app.record.TranscribeWorker
 import kr.nuga.app.sync.SyncRepository
 import kr.nuga.shared.model.Config
 import kr.nuga.shared.model.RecordSource
@@ -85,6 +90,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 8)
     val events: SharedFlow<UiEvent> get() = _events
+
+    // ------------------------------------------------------------ 탭 이동 요청 (알림에서)
+
+    private val _tabRequest = MutableStateFlow<String?>(null)
+    val tabRequest: StateFlow<String?> get() = _tabRequest
+    fun requestTab(tab: String) { _tabRequest.value = tab }
+    fun consumeTabRequest() { _tabRequest.value = null }
+
+    // ------------------------------------------------------------ 수업 녹음
+
+    val recordings: StateFlow<List<RecordingItem>> = g.recordings.items
+    val recorder: StateFlow<RecorderState> = RecordingService.state
+    val speechKeys: StateFlow<SecureStore.SpeechKeys> = g.secure.speechKeys
+
+    fun startRecordingNow() = RecordingService.start(getApplication(), RecordingService.ACTION_START)
+    fun startStandby() = RecordingService.start(getApplication(), RecordingService.ACTION_STANDBY_ON)
+    fun recorderCommand(action: String) = RecordingService.command(getApplication(), action)
+    fun deleteRecording(id: String) = viewModelScope.launch { g.recordings.delete(id) }
+    fun retryTranscribe(id: String) = viewModelScope.launch {
+        g.recordings.update(id) { it.copy(status = RecordingStatus.RECORDED, attempts = 0, error = "") }
+        TranscribeWorker.enqueue(getApplication(), wifiOnly = false)
+        _events.tryEmit(UiEvent.Toast("변환을 다시 시도합니다"))
+    }
+    fun audioFile(item: RecordingItem): java.io.File = g.recordings.audioFile(item)
 
     // ------------------------------------------------------------ number sheet
 

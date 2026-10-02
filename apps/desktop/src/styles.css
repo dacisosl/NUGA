@@ -457,3 +457,15 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .level-card.big b { font-size: 18px; }
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .provider-grid .level-card { min-width: 0; }
+
+.note { background: #FFF8E6; border: 1px solid #F1DFA8; color: #5C4A12; border-radius: 8px; padding: 8px 12px; }
+.check-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line2); border-radius: 10px; cursor: pointer; }
+.check-row input { margin-top: 3px; width: 16px; height: 16px; flex: none; }
+/* 스크립트 */
+.seg-list { max-height: 62vh; overflow: auto; border: 1px solid var(--line2); border-radius: 10px; background: var(--surface); }
+.seg-line { display: grid; grid-template-columns: 70px 112px 1fr auto; gap: 10px; align-items: baseline; padding: 7px 12px; border-bottom: 1px solid var(--line2); font-size: 14px; }
+.seg-line.teacher { color: var(--text2); background: #FAFAF8; }
+.seg-line.hl { background: #FFF07A55; }
+.seg-time { color: var(--text3); font-size: 12px; }
+.seg-spk { font-weight: 700; font-size: 13px; white-space: nowrap; }
+.seg-text { line-height: 1.55; }
