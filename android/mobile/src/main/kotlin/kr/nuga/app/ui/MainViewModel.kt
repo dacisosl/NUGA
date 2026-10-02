@@ -183,6 +183,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 링크(nuga://pair?…)로 들어온 페어링은 바로 적용하지 않고 교사에게 확인받는다 */
+    private val _pendingPair = MutableStateFlow<kr.nuga.shared.sync.Pairing?>(null)
+    val pendingPair: StateFlow<kr.nuga.shared.sync.Pairing?> get() = _pendingPair
+    fun requestPair(uri: String) { _pendingPair.value = PairingUri.parse(uri) ?: run { _events.tryEmit(UiEvent.Toast("연결 링크 형식 오류")); null } }
+    fun confirmPair(ok: Boolean) {
+        val p = _pendingPair.value ?: return
+        _pendingPair.value = null
+        if (ok) pair(PairingUri.build(p.key, p.relayUrl, p.pcName))
+    }
+
     fun pair(scanned: String) {
         val pairing = PairingUri.parse(scanned)
         if (pairing == null) {

@@ -118,6 +118,17 @@ fun NugaRoot(vm: MainViewModel) {
         }
     }
 
+    val pendingPair by vm.pendingPair.collectAsStateWithLifecycle()
+    pendingPair?.let { p ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { vm.confirmPair(false) },
+            title = { Text("이 PC와 연결할까요?") },
+            text = { Text("PC 이름: ${p.pcName.ifBlank { "(없음)" }}\n릴레이: ${p.relayUrl}\n\n본인 PC의 연결 링크가 맞는지 확인하세요. 연결하면 기록이 이 PC로 전송됩니다.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { vm.confirmPair(true) }) { Text("연결") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { vm.confirmPair(false) }) { Text("취소") } },
+        )
+    }
+
     sheet?.let { s ->
         NumberSheet(
             state = s,

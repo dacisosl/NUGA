@@ -57,7 +57,16 @@ export function SupplementModal() {
 
   if (!rec) return null;
   const close = () => openSupplement([]);
-  const advance = () => { if (idx + 1 < ids.length) setIdx(idx + 1); else { close(); toast({ text: `보완 완료 · ${ids.length}건` }); } };
+  // 이 기록들과 같은 반·같은 날 수업의 처리하지 않은 추천 카드 (1차 기록을 다 처리하면 추천함으로 이어진다)
+  const dayKey = (iso: string) => iso.slice(0, 10);
+  const related = tIndex.filter((m) => doc.records.some((r) => ids.includes(r.id) && r.class === m.class && dayKey(r.time) === dayKey(m.startedAt)) && (m.suggestNew ?? 0) > 0);
+  const suggestCount = related.reduce((a, m) => a + (m.suggestNew ?? 0), 0);
+  const advance = () => {
+    if (idx + 1 < ids.length) { setIdx(idx + 1); return; }
+    close();
+    if (suggestCount > 0) toast({ text: `보완 완료 · ${ids.length}건 — 같은 수업의 추천 ${suggestCount}개가 남아 있습니다`, kind: "notice", ttl: 12000, action: { label: "추천 보기", onClick: () => useStore.getState().setPage("today") } });
+    else toast({ text: `보완 완료 · ${ids.length}건` });
+  };
   const save = () => { updateRecord(rec.id, { note: note.trim(), category: cat, status: "confirmed", lesson: rec.lesson }); advance(); };
   const skip = () => { updateRecord(rec.id, { status: "skipped", category: cat, lesson: rec.lesson }); advance(); };
   const onKey = (e: React.KeyboardEvent) => {
@@ -69,7 +78,7 @@ export function SupplementModal() {
   return (
     <Modal onClose={close} header={
       <div className="supp-head">
-        <span className="chip outline">{idx + 1} / {ids.length}</span>
+        <span className="chip outline">기록 {idx + 1}/{ids.length}{suggestCount ? ` · 추천 ${suggestCount}` : ""}</span>
         <span>{rec.class} · {rec.no}번 · {studentName(doc, rec.class, rec.no)}</span>
         <Chip cat={cat} label={catLabel(doc, cat)} />
         <span className="muted">{lessonLabel(rec.lesson) || "진도 미등록"}</span>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  릴레이는 학교 안 PC(같은 Wi-Fi, http://192.168.x.x:8787)에서도 돌릴 수 있어서 평문 HTTP 접속을 허용한다.
+  릴레이로 오가는 내용은 모두 동기화 키로 종단간 암호화(AES-256-GCM)된 암호문이라 전송 구간이 평문이어도 내용은 보호된다.
+  음성 API(Gemini) 등 외부 서비스는 HTTPS 로만 접속한다.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">openrouter.ai</domain>
+    </domain-config>
+</network-security-config>

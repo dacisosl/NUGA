@@ -13,3 +13,4 @@ apps/desktop/src-tauri/gen/schemas/
 android/**/.gradle/
 android/.kotlin/
 *.tmp
+tools/out/

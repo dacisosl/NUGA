@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private fun handleDeepLink(intent: Intent?) {
         intent?.getStringExtra(EXTRA_TAB)?.let { vm.requestTab(it); intent.removeExtra(EXTRA_TAB) }
         val data = intent?.data ?: return
+        if (data.scheme == "nuga" && data.host == "pair") { vm.requestPair(data.toString()); intent.data = null; return }
         if (data.scheme != "nuga" || data.host != "record") return
         val category = data.getQueryParameter("category")?.toIntOrNull()
         val classLabel = data.getQueryParameter("class")?.takeIf { it.isNotBlank() }
