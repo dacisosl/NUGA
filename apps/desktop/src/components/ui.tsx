@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from "react";
-import type { Category, Level, ReviewResult } from "@nuga/core";
-import { RESULT_LABEL } from "@nuga/core";
-import { useStore } from "../store";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type { Category, LengthMode, ReviewResult, Student } from "@nuga/core";
+import { RESULT_LABEL, gradeStep, lengthWindow } from "@nuga/core";
+import { achievementOf, useStore } from "../store";
 
 export function Chip({ cat, label, className = "", onClick, selected }: { cat?: Category | "perf"; label: React.ReactNode; className?: string; onClick?: () => void; selected?: boolean }) {
   const c = cat === "perf" ? "perf" : cat ? `c${cat}` : "";
@@ -14,45 +15,98 @@ export function CatChip({ cat }: { cat: Category }) {
   return <Chip cat={cat} label={label} />;
 }
 
-const NEXT_LEVEL: Record<Level, Level> = { B: "C", C: "A", A: "B" };
-/** 수준 배지. student 를 주면 클릭할 때마다 B → C → A 순으로 바뀐다. */
-export function LevelBadge({ level, student }: { level: Level; student?: { class: string; no: number } }) {
-  const upsert = useStore((s) => s.upsertStudent);
+/** 도달 정도 5단계 바탕색 (낮음 → 높음) */
+export const ACH_COLORS = ["#F1F4FD", "#D3DCF7", "#A7B8EE", "#6F8BE0", "#2448C9"];
+const CONF_LABEL: Record<string, string> = { ok: "근거 충분", low: "근거 부족 · 참고용", none: "추정 불가" };
+
+type TagStudent = Pick<Student, "class" | "no" | "name" | "achievement" | "level">;
+
+/**
+ * 도달 정도 조정: 0~100 슬라이더, 자동값 눈금, [자동값으로 되돌리기].
+ * 생기부·내보내기에는 나오지 않는 내부 값이며 초안의 표현 방향만 바꾼다.
+ */
+export function AchievementControl({ student, compact }: { student: TagStudent; compact?: boolean }) {
   const doc = useStore((s) => s.doc);
-  if (!student) return <span className={`lvl ${level}`}>{level}</span>;
-  const onClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); e.preventDefault();
-    const cur = doc.students.find((x) => x.class === student.class && x.no === student.no);
-    if (cur) upsert({ ...cur, level: NEXT_LEVEL[cur.level] });
-  };
-  return <span role="button" tabIndex={0} className={`lvl ${level} clickable`} onClick={onClick} onDoubleClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(e as unknown as React.MouseEvent); }} title="클릭: 수준 변경 (B → C → A)">{level}</span>;
+  const setAchievement = useStore((s) => s.setAchievement);
+  const ach = achievementOf(doc, student);
+  const [v, setV] = useState<number | null>(ach.value);
+  useEffect(() => { setV(ach.value); }, [ach.value]);
+  const commit = () => { if (v !== null && v !== ach.value) setAchievement(student.class, student.no, v); };
+  const step = gradeStep(v);
+  const n = doc.records.filter((r) => r.class === student.class && r.no === student.no && r.status !== "skipped").length;
+  return (
+    <div className={`ach-ctl ${compact ? "compact" : ""}`}>
+      <div className="flex" style={{ gap: 8, alignItems: "baseline" }}>
+        <b className="ach-num" style={{ color: step >= 0 ? ACH_COLORS[Math.max(3, step)] : "var(--muted)" }}>{v ?? "—"}</b>
+        <span className="muted small">{ach.edited ? "교사 조정값" : "자동값"} · {ach.edited ? `자동 ${ach.auto ?? "—"}` : CONF_LABEL[ach.confidence]} · 기록 {n}건</span>
+      </div>
+      <div className="ach-track">
+        <input type="range" min={0} max={100} step={1} value={v ?? 50} aria-label="도달 정도"
+          className={v === null ? "unset" : ""}
+          onChange={(e) => setV(Number(e.target.value))}
+          onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
+        {ach.auto !== null && <i className="ach-auto" style={{ left: `${ach.auto}%` }} title={`자동값 ${ach.auto}`} />}
+        <div className="ach-scale">{ACH_COLORS.map((c) => <span key={c} style={{ background: c }} />)}</div>
+      </div>
+      <div className="flex" style={{ gap: 6, marginTop: 6 }}>
+        {ach.edited && <button className="btn sm" onClick={() => setAchievement(student.class, student.no, null)}>자동값으로 되돌리기</button>}
+        {!compact && <span className="muted small">생기부·내보내기에는 나오지 않는 내부 값입니다. 초안의 표현 방향(서술어 강도)만 바꿉니다.</span>}
+      </div>
+    </div>
+  );
+}
+
+function AchievementPopover({ student, anchor, onClose }: { student: TagStudent; anchor: DOMRect; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("mousedown", down, true); window.addEventListener("keydown", key, true);
+    return () => { window.removeEventListener("mousedown", down, true); window.removeEventListener("keydown", key, true); };
+  }, [onClose]);
+  const w = 300;
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, anchor.right - w / 2));
+  const below = anchor.bottom + 8 + 170 < window.innerHeight;
+  const style: React.CSSProperties = { left, width: w, ...(below ? { top: anchor.bottom + 8 } : { bottom: window.innerHeight - anchor.top + 8 }) };
+  return createPortal(
+    <div ref={ref} className="ach-pop" style={style} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} role="dialog" aria-label="도달 정도 조정">
+      <div className="flex" style={{ marginBottom: 4 }}><b>{student.name || `${student.no}번`}</b><span className="muted small">도달 정도</span><span className="grow" /><button className="x" onClick={onClose} aria-label="닫기">×</button></div>
+      <AchievementControl student={student} compact />
+    </div>,
+    document.body,
+  );
 }
 
 /**
- * 학생 이름표: 바탕색이 수준을 나타낸다 (A 검정 · B 흰색 · C 회색).
- * 오른쪽 위 작은 배지에 A·B·C 를 표시하고, 배지를 누르면 B → C → A 순으로 바뀐다.
+ * 학생 이름표: 바탕색이 도달 정도(파랑 5단계)를 나타낸다. 값이 없으면 흰 바탕에 회색 빗금.
+ * 오른쪽 위 배지에 숫자를 표시하고, 누르면 조정 창이 열린다. 교사가 조정한 값에는 연필, 근거가 부족한 자동값은 점선 테두리.
  */
 export function StudentTag({ student, size = "md", onNameClick, title }: {
-  student: { class: string; no: number; name: string; level: Level };
+  student: TagStudent;
   size?: "sm" | "md" | "lg"; onNameClick?: () => void; title?: string;
 }) {
-  const upsert = useStore((s) => s.upsertStudent);
   const doc = useStore((s) => s.doc);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const closedAt = useRef(0);
   const showBadge = doc.settings.options.showLevelBadge !== false;
-  const cycle = (e: React.SyntheticEvent) => {
+  const ach = achievementOf(doc, student);
+  const step = gradeStep(ach.value);
+  const open = (e: React.SyntheticEvent) => {
     e.stopPropagation(); e.preventDefault();
-    const cur = doc.students.find((x) => x.class === student.class && x.no === student.no);
-    if (cur) upsert({ ...cur, level: NEXT_LEVEL[cur.level] });
+    if (Date.now() - closedAt.current < 300) return; // 바깥 클릭으로 막 닫힌 경우 다시 열지 않음
+    setAnchor(anchor ? null : (e.currentTarget as HTMLElement).getBoundingClientRect());
   };
   const name = student.name || `${student.no}번`;
+  const lowConf = !ach.edited && ach.confidence === "low";
   return (
-    <span className={`stag ${student.level} ${size} ${showBadge ? "" : "nob"}`} title={title}>
+    <span className={`stag g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title}>
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}
-      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`수준 ${student.level}, 눌러서 변경`} title="수준 변경 (B → C → A)"
-        onClick={cycle} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") cycle(e); }}>{student.level}</span>}
+      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`도달 정도 ${ach.value ?? "없음"}, 눌러서 조정`} title={`도달 정도 ${ach.value ?? "—"}${ach.edited ? " (교사 조정)" : lowConf ? " (근거 부족)" : ""} · 눌러서 조정`}
+        onClick={open} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }}>{ach.value ?? "—"}{ach.edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}
+      {anchor && <AchievementPopover student={student} anchor={anchor} onClose={() => { closedAt.current = Date.now(); setAnchor(null); }} />}
     </span>
   );
 }
@@ -111,14 +165,19 @@ export function Toasts() {
   );
 }
 
-export function LenBar({ len, target, mode }: { len: number; target: number; mode?: "withSpaces" | "withoutSpaces" }) {
-  const min = target - 20; const max = target - 1;
-  const pct = Math.min(100, (len / target) * 100);
+/** 분량 막대. 바이트 단위면 "1,452 / 1,500 B · 약 484자" 로 표시한다. 목표 구간은 한도의 96~100%. */
+export function LenBar({ len, target, mode, chars, band }: { len: number; target: number; mode?: LengthMode; chars?: number; band?: [number, number] }) {
+  const { min, max } = lengthWindow(target, band);
+  const pct = Math.min(100, (len / Math.max(1, target)) * 100);
   const cls = len > max ? "over" : len < min ? "low" : "";
+  const bytes = mode === "bytes";
+  const fmt = (n: number) => n.toLocaleString("ko-KR");
+  const unit = bytes ? "B" : "자";
+  const modeText = bytes ? "NEIS 바이트" : mode === "withoutSpaces" ? "공백 제외" : "공백 포함";
   return (
-    <span className="flex" title={`허용 ${min}~${max}자 (${mode === "withoutSpaces" ? "공백 제외" : "공백 포함"})`}>
-      <span className="lenbar"><i className={cls} style={{ width: pct + "%" }} /></span>
-      <span className={`num small ${len > max ? "" : "muted"}`} style={{ color: len > max ? "var(--warn)" : undefined }}>{len}/{target}</span>
+    <span className="flex" title={`목표 ${fmt(min)}~${fmt(max)}${unit} (${modeText}) · 한도 초과 금지`}>
+      <span className="lenbar"><i className={cls} style={{ width: pct + "%" }} /><b style={{ left: `${(min / Math.max(1, target)) * 100}%` }} /></span>
+      <span className={`num small ${len > max ? "" : "muted"}`} style={{ color: len > max ? "var(--warn)" : undefined }}>{fmt(len)}/{fmt(target)}{bytes ? " B" : ""}{bytes && chars !== undefined ? ` · 약 ${fmt(chars)}자` : ""}</span>
     </span>
   );
 }

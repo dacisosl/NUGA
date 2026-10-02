@@ -1,4 +1,5 @@
 import type { NugaDoc, Student, Level } from "./types";
+import { LEGACY_LEVEL_SCORE, clampScore } from "./achievement";
 import { emptyDoc } from "./types";
 
 export interface ExportJson { format: "nuga"; version: 1; exportedAt: string; doc: NugaDoc }
@@ -44,8 +45,11 @@ export function studentsFromRows(rows: Record<string, unknown>[], fallbackClass?
     if (cls && /^\d+-\d+$/.test(cls)) cls = cls.split("-").map((x) => String(parseInt(x, 10))).join("-");
     cls = cls || fallbackClass || "";
     if (!cls || !no) continue;
-    const lv = get("수준", "level").toUpperCase();
-    out.push({ class: cls, no, name, level: (["A", "B", "C"].includes(lv) ? lv : "B") as Level });
+    // 도달 정도: 숫자(0~100) 또는 옛 수준 A·B·C. 비어 있으면 기록으로 자동 추정
+    const raw = get("도달정도", "도달", "achievement", "수준", "level").toUpperCase();
+    const num = Number(raw);
+    const manual = raw && !Number.isNaN(num) ? clampScore(num) : (["A", "B", "C"] as string[]).includes(raw) ? LEGACY_LEVEL_SCORE[raw as Level] : null;
+    out.push({ class: cls, no, name, ...(manual !== null ? { achievement: { auto: null, manual, confidence: "ok" as const } } : {}) });
   }
   return out;
 }

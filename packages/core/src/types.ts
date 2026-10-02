@@ -1,5 +1,14 @@
 export type Category = 1 | 2 | 3 | 4;
+/** 0.2.0 이하의 수준 표시. 불러올 때 도달 정도로 옮긴다. */
 export type Level = "A" | "B" | "C";
+/** 도달 정도(0~100)를 앱 안에서 나누는 5등급. 화면·내보내기에는 등급 이름을 쓰지 않는다. */
+export type Grade = "A" | "B" | "C" | "D" | "E";
+export type SchoolLevel = "elem" | "middle" | "high";
+/** 글자수 단위: 공백 포함 글자 · 공백 제외 글자 · NEIS 바이트 */
+export type LengthMode = "withSpaces" | "withoutSpaces" | "bytes";
+/** 영역에서 작성하는 생기부 항목 */
+export type WriteItem = "setuk" | "elemSubject" | "behavior" | "autonomy" | "club" | "career";
+export type AiProvider = "anthropic" | "gemini" | "openrouter" | "local";
 export type RecordStatus = "pending" | "confirmed" | "skipped";
 export type RecordSource = "watch" | "phone" | "widget" | "pc";
 export type DraftField = "세특" | "행특" | "창체";
@@ -26,7 +35,24 @@ export interface NugaRecord {
 
 export interface Tombstone { id: string; deletedAt: string }
 
-export interface Student { class: string; no: number; name: string; level: Level }
+/**
+ * 성취기준 도달 정도 (PC 전용 내부 값, 0~100).
+ * final = manual ?? auto. confidence: 근거 기록 3건 이상 ok, 1~2건 low, 0건 none.
+ */
+export interface Achievement {
+  auto: number | null;
+  manual: number | null;
+  confidence: "ok" | "low" | "none";
+  byStandard?: Record<string, number>;
+  updatedAt?: string;
+}
+
+export interface Student {
+  class: string; no: number; name: string;
+  achievement?: Achievement;
+  /** 0.2.0 이하 데이터에만 있음. normalize 할 때 achievement 로 옮기고 지운다. */
+  level?: Level;
+}
 
 export interface Performance {
   id: string;
@@ -96,9 +122,15 @@ export interface SyncSettings {
 
 export interface AiSettings {
   enabled: boolean;
-  provider: "anthropic" | "local";
+  /** "local" 은 0.2.0 까지 'AI 없이 규칙 생성'을 뜻했다. 지금은 llama-server(로컬 LLM) 이다. */
+  provider: AiProvider | "rules";
+  /** 0.2.0 이하 호환용. 키는 OS 보안 저장소에 두고 문서에는 저장하지 않는다. */
   apiKey: string;
   model: string;
+  /** 제공자별 모델 이름 */
+  models?: Partial<Record<AiProvider, string>>;
+  /** 로컬 LLM(llama-server) 주소 */
+  localUrl?: string;
 }
 
 export interface Settings {
@@ -108,8 +140,17 @@ export interface Settings {
   periods: PeriodDef[];
   timetable: TimetableCell[];
   progress: ProgressRow[];
+  /** 항목별 한도. 단위는 lengthMode (bytes 면 바이트) */
   targetLength: Record<string, number>;
-  lengthMode: "withSpaces" | "withoutSpaces";
+  lengthMode: LengthMode;
+  /** 목표 구간(한도 대비 비율). 기본 [0.96, 1.0] */
+  lengthBand?: [number, number];
+  /** 교사가 기재요령 값을 바꿨으면 true ("사용자 설정" 표시) */
+  lengthCustom?: boolean;
+  /** 학교급 (프리셋) */
+  schoolLevel?: SchoolLevel;
+  /** 이 영역에서 쓰는 생기부 항목 */
+  writeItem?: WriteItem;
   lowRecordThreshold: number;
   lowRecordEnabled: boolean;
   supplementEnabled: boolean;
@@ -175,8 +216,9 @@ export function defaultSettings(): Settings {
     periods: DEFAULT_PERIODS.map((p) => ({ ...p })),
     timetable: [],
     progress: [],
-    targetLength: { "세특": 500 },
-    lengthMode: "withSpaces",
+    targetLength: { "세특": 1500 },
+    lengthMode: "bytes",
+    lengthBand: [0.96, 1.0],
     lowRecordThreshold: 1,
     lowRecordEnabled: false,
     supplementEnabled: false,
@@ -185,7 +227,7 @@ export function defaultSettings(): Settings {
     draftPrompt: "",
     options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true },
     sync: null,
-    ai: { enabled: false, provider: "local", apiKey: "", model: "claude-opus-5-5" },
+    ai: { enabled: false, provider: "anthropic", apiKey: "", model: "claude-opus-5-5" },
     onboarded: false,
   };
 }

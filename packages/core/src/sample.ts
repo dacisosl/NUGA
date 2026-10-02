@@ -59,16 +59,22 @@ export function makeSampleDoc(seed = 42): NugaDoc {
   const year = 2026;
   doc.settings.school = { grade: 2, subject: "화학Ⅰ", year, semester: 1 };
   doc.settings.classes = [{ class: "2-3", size: 26 }, { class: "2-5", size: 25 }];
-  doc.settings.targetLength = { "세특": 500 };
+  doc.settings.targetLength = { "세특": 1500 };
+  doc.settings.lengthMode = "bytes";
+  doc.settings.schoolLevel = "high";
+  doc.settings.writeItem = "setuk";
   doc.settings.onboarded = true;
 
   // 학생
   const used = new Set<string>();
+  const levelOf = new Map<string, Level>();
   const levels: Level[] = ["A", "A", "A", "A", "A", "B", "B", "B", "B", "B", "B", "B", "B", "B", "B", "C", "C", "C", "C", "C"];
   for (const c of doc.settings.classes) {
     for (let no = 1; no <= c.size; no++) {
       let name = ""; do { name = pick(r, SURNAMES) + pick(r, GIVEN); } while (used.has(name)); used.add(name);
-      doc.students.push({ class: c.class, no, name, level: pick(r, levels) });
+      // 견본 학생의 도달 정도는 기록으로 자동 추정한다 (교사 조정값 없음). 기록 수 분포만 옛 수준을 따른다.
+      levelOf.set(`${c.class}|${no}`, pick(r, levels));
+      doc.students.push({ class: c.class, no, name });
     }
   }
 
@@ -98,11 +104,12 @@ export function makeSampleDoc(seed = 42): NugaDoc {
   const pmap = new Map(doc.settings.periods.map((p) => [p.no, p]));
   const records: NugaRecord[] = [];
   for (const s of doc.students) {
-    const n = s.level === "A" ? 3 + Math.floor(r() * 5) : s.level === "B" ? 1 + Math.floor(r() * 4) : Math.floor(r() * 3);
+    const lv = levelOf.get(`${s.class}|${s.no}`) || "B";
+    const n = lv === "A" ? 3 + Math.floor(r() * 5) : lv === "B" ? 1 + Math.floor(r() * 4) : Math.floor(r() * 3);
     const myDays = progress.filter((p) => p.class === s.class && p.date < todayKey).map((p) => p.date);
     for (let i = 0; i < n && myDays.length; i++) {
       const date = pick(r, myDays);
-      const cat = (s.level === "A" ? pick(r, [1, 1, 2, 2, 3, 4]) : s.level === "B" ? pick(r, [1, 2, 3, 3, 4]) : pick(r, [3, 4, 2, 1])) as Category;
+      const cat = (lv === "A" ? pick(r, [1, 1, 2, 2, 3, 4]) : lv === "B" ? pick(r, [1, 2, 3, 3, 4]) : pick(r, [3, 4, 2, 1])) as Category;
       const w = new Date(date + "T00:00:00").getDay();
       const cell = tt.find((t) => t.class === s.class && t.weekday === w);
       const per = pmap.get(cell?.period || 3)!;

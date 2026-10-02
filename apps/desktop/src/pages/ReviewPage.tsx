@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ISSUE_LABEL, RESULT_LABEL, countChars, nowIso, reviewText, splitSentences, summarize, truncate, type Draft, type ReviewIssue, type ReviewResult, type Student } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
-import { draftOf, recordsOf, studentsOf, useStore } from "../store";
+import { draftOf, lengthOfText, limitOf, recordsOf, reviewCtxOf, studentsOf, useStore } from "../store";
 import { Empty, Icon, LenBar, StatusChip, StudentTag } from "../components/ui";
 import { exportSheets } from "../lib/excel";
 import { DraftView, ViewToggles } from "../components/DraftView";
@@ -21,7 +21,7 @@ export function ReviewPage() {
   const [filter, setFilter] = useState<ReviewResult | "all">("all");
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [cur, setCur] = useState<number | null>(null);
-  const target = doc.settings.targetLength["세특"] || 500;
+  const target = limitOf(doc);
 
   useEffect(() => { setSel(new Set()); setCur(null); }, [cls]);
 
@@ -31,7 +31,7 @@ export function ReviewPage() {
 
   const reviewOne = (s: Student, d: Draft): Draft => {
     const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
-    const r = reviewText(d.text, d.sentences.length ? d.sentences : null, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recordsOf(doc, s.class, s.no).filter((x) => x.status !== "skipped").length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name });
+    const r = reviewText(d.text, d.sentences.length ? d.sentences : null, reviewCtxOf(doc, s, d.targetLength || target, recordsOf(doc, s.class, s.no).filter((x) => x.status !== "skipped").length, others));
     return { ...d, review: { result: r.result, issues: r.issues, at: nowIso() } };
   };
   const runReview = () => {
@@ -43,7 +43,7 @@ export function ReviewPage() {
   const exportExcel = async () => {
     const sheets = Array.from(new Set(doc.students.map((s) => s.class))).sort().map((c) => ({
       name: c, widths: [8, 10, 6, 90, 8, 10, 40],
-      rows: studentsOf(doc, c).map((s) => { const d = draftOf(doc, c, s.no); return { 번호: s.no, 이름: s.name, 수준: s.level, 세특: d?.text || "", 글자수: d?.length || 0, 상태: RESULT_LABEL[d?.text ? d.review.result : "none"], 문제: d?.review.issues.map((i) => i.message).join("; ") || "" }; }),
+      rows: studentsOf(doc, c).map((s) => { const d = draftOf(doc, c, s.no); return { 번호: s.no, 이름: s.name, 세특: d?.text || "", 글자수: d?.length || 0, 상태: RESULT_LABEL[d?.text ? d.review.result : "none"], 문제: d?.review.issues.map((i) => i.message).join("; ") || "" }; }),
     }));
     if (await exportSheets(`세특검토-${nowIso().slice(0, 10)}.xlsx`, sheets)) toast({ text: "엑셀 내보내기 완료" });
   };
@@ -106,7 +106,7 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
   const patchText = (newSents: string[], keepIssues: ReviewIssue[]) => {
     const text = newSents.join(" ");
     const sentences = d.sentences.length ? newSents.map((t) => d.sentences.find((x) => x.text === t) || { text: t, evidence: [] }) : [];
-    onUpdate({ ...d, text, sentences, length: doc.settings.lengthMode === "withSpaces" ? countChars(text).withSpaces : countChars(text).withoutSpaces, review: { ...d.review, issues: keepIssues, result: summarize(keepIssues) } });
+    onUpdate({ ...d, text, sentences, length: lengthOfText(doc, text), review: { ...d.review, issues: keepIssues, result: summarize(keepIssues) } });
   };
   const removeSentence = (i: number) => { if (i === undefined || i < 0 || i >= sents.length) return; const n = sents.filter((_, k) => k !== i); patchText(n, issues.filter((x) => x.sentenceIndex !== i)); };
   const rewrite = (iss: ReviewIssue) => {
@@ -123,7 +123,7 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
           {sents.map((t, i) => { const hit = issues.filter((x) => x.sentenceIndex === i); return <span key={i}>{hit.length ? <mark className={hit.every((h) => h.kind === "style" || h.kind === "honorific" || h.kind === "subject") ? "style" : ""}>{t}</mark> : t}{" "}</span>; })}
         </div>
         <div className="flex wrap small muted" style={{ marginTop: 10, gap: 12 }}>
-          <span className="num">{cc.withSpaces}자 (공백 제외 {cc.withoutSpaces} · NEIS {cc.neisBytes}B) / {target}</span>
+          <span className="num">{doc.settings.lengthMode === "bytes" ? `${cc.neisBytes.toLocaleString("ko-KR")} / ${(d.targetLength || target).toLocaleString("ko-KR")} B · 약 ${cc.withSpaces}자 (공백 제외 ${cc.withoutSpaces})` : `${cc.withSpaces}자 (공백 제외 ${cc.withoutSpaces} · NEIS ${cc.neisBytes}B) / ${d.targetLength || target}`}</span>
           <span>{evid}</span>
           <span>어체 {styleOk ? "✓" : "!"}</span>
         </div>

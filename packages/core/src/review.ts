@@ -1,5 +1,5 @@
-import type { Draft, Level, ReviewIssue, ReviewResult } from "./types";
-import { countChars, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
+import type { Draft, LengthMode, ReviewIssue, ReviewResult } from "./types";
+import { countChars, lengthIn, lengthWindow, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
 import { draftSpans, spanRatio } from "./highlight";
 
 /** 기재 금지 사전. 정규식으로 매칭되며 사용자 설정으로 확장 가능. */
@@ -11,9 +11,12 @@ export const FORBIDDEN_TERMS: { group: string; terms: string[] }[] = [
 ];
 
 export interface ReviewContext {
+  /** 한도 (lengthMode 단위) */
   target: number;
-  lengthMode: "withSpaces" | "withoutSpaces";
-  level: Level;
+  lengthMode: LengthMode;
+  lengthBand?: [number, number];
+  /** 도달 정도 (0~100, 없으면 null). 80 이상인데 분량이 모자라면 확인 필요 */
+  achievement: number | null;
   recordCount: number;
   lowRecordThreshold: number;
   otherDrafts: { text: string; label: string }[];
@@ -70,12 +73,13 @@ export function reviewText(text: string, sentences: Draft["sentences"] | null, c
 
   // 6. 글자수
   const cc = countChars(trimmed);
-  const len = ctx.lengthMode === "withSpaces" ? cc.withSpaces : cc.withoutSpaces;
-  const min = ctx.target - 20; const max = ctx.target - 1;
-  if (len > max) issues.push({ kind: "length", message: `글자수 초과 ${len}/${ctx.target} (허용 ${min}~${max})` });
+  const len = lengthIn(trimmed, ctx.lengthMode);
+  const { min, max } = lengthWindow(ctx.target, ctx.lengthBand);
+  const u = ctx.lengthMode === "bytes" ? "B" : "자";
+  if (len > max) issues.push({ kind: "length", message: `분량 초과 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });
   else if (len < min) {
-    if (ctx.level === "A") issues.push({ kind: "levelA", message: `수준 A · 글자수 미달 ${len}/${ctx.target}` });
-    else if (ctx.recordCount > ctx.lowRecordThreshold) issues.push({ kind: "length", message: `글자수 미달 ${len}/${ctx.target} (허용 ${min}~${max})` });
+    if ((ctx.achievement ?? 0) >= 80) issues.push({ kind: "levelA", message: `도달 정도 높음 · 분량 미달 ${len}/${ctx.target}${u}` });
+    else if (ctx.recordCount > ctx.lowRecordThreshold) issues.push({ kind: "length", message: `분량 미달 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });
   }
 
   // 7. 평가 비중: 교사의 평가 표현이 많고 학생활동이 적으면 확인 필요
@@ -98,5 +102,5 @@ export function summarize(issues: ReviewIssue[]): ReviewResult {
 export const RESULT_LABEL: Record<ReviewResult, string> = { pass: "통과", check: "확인 필요", fix: "수정 권장", none: "미작성" };
 
 export const ISSUE_LABEL: Record<ReviewIssue["kind"], string> = {
-  forbidden: "기재 금지", similar: "문장 유사", noEvidence: "근거 없음", length: "글자수", style: "어체", honorific: "존칭·감탄", subject: "주어", name: "이름", levelA: "A·기록 부족", empty: "미작성", evalHeavy: "평가 비중",
+  forbidden: "기재 금지", similar: "문장 유사", noEvidence: "근거 없음", length: "글자수", style: "어체", honorific: "존칭·감탄", subject: "주어", name: "이름", levelA: "도달 높음·분량 미달", empty: "미작성", evalHeavy: "평가 비중",
 };

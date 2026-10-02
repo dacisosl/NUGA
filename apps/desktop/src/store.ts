@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
-  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc,
-  type Category, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
+  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc, migrateDoc, estimateAchievement, migrateStudent, clampScore, LEGACY_LEVEL_SCORE, lengthIn, presetLimitIn, schoolStyle, defaultGuideFor,
+  type Achievement, type Category, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
 } from "@nuga/core";
 import { getPersist } from "./lib/persist";
 
@@ -21,8 +21,10 @@ export interface MultiBackup { format: "nuga-multi"; version: 1; exportedAt: str
 const DEFAULT_AREA = "default";
 function normalizeDoc(doc: NugaDoc): NugaDoc {
   const base = emptyDoc();
-  doc.settings = { ...base.settings, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
-  return doc;
+  // 0.2.0 이하 문서는 lengthMode·lengthBand 가 없을 수 있다. 옛 문서의 기본 단위는 '공백 포함 글자'였다.
+  const legacy = { lengthMode: "withSpaces" as const };
+  doc.settings = { ...base.settings, ...legacy, ...doc.settings, options: { ...base.settings.options, ...(doc.settings.options || {}) }, ai: { ...base.settings.ai, ...(doc.settings.ai || {}) } };
+  return migrateDoc(doc);
 }
 function pickGlobal(doc: NugaDoc, _prev: GlobalSettings | null): GlobalSettings {
   const s = doc.settings;
@@ -93,7 +95,9 @@ interface State {
   deleteRecord(id: string): void;
   setStudents(students: Student[]): void;
   upsertStudent(s: Student): void;
-  editStudent(cls: string, oldNo: number, patch: { no?: number; name?: string; level?: Student["level"] }): { ok: boolean; message?: string; student?: Student };
+  editStudent(cls: string, oldNo: number, patch: { no?: number; name?: string; manual?: number | null }): { ok: boolean; message?: string; student?: Student };
+  /** 도달 정도 교사 조정값 (null = 자동값으로 되돌리기) */
+  setAchievement(cls: string, no: number, manual: number | null): void;
   removeStudent(cls: string, no: number): void;
   setSettings(patch: Partial<Settings> | ((s: Settings) => Settings)): void;
   saveDraft(d: Draft): void;
@@ -177,7 +181,7 @@ export const useStore = create<State>((set, get) => ({
     const cs = cur.settings;
     d.settings = { ...d.settings, school: { grade: a.grade, subject: a.name.trim(), year: a.year, semester: a.semester }, categories: cs.categories.map((c) => ({ ...c })), periods: cs.periods.map((x) => ({ ...x })), onboarded: true,
       // 글자수·기준은 영역별이지만 새 영역은 지금 영역 값에서 시작한다
-      targetLength: { ...cs.targetLength }, lengthMode: cs.lengthMode, lowRecordThreshold: cs.lowRecordThreshold, lowRecordEnabled: cs.lowRecordEnabled, similarityThreshold: cs.similarityThreshold, draftPrompt: "" };
+      targetLength: { ...cs.targetLength }, lengthMode: cs.lengthMode, lengthBand: cs.lengthBand, lengthCustom: cs.lengthCustom, schoolLevel: cs.schoolLevel, writeItem: cs.writeItem, lowRecordThreshold: cs.lowRecordThreshold, lowRecordEnabled: cs.lowRecordEnabled, similarityThreshold: cs.similarityThreshold, draftPrompt: "" };
     if (a.copyRoster) { d.students = cur.students.map((s) => ({ ...s })); d.settings.classes = cur.settings.classes.map((c) => ({ ...c })); }
     const id = uuid();
     await writeAreaDoc(id, d);
@@ -334,7 +338,8 @@ export const useStore = create<State>((set, get) => ({
     if (!Number.isInteger(newNo) || newNo < 1) return { ok: false, message: "번호는 1 이상의 정수" };
     if (newNo !== oldNo && d0.students.some((x) => x.class === cls && x.no === newNo)) return { ok: false, message: `${cls} ${newNo}번은 이미 있음` };
     const name = (patch.name ?? cur.name).trim() || cur.name;
-    const next: Student = { ...cur, name, level: patch.level ?? cur.level, no: newNo };
+    const base = migrateStudent(cur);
+    const next: Student = { ...base, name, no: newNo, ...(patch.manual !== undefined ? { achievement: withManual(base.achievement, patch.manual) } : {}) };
     const moved: NugaRecord[] = [];
     get().update((d) => {
       d.students = d.students.map((x) => (x.class === cls && x.no === oldNo ? next : x)).sort((a, b) => classSortKey(a.class) - classSortKey(b.class) || a.no - b.no);
@@ -350,6 +355,11 @@ export const useStore = create<State>((set, get) => ({
     const sel = get().selected;
     if (sel && sel.class === cls && sel.no === oldNo) set({ selected: { class: cls, no: newNo } });
     return { ok: true, student: next };
+  },
+  setAchievement(cls, no, manual) {
+    get().update((d) => {
+      d.students = d.students.map((x) => (x.class === cls && x.no === no ? { ...migrateStudent(x), achievement: withManual(migrateStudent(x).achievement, manual) } : x));
+    });
   },
   upsertStudent(s) {
     const students = get().doc.students.filter((x) => !(x.class === s.class && x.no === s.no));
@@ -439,3 +449,52 @@ export function isLowRecord(doc: NugaDoc, cls: string, no: number): boolean {
   if (!doc.settings.lowRecordEnabled) return false;
   return recordsOf(doc, cls, no).filter((r) => r.status !== "skipped").length <= doc.settings.lowRecordThreshold;
 }
+
+/* ---------- 도달 정도 ---------- */
+
+function withManual(a: Achievement | undefined, manual: number | null): Achievement {
+  return { auto: a?.auto ?? null, manual: manual === null ? null : clampScore(manual), confidence: a?.confidence ?? "none", byStandard: a?.byStandard, updatedAt: nowIso() };
+}
+
+export interface AchievementView {
+  /** 최종값 (교사 조정값 → 자동값) */
+  value: number | null;
+  auto: number | null;
+  manual: number | null;
+  confidence: Achievement["confidence"];
+  edited: boolean;
+}
+
+/** 학생의 도달 정도. 자동값은 기록으로 바로 계산한다 (AI 추정값이 저장돼 있으면 그 값). */
+export function achievementOf(doc: NugaDoc, s: Pick<Student, "class" | "no" | "achievement" | "level">): AchievementView {
+  const a = s.achievement;
+  const manual = a?.manual ?? (s.level ? LEGACY_LEVEL_SCORE[s.level] : null);
+  let auto = a?.auto ?? null; let confidence: Achievement["confidence"] = a?.confidence ?? "none";
+  if (auto === null) {
+    const est = estimateAchievement(doc.records.filter((r) => r.class === s.class && r.no === s.no), doc.performances.filter((p) => p.class === s.class && p.no === s.no));
+    auto = est.value; confidence = est.confidence;
+  }
+  return { value: manual ?? auto, auto, manual, confidence: manual !== null && confidence === "none" ? "ok" : confidence, edited: manual !== null };
+}
+
+/* ---------- 글자수(바이트)·검토 기준 ---------- */
+
+/** 이 영역의 한도 (단위는 lengthMode) */
+export function limitOf(doc: NugaDoc): number {
+  return doc.settings.targetLength["세특"] || presetLimitIn(doc.settings.writeItem || "setuk", doc.settings.lengthMode);
+}
+export function lengthOfText(doc: NugaDoc, text: string): number { return lengthIn(text, doc.settings.lengthMode); }
+export function unitOf(doc: NugaDoc): string { return doc.settings.lengthMode === "bytes" ? "B" : "자"; }
+/** 학교급 프리셋의 추가 금지어 */
+export function schoolForbidden(doc: NugaDoc): string[] { return schoolStyle(doc.settings.schoolLevel).forbidden.flatMap((g) => g.terms); }
+/** 검토 기준 (도달 정도·한도·목표 구간·금지어) */
+export function reviewCtxOf(doc: NugaDoc, s: Student, target: number, recordCount: number, otherDrafts: { text: string; label: string }[]) {
+  return {
+    target, lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand, achievement: achievementOf(doc, s).value,
+    recordCount, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts, similarityThreshold: doc.settings.similarityThreshold,
+    studentName: s.name, extraForbidden: schoolForbidden(doc),
+  };
+}
+
+/** 이 영역의 초안 지침 (직접 쓴 프롬프트 → 작성 항목 기본 양식) */
+export function guideOf(doc: NugaDoc): string { return doc.settings.draftPrompt.trim() || defaultGuideFor(doc.settings.writeItem); }

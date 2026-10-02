@@ -11,6 +11,11 @@ export interface Persist {
 
 const FILE = "nuga-data.json";
 
+/** 파일명에 쓸 수 없는 문자(Windows의 콜론 등)를 안전한 문자로 바꾼다. */
+export function safeAuxName(key: string): string {
+  return `aux-${key.replace(/[\\/:*?"<>|]/g, "_")}.json`;
+}
+
 async function tauriPersist(): Promise<Persist> {
   const fs = await import("@tauri-apps/plugin-fs");
   const path = await import("@tauri-apps/api/path");
@@ -28,8 +33,16 @@ async function tauriPersist(): Promise<Persist> {
   return {
     load: () => readJson<NugaDoc>(FILE),
     save: (doc) => writeJson(FILE, doc),
-    loadAux: (k) => readJson(`aux-${k}.json`),
-    saveAux: (k, v) => writeJson(`aux-${k}.json`, v),
+    loadAux: async <T,>(k: string) => {
+      const name = safeAuxName(k);
+      const v = await readJson<T>(name);
+      if (v !== null || name === `aux-${k}.json`) return v;
+      // 0.2.0 이하: "aux-doc:<id>.json" 으로 저장했던 파일(Windows에서는 대체 데이터 스트림)을 옮긴다
+      const old = await readJson<T>(`aux-${k}.json`);
+      if (old !== null) { try { await writeJson(name, old); } catch { /* 다음 저장 때 다시 씀 */ } }
+      return old;
+    },
+    saveAux: (k, v) => writeJson(safeAuxName(k), v),
     location: () => p(FILE),
   };
 }

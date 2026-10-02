@@ -1,0 +1,16 @@
+{
+  "year": 2026,
+  "source": "학교생활기록부 기재요령 (교육부, 2026학년도)",
+  "verified": false,
+  "note": "값은 기획 단계 기본값입니다. 2026학년도 기재요령으로 확인한 뒤 verified 를 true 로 바꿉니다.",
+  "unit": "bytes",
+  "band": [0.96, 1.0],
+  "items": {
+    "setuk":       { "label": "과목별 세부능력 및 특기사항", "limit": 1500, "verified": false },
+    "elemSubject": { "label": "교과학습발달상황 특기사항(초)", "limit": 1500, "verified": false },
+    "behavior":    { "label": "행동특성 및 종합의견", "limit": 1500, "verified": false },
+    "autonomy":    { "label": "창체 자율·자치활동", "limit": 1500, "verified": false },
+    "club":        { "label": "창체 동아리활동", "limit": 1500, "verified": false },
+    "career":      { "label": "창체 진로활동", "limit": 2100, "verified": false }
+  }
+}

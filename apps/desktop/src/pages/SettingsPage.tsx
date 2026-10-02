@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
-  type BackupContainer, type Level, type ProgressRow, type Student,
+  LEGACY_LEVEL_SCORE, LENGTH_PRESET, defaultGuideFor, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
+  type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
 import { TopBar } from "../App";
-import { classList, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup } from "../store";
-import { Confirm, EditableCell, Icon, Modal, Switch } from "../components/ui";
+import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup } from "../store";
+import { ACH_COLORS, Confirm, EditableCell, Icon, Modal, StudentTag, Switch } from "../components/ui";
 import { AreaModal } from "../components/AreaSwitcher";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
 import { pickFile, readFileAsText, saveFile, hostName, openExternal } from "../lib/platform";
@@ -21,7 +22,7 @@ const COMMON_TABS: { key: string; label: string }[] = [
 /** 개별 설정: 지금 열린 영역에만 적용된다 */
 const AREA_TABS: { key: string; label: string }[] = [
   { key: "subject", label: "영역" }, { key: "roster", label: "반·명단" }, { key: "timetable", label: "시간표" },
-  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" }, { key: "length", label: "글자수·기준" },
+  { key: "progress", label: "진도" }, { key: "category", label: "카테고리" }, { key: "length", label: "항목·분량" },
   { key: "prompt", label: "초안 프롬프트" },
 ];
 
@@ -151,7 +152,7 @@ export function RosterSection() {
     setStudents(doc.students.filter((s) => s.class !== c));
     setSettings((s) => ({ ...s, classes: s.classes.filter((x) => x.class !== c), timetable: s.timetable.filter((t) => t.class !== c) }));
   };
-  const addRow = () => { const no = (list[list.length - 1]?.no || 0) + 1; upsertStudent({ class: cls, no, name: "", level: "B" }); };
+  const addRow = () => { const no = (list[list.length - 1]?.no || 0) + 1; upsertStudent({ class: cls, no, name: "" }); };
   const setSize = (n: number) => setSettings((s) => ({ ...s, classes: s.classes.map((x) => x.class === cls ? { ...x, size: n } : x) }));
   const size = doc.settings.classes.find((c) => c.class === cls)?.size || list.length;
 
@@ -178,13 +179,13 @@ export function RosterSection() {
             </span>
           </div>
           <table className="table" style={{ marginTop: 12 }}>
-            <thead><tr><th style={{ width: 70 }}>번호</th><th>이름</th><th style={{ width: 120 }}>수준</th><th style={{ width: 80 }}>기록</th><th style={{ width: 50 }} /></tr></thead>
+            <thead><tr><th style={{ width: 70 }}>번호</th><th>이름</th><th style={{ width: 150 }} title="성취기준 도달 정도 (0~100). 비우면 기록으로 자동 추정">도달 정도</th><th style={{ width: 80 }}>기록</th><th style={{ width: 50 }} /></tr></thead>
             <tbody>
               {list.map((s) => (
                 <tr key={s.no} style={{ height: 44 }}>
                   <td className="tight"><NoInput value={s.no} onCommit={(no) => { const r = editStudent(s.class, s.no, { no }); if (!r.ok) toast({ text: r.message || "변경 실패" }); return r.ok; }} /></td>
                   <td className="tight"><input className="cell-edit" value={s.name} placeholder="이름" onChange={(e) => upsertStudent({ ...s, name: e.target.value })} /></td>
-                  <td className="tight"><span className="seg">{(["A", "B", "C"] as Level[]).map((l) => <button key={l} className={s.level === l ? "active" : ""} style={{ height: 26, padding: "0 10px" }} onClick={() => upsertStudent({ ...s, level: l })}>{l}</button>)}</span></td>
+                  <td className="tight"><AchInput student={s} /></td>
                   <td className="num muted small">{recordsOf(doc, s.class, s.no).length}</td>
                   <td className="tight"><button className="btn ghost icon sm" onClick={() => removeStudent(s.class, s.no)}><Icon name="trash" size={14} /></button></td>
                 </tr>
@@ -200,6 +201,28 @@ export function RosterSection() {
   );
 }
 
+/** 도달 정도 칸: 숫자를 넣으면 교사 조정값, 비우면 자동값(기록으로 추정) */
+function AchInput({ student }: { student: Student }) {
+  const doc = useStore((s) => s.doc);
+  const setAchievement = useStore((s) => s.setAchievement);
+  const ach = achievementOf(doc, student);
+  const [v, setV] = useState(ach.manual === null ? "" : String(ach.manual));
+  useEffect(() => { setV(ach.manual === null ? "" : String(ach.manual)); }, [ach.manual]);
+  const commit = () => {
+    const t = v.trim();
+    if (!t) { if (ach.manual !== null) setAchievement(student.class, student.no, null); return; }
+    const n = Number(t); if (Number.isNaN(n)) { setV(ach.manual === null ? "" : String(ach.manual)); return; }
+    if (clampScore(n) !== ach.manual) setAchievement(student.class, student.no, n);
+  };
+  return (
+    <span className="flex" style={{ gap: 6 }}>
+      <input type="number" min={0} max={100} className="cell-edit num" style={{ width: 58 }} value={v} placeholder={ach.auto === null ? "—" : `자동 ${ach.auto}`}
+        onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+      <span className="small muted">{ach.manual === null ? (ach.confidence === "low" ? "근거 부족" : ach.confidence === "none" ? "" : "자동") : "조정"}</span>
+    </span>
+  );
+}
+
 /** 번호 칸: 입력 후 Enter·포커스 이동 시 반영(기록도 함께 이동). 충돌하면 원래 값으로 되돌림 */
 function NoInput({ value, onCommit }: { value: number; onCommit: (no: number) => boolean }) {
   const [v, setV] = useState(String(value));
@@ -208,7 +231,7 @@ function NoInput({ value, onCommit }: { value: number; onCommit: (no: number) =>
   return <input type="number" className="cell-edit num" min={1} value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setV(String(value)); (e.target as HTMLInputElement).blur(); } }} style={{ width: 56 }} />;
 }
 
-/** 붙여넣기: 한 줄에 한 명. 이름만 있으면 번호를 차례로 매김. "3 홍길동", "3. 홍길동", "20315 홍길동", "홍길동 A" 모두 인식 */
+/** 붙여넣기: 한 줄에 한 명. 이름만 있으면 번호를 차례로 매김. "3 홍길동", "3. 홍길동", "20315 홍길동", "홍길동 72"(도달 정도) 모두 인식 */
 function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
   const doc = useStore((s) => s.doc);
   const setStudents = useStore((s) => s.setStudents);
@@ -228,15 +251,15 @@ function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
       const num = rest.match(/^(\d{1,3})[\s.,)\-]+(.+)$/);
       if (hak) { no = parseInt(hak[1].slice(-2), 10); rest = hak[2]; }
       else if (num) { no = parseInt(num[1], 10); rest = num[2]; }
-      let level: Level = "B";
-      const lv = rest.match(/[\s,]+([ABCabc])$/);
-      if (lv) { level = lv[1].toUpperCase() as Level; rest = rest.slice(0, lv.index).trim(); }
+      let manual: number | null = null;
+      const lv = rest.match(/[\s,]+([ABCabc]|\d{1,3})$/);
+      if (lv) { const t = lv[1].toUpperCase(); manual = /\d/.test(t) ? clampScore(Number(t)) : LEGACY_LEVEL_SCORE[t as Level]; rest = rest.slice(0, lv.index).trim(); }
       const name = rest.replace(/[,]+$/, "").trim();
       if (!name) continue;
       if (!no) { while (used.has(next)) next++; no = next++; }
       const overwrite = mode === "append" && existing.some((s) => s.no === no);
       used.add(no);
-      out.push({ class: cls, no, name, level, overwrite });
+      out.push({ class: cls, no, name, ...(manual !== null ? { achievement: { auto: null, manual, confidence: "ok" as const } } : {}), overwrite });
     }
     return out;
   }, [text, cls, mode, existing.length]);
@@ -256,12 +279,12 @@ function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
           </span>
         )}
         <div className="grid2" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
-          <textarea rows={14} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={"한 줄에 한 명씩 이름만 붙여넣어도 됩니다.\n김민준\n이서연\n박지우\n\n번호·수준도 가능\n12 최하은 A\n20315 정도윤"} />
+          <textarea rows={14} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={"한 줄에 한 명씩 이름만 붙여넣어도 됩니다.\n김민준\n이서연\n박지우\n\n번호·도달 정도(0~100)도 가능\n12 최하은 72\n20315 정도윤"} />
           <div className="tablewrap" style={{ maxHeight: 300, border: "1px solid var(--line)" }}>
             <table className="table" style={{ border: "none" }}>
-              <thead><tr><th style={{ width: 60 }}>번호</th><th>이름</th><th style={{ width: 56 }}>수준</th></tr></thead>
+              <thead><tr><th style={{ width: 60 }}>번호</th><th>이름</th><th style={{ width: 70 }}>도달 정도</th></tr></thead>
               <tbody>
-                {parsed.map((p, i) => <tr key={i}><td className="num key">{p.no}</td><td className="key name">{p.name}{p.overwrite && <span className="chip check" style={{ marginLeft: 6 }}>덮어씀</span>}</td><td><span className={`lvl ${p.level}`}>{p.level}</span></td></tr>)}
+                {parsed.map((p, i) => <tr key={i}><td className="num key">{p.no}</td><td className="key name">{p.name}{p.overwrite && <span className="chip check" style={{ marginLeft: 6 }}>덮어씀</span>}</td><td className="num muted">{p.achievement?.manual ?? "자동"}</td></tr>)}
                 {!parsed.length && <tr><td colSpan={3} className="muted small" style={{ textAlign: "center" }}>미리보기</td></tr>}
               </tbody>
             </table>
@@ -448,18 +471,92 @@ function CategorySection() {
 function LengthSection() {
   const s = useStore((x) => x.doc.settings);
   const setSettings = useStore((x) => x.setSettings);
+  const toast = useStore((x) => x.toast);
+  const [confirmLevel, setConfirmLevel] = useState<SchoolLevel | null>(null);
   const areaName = s.school.subject || "현재 영역";
+  const item: WriteItem = s.writeItem || "setuk";
+  const preset = s.schoolLevel ? SCHOOL_PRESETS[s.schoolLevel] : null;
+  const items: WriteItem[] = preset ? preset.items : (Object.keys(WRITE_ITEM_LABEL) as WriteItem[]);
+  const limit = s.targetLength["세특"] || presetLimitIn(item, s.lengthMode);
+  const presetValue = presetLimitIn(item, s.lengthMode);
+  const custom = limit !== presetValue;
+  const band = s.lengthBand || [0.96, 1.0];
+  const lenItem = LENGTH_PRESET.items[item];
+  const unit = s.lengthMode === "bytes" ? "B" : "자";
+  const setLimit = (n: number) => setSettings((x) => ({ ...x, targetLength: { ...x.targetLength, "세특": n }, lengthCustom: n !== presetLimitIn(x.writeItem || "setuk", x.lengthMode) }));
+  const setMode = (m: LengthMode) => setSettings((x) => {
+    if (x.lengthMode === m) return x;
+    const cur = x.targetLength["세특"] || presetLimitIn(x.writeItem || "setuk", x.lengthMode);
+    // 바이트 ↔ 글자 바꿀 때 한도도 함께 바꾼다 (한글 1자 ≈ 3바이트)
+    const next = x.lengthMode === "bytes" ? Math.round(cur / 3) : m === "bytes" ? cur * 3 : cur;
+    return { ...x, lengthMode: m, targetLength: { ...x.targetLength, "세특": next } };
+  });
+  const setItem = (it: WriteItem) => setSettings((x) => ({ ...x, writeItem: it, targetLength: { ...x.targetLength, "세특": presetLimitIn(it, x.lengthMode) }, lengthCustom: false }));
+  const applyLevel = (lv: SchoolLevel) => { setSettings((x) => applySchoolPreset(x, lv)); toast({ text: `${SCHOOL_PRESETS[lv].label} 프리셋 적용` }); };
+  const pct = (v: number) => Math.round(v * 100);
   return (
     <>
     <div className="card pad">
-      <h3>글자수 · 판단 기준 <span className="muted small">{areaName} 영역</span></h3>
+      <h3>학교급 · 작성 항목 <span className="muted small">{areaName} 영역</span></h3>
+      <div className="col" style={{ gap: 14 }}>
+        <div className="field"><label>학교급</label>
+          <span className="flex wrap" style={{ gap: 8 }}>
+            {(["elem", "middle", "high"] as SchoolLevel[]).map((lv) => (
+              <button key={lv} className={`level-card ${s.schoolLevel === lv ? "active" : ""}`} onClick={() => { if (s.schoolLevel !== lv) setConfirmLevel(lv); }}>
+                <b>{SCHOOL_PRESETS[lv].label}</b><span>{SCHOOL_PRESETS[lv].userModelLabel}</span><span>카테고리 {SCHOOL_PRESETS[lv].categories.join(" · ")}</span>
+              </button>
+            ))}
+          </span>
+          {preset && <span className="muted small">문체 지침: {preset.styleGuide}</span>}
+        </div>
+        <div className="field"><label>작성 항목</label>
+          <span className="seg wrap">{items.map((it) => <button key={it} className={item === it ? "active" : ""} onClick={() => setItem(it)}>{WRITE_ITEM_LABEL[it]}</button>)}</span>
+          <span className="muted small">항목에 따라 기재요령 한도와 초안 지침 기본 양식이 정해집니다.</span>
+        </div>
+      </div>
+    </div>
+    <div className="card pad">
+      <div className="flex between">
+        <h3 style={{ margin: 0 }}>분량</h3>
+        <span className="flex">
+          {!lenItem?.verified && s.lengthMode === "bytes" && <span className="chip check" title={LENGTH_PRESET.note}>기재요령 확인 필요</span>}
+          <span className={`chip ${custom ? "check" : "pass"}`}>{custom ? "사용자 설정" : `${LENGTH_PRESET.year} 기재요령 값`}</span>
+        </span>
+      </div>
+      <div className="grid2" style={{ marginTop: 12 }}>
+        <div className="field"><label>단위</label>
+          <span className="seg">
+            <button className={s.lengthMode === "bytes" ? "active" : ""} onClick={() => setMode("bytes")}>NEIS 바이트</button>
+            <button className={s.lengthMode === "withSpaces" ? "active" : ""} onClick={() => setMode("withSpaces")}>글자 (공백 포함)</button>
+            <button className={s.lengthMode === "withoutSpaces" ? "active" : ""} onClick={() => setMode("withoutSpaces")}>글자 (공백 제외)</button>
+          </span>
+          <span className="muted small">NEIS는 바이트로 셉니다: 한글 1자 3B · 영문·숫자·공백 1B · 줄바꿈 2B.</span>
+        </div>
+        <div className="field"><label>{lenItem?.label || WRITE_ITEM_LABEL[item]} 한도</label>
+          <span className="flex">
+            <input type="number" className="num" style={{ width: 110 }} value={limit} onChange={(e) => setLimit(Number(e.target.value))} /><span>{unit}</span>
+            {custom && <button className="btn sm" onClick={() => setLimit(presetValue)}>기재요령 값으로 되돌리기 ({presetValue.toLocaleString("ko-KR")}{unit})</button>}
+          </span>
+          {s.lengthMode === "bytes" && <span className="muted small">한글 위주 문장 기준 약 {Math.round(limit / 2.75).toLocaleString("ko-KR")}자 (공백 포함)</span>}
+        </div>
+        <div className="field"><label>목표 구간 (한도 대비)</label>
+          <span className="flex">
+            <input type="number" className="num" style={{ width: 70 }} min={50} max={100} value={pct(band[0])} onChange={(e) => setSettings({ lengthBand: [Math.min(Number(e.target.value), pct(band[1])) / 100, band[1]] })} />%
+            <span>~</span>
+            <input type="number" className="num" style={{ width: 70 }} min={50} max={100} value={pct(band[1])} onChange={(e) => setSettings({ lengthBand: [band[0], Math.min(100, Math.max(Number(e.target.value), pct(band[0]))) / 100] })} />%
+          </span>
+          <span className="muted small">지금 기준 {Math.ceil(limit * band[0]).toLocaleString("ko-KR")}~{Math.floor(limit * band[1]).toLocaleString("ko-KR")}{unit}. 한도 초과는 금지, 기록이 적으면 미달을 허용합니다.</span>
+        </div>
+      </div>
+    </div>
+    <div className="card pad">
+      <h3>판단 기준</h3>
       <div className="grid2">
-        <div className="field"><label>세특 목표 글자수</label><input type="number" className="num" value={s.targetLength["세특"] || 500} onChange={(e) => setSettings((x) => ({ ...x, targetLength: { ...x.targetLength, "세특": Number(e.target.value) } }))} /><span className="muted small">허용 구간 N−20 ~ N−1 · NEIS 바이트는 검토 패널에 병기</span></div>
-        <div className="field"><label>글자수 기준</label><span className="seg"><button className={s.lengthMode === "withSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withSpaces" })}>공백 포함</button><button className={s.lengthMode === "withoutSpaces" ? "active" : ""} onClick={() => setSettings({ lengthMode: "withoutSpaces" })}>공백 제외</button></span></div>
         <div className="field"><label>기록 부족 표시</label><Switch on={s.lowRecordEnabled} onChange={(v) => setSettings({ lowRecordEnabled: v })} label={s.lowRecordEnabled ? "켬 — 이름 옆 주황 점과 필터 표시" : "끔"} />{s.lowRecordEnabled && <span className="flex small muted">기준 <input type="number" className="num" style={{ width: 60, height: 30 }} value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Number(e.target.value) })} />건 이하</span>}</div>
         <div className="field"><label>문장 유사도 임계값 (0~1)</label><input type="number" step="0.05" min="0.3" max="1" className="num" value={s.similarityThreshold} onChange={(e) => setSettings({ similarityThreshold: Number(e.target.value) })} /></div>
       </div>
     </div>
+    {confirmLevel && <Confirm title={`${SCHOOL_PRESETS[confirmLevel].label} 프리셋 적용`} body="이 영역의 카테고리·작성 항목·분량(바이트 한도와 목표 구간)이 프리셋 값으로 바뀝니다. 명단·기록·시간표는 그대로입니다." okLabel="적용" onOk={() => applyLevel(confirmLevel)} onClose={() => setConfirmLevel(null)} />}
     </>
   );
 }
@@ -613,8 +710,8 @@ function AiSection() {
   const showPreview = () => {
     const s = doc.students.find((x) => recordsOf(doc, x.class, x.no).length > 0) || doc.students[0];
     const recs = s ? recordsOf(doc, s.class, s.no) : [];
-    const req = buildDraftRequest({ level: s?.level || "B", targetLength: doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject, school: doc.settings.school, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
-    setPreview(previewPayload(req, doc.settings.draftPrompt));
+    const req = buildDraftRequest({ achievement: s ? achievementOf(doc, s).value : null, targetLength: limitOf(doc), lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand, styleGuide: schoolStyle(doc.settings.schoolLevel).styleGuide, subject: doc.settings.school.subject, school: doc.settings.school, records: recs, performances: s ? perfsOf(doc, s.class, s.no) : [], categories: doc.settings.categories });
+    setPreview(previewPayload(req, guideOf(doc)));
   };
   return (
     <>
@@ -685,11 +782,12 @@ function PromptSection() {
   const toast = useStore((x) => x.toast);
   const areaName = s.school.subject || "현재 영역";
   const custom = s.draftPrompt.trim().length > 0;
-  const value = custom ? s.draftPrompt : DEFAULT_DRAFT_GUIDE;
+  const base = defaultGuideFor(s.writeItem);
+  const value = custom ? s.draftPrompt : base;
   const [confirmPreset, setConfirmPreset] = useState<string | null>(null);
   const applyPreset = (key: string) => {
     const p = DRAFT_PROMPT_PRESETS.find((x) => x.key === key); if (!p) return;
-    setSettings({ draftPrompt: p.text === DEFAULT_DRAFT_GUIDE ? "" : p.text }); toast({ text: `"${p.label}" 양식을 불러옴` });
+    setSettings({ draftPrompt: p.text === base ? "" : p.text }); toast({ text: `"${p.label}" 양식을 불러옴` });
   };
   return (
     <>
@@ -697,7 +795,7 @@ function PromptSection() {
         <div className="flex between">
           <h3 style={{ margin: 0 }}>초안 프롬프트 <span className="muted small">{areaName} 영역</span></h3>
           <span className="flex">
-            <span className={`chip ${custom ? "check" : "pass"}`}>{custom ? "직접 설정" : "기본값 사용 중"}</span>
+            <span className={`chip ${custom ? "check" : "pass"}`}>{custom ? "직접 설정" : `기본값 · ${WRITE_ITEM_LABEL[s.writeItem || "setuk"]}`}</span>
             <select className="select" value="" onChange={(e) => { if (e.target.value) setConfirmPreset(e.target.value); }}>
               <option value="">양식 불러오기</option>
               {DRAFT_PROMPT_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
@@ -706,7 +804,7 @@ function PromptSection() {
           </span>
         </div>
         <div className="muted small" style={{ margin: "6px 0 10px" }}>AI가 초안을 쓸 때 따르는 지침입니다. 영역마다 따로 저장됩니다. AI가 꺼져 있으면 규칙 기반 생성기가 동작하며 이 지침은 쓰이지 않습니다.</div>
-        <textarea className="prompt-edit" rows={16} value={value} onChange={(e) => setSettings({ draftPrompt: e.target.value === DEFAULT_DRAFT_GUIDE ? "" : e.target.value })} spellCheck={false} />
+        <textarea className="prompt-edit" rows={16} value={value} onChange={(e) => setSettings({ draftPrompt: e.target.value === base ? "" : e.target.value })} spellCheck={false} />
       </div>
       <div className="card pad">
         <h3>항상 덧붙는 출력 형식 <span className="muted small">바꿀 수 없음</span></h3>
@@ -715,7 +813,7 @@ function PromptSection() {
       </div>
       <div className="card pad">
         <h3>함께 전달되는 내용</h3>
-        <div className="small muted">영역명, 학년·학년도·학기, 수준, 목표 글자수, 체크한 누가기록(날짜·분류·수업 주제·내용), PDF기록 발췌와 가린 전산화 글, 현재 초안과 대화 내역, 요청 문장. 반·번호·이름과 단원·차시 번호는 보내지 않습니다. 실제 전송 본문은 공통 설정 → AI → 전송 내용 미리보기에서 볼 수 있습니다.</div>
+        <div className="small muted">영역명, 학년·학년도·학기, 분량 한도, 학교급 문체 지침, 표현 방향(도달 정도에 맞는 서술어 강도와 어휘 · 숫자와 등급은 보내지 않음), 체크한 누가기록(날짜·분류·수업 주제·내용), PDF기록 발췌와 가린 전산화 글, 현재 초안과 대화 내역, 요청 문장. 반·번호·이름과 단원·차시 번호는 보내지 않습니다. 실제 전송 본문은 공통 설정 → AI → 전송 내용 미리보기에서 볼 수 있습니다.</div>
       </div>
       {confirmPreset && <Confirm title="양식 불러오기" body="지금 프롬프트를 선택한 양식으로 바꿉니다." okLabel="불러오기" onOk={() => applyPreset(confirmPreset)} onClose={() => setConfirmPreset(null)} />}
     </>
@@ -734,11 +832,13 @@ function DisplaySection() {
       <div className="card pad">
         <h3>학생 이름표</h3>
         <div className="col" style={{ gap: 12 }}>
-          <Switch on={badge} onChange={(v) => setSettings((x) => ({ ...x, options: { ...x.options, showLevelBadge: v } }))} label={badge ? "수준 배지 표시 — 이름표 오른쪽 위에 A·B·C, 눌러서 변경" : "수준 배지 숨김 — 이름표 바탕색으로만 수준 표시"} />
-          <span className="flex" style={{ gap: 18, paddingTop: 6 }}>
-            {(["A", "B", "C"] as const).map((l) => <StudentTagPreview key={l} level={l} badge={badge} />)}
+          <Switch on={badge} onChange={(v) => setSettings((x) => ({ ...x, options: { ...x.options, showLevelBadge: v } }))} label={badge ? "도달 정도 숫자 표시 — 이름표 오른쪽 위 숫자를 누르면 조정" : "도달 정도 숫자 숨김 — 이름표 바탕색으로만 표시"} />
+          <span className="flex wrap" style={{ gap: 20, paddingTop: 8 }}>
+            {[null, 10, 30, 50, 70, 90].map((v, i) => <StudentTagPreview key={i} value={v} badge={badge} />)}
+            <StudentTagPreview value={45} badge={badge} low />
+            <StudentTagPreview value={88} badge={badge} edited />
           </span>
-          <div className="muted small">배지를 숨기면 수준은 반·명단 설정에서 바꿀 수 있습니다.</div>
+          <div className="muted small">바탕색은 성취기준 도달 정도(0~100)를 파랑 5단계로 나타냅니다. 빗금은 추정 불가, 점선은 근거 기록이 적은 자동값, 연필은 교사가 조정한 값입니다. 도달 정도는 생기부·내보내기에 나오지 않고 초안의 표현 방향만 바꿉니다.</div>
         </div>
       </div>
       <div className="card pad">
@@ -753,6 +853,7 @@ function DisplaySection() {
   );
 }
 
-function StudentTagPreview({ level, badge }: { level: "A" | "B" | "C"; badge: boolean }) {
-  return <span className={`stag ${level} md ${badge ? "" : "nob"}`}><span className="stag-name">학생 {level}</span>{badge && <span className="stag-lv">{level}</span>}</span>;
+function StudentTagPreview({ value, badge, low, edited }: { value: number | null; badge: boolean; low?: boolean; edited?: boolean }) {
+  const step = value === null ? "x" : String(Math.min(4, Math.floor(value / 20)));
+  return <span className={`stag g${step} md ${badge ? "" : "nob"} ${low ? "lowconf" : ""}`} title={value === null ? "추정 불가" : `도달 정도 ${value}`}><span className="stag-name">학생</span>{badge && <span className="stag-lv">{value ?? "—"}{edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}</span>;
 }

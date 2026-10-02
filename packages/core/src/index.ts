@@ -9,3 +9,6 @@ export * from "./sync";
 export * from "./sample";
 export * from "./export";
 export * from "./highlight";
+export * from "./achievement";
+export * from "./presets";
+export * from "./migrate";

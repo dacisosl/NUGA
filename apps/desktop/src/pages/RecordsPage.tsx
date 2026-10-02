@@ -37,7 +37,7 @@ export function RecordsPage() {
       widths: [8, 10, 6, 8, 80, 12],
       rows: doc.students.filter((s) => s.class === c).sort((a, b) => a.no - b.no).map((s) => {
         const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
-        return { 번호: s.no, 이름: s.name, 수준: s.level, 기록수: recs.length,
+        return { 번호: s.no, 이름: s.name, 기록수: recs.length,
           누가기록: recs.map((r) => `[${catLabel(doc, r.category)}] ${fmtMD(r.time)} ${lessonLabel(r.lesson)} ${r.note || r.memo || ""}`.trim()).join("\n"),
           마지막: recs[0] ? fmtMD(recs[0].time) : "" };
       }),

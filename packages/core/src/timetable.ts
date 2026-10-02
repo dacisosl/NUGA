@@ -95,3 +95,34 @@ export function periodLabel(p: PeriodDef): string { return `${p.no}교시 ${p.st
 export function cellKey(t: TimetableCell): string { return `${t.weekday}-${t.period}`; }
 
 export const WEEKDAY_LABELS = ["", "월", "화", "수", "목", "금", "토", "일"];
+
+/** 영역 배정용 요약: 영역 id, 그 영역의 시간표·교시, 반 이름들 */
+export interface AreaRoute { id: string; timetable: TimetableCell[]; periods: PeriodDef[]; classes: string[] }
+
+/**
+ * 폰에서 온 기록을 어느 영역에 넣을지 정한다.
+ * 1) 기록 시각에 그 반 수업이 있는 영역(시작 5분 전 ~ 끝난 뒤 10분)
+ * 2) 같은 날 그 반의 직전 수업이 있는 영역(쉬는 시간·방과 후 기록)
+ * 3) 그 반을 가진 영역
+ * 같은 조건이면 현재 영역을 먼저 고른다. 아무 데도 없으면 현재 영역.
+ */
+export function routeRecordArea(areas: AreaRoute[], rec: { class: string; time: string }, currentId: string): string {
+  const order = [...areas].sort((a, b) => (a.id === currentId ? -1 : b.id === currentId ? 1 : 0));
+  const d = new Date(rec.time);
+  if (!Number.isNaN(d.getTime())) {
+    const wd = weekdayOf(d);
+    const mins = d.getHours() * 60 + d.getMinutes();
+    let best: { id: string; start: number } | null = null;
+    for (const a of order) {
+      for (const s of slotsForWeekday(a, wd)) {
+        if (s.class !== rec.class) continue;
+        const st = hm(s.start), en = hm(s.end);
+        if (mins >= st - 5 && mins <= en + 10) return a.id;
+        if (st <= mins && (!best || st > best.start)) best = { id: a.id, start: st };
+      }
+    }
+    if (best) return best.id;
+  }
+  const byClass = order.find((a) => a.classes.includes(rec.class));
+  return byClass ? byClass.id : currentId;
+}

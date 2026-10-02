@@ -1,10 +1,10 @@
-/** 글자수: 공백 포함 / 공백 제외 / NEIS 바이트(비ASCII 3바이트, ASCII 1바이트) */
+/** 글자수: 공백 포함 / 공백 제외 / NEIS 바이트(한글 등 3바이트, 영문·숫자·공백 1바이트, 줄바꿈 2바이트) */
 export interface CharCount { withSpaces: number; withoutSpaces: number; neisBytes: number }
 
 export function countChars(text: string): CharCount {
-  const chars = Array.from(text);
+  const chars = Array.from(text.replace(/\r\n?/g, "\n"));
   let bytes = 0;
-  for (const ch of chars) bytes += ch.charCodeAt(0) < 128 ? 1 : 3;
+  for (const ch of chars) bytes += ch === "\n" ? 2 : ch.charCodeAt(0) < 128 ? 1 : 3;
   return { withSpaces: chars.length, withoutSpaces: chars.filter((c) => !/\s/.test(c)).length, neisBytes: bytes };
 }
 
@@ -99,3 +99,33 @@ export function similarity(a: string, b: string): number {
 }
 
 export function truncate(s: string, n: number): string { const cs = Array.from(s); return cs.length > n ? cs.slice(0, n - 1).join("") + "…" : s; }
+
+/** 단위에 맞는 길이 (bytes = NEIS 바이트) */
+export function lengthIn(text: string, mode: "withSpaces" | "withoutSpaces" | "bytes"): number {
+  const c = countChars(text);
+  return mode === "bytes" ? c.neisBytes : mode === "withSpaces" ? c.withSpaces : c.withoutSpaces;
+}
+
+/** 목표 구간: 한도 × band (기본 96~100%). 한도 초과는 금지. */
+export function lengthWindow(limit: number, band: [number, number] = [0.96, 1.0]): { min: number; max: number } {
+  const max = Math.floor(limit * Math.min(1, band[1]));
+  return { min: Math.min(max, Math.ceil(limit * band[0])), max };
+}
+
+export function unitLabel(mode: "withSpaces" | "withoutSpaces" | "bytes"): string {
+  return mode === "bytes" ? "B" : "자";
+}
+
+export function modeLabel(mode: "withSpaces" | "withoutSpaces" | "bytes"): string {
+  return mode === "bytes" ? "NEIS 바이트" : mode === "withSpaces" ? "공백 포함" : "공백 제외";
+}
+
+/** 표시용: "1,452 / 1,500 B · 약 484자" (바이트) 또는 "484 / 500자" */
+export function formatLength(text: string, limit: number, mode: "withSpaces" | "withoutSpaces" | "bytes"): string {
+  const n = (x: number) => x.toLocaleString("ko-KR");
+  if (mode === "bytes") return `${n(lengthIn(text, "bytes"))} / ${n(limit)} B · 약 ${n(countChars(text).withSpaces)}자`;
+  return `${n(lengthIn(text, mode))} / ${n(limit)}자`;
+}
+
+/** 바이트 한도를 대략 글자수로 (한글 위주 문장 기준) */
+export function approxCharsForBytes(bytes: number): number { return Math.round(bytes / 2.75); }

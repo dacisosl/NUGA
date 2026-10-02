@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ISSUE_LABEL, buildDraftRequest, countChars, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
+  ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
   type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
 } from "@nuga/core";
 import { ClassTabs, TopBar, useClassStudents } from "../App";
-import { catCounts, draftOf, fillLesson, isLowRecord, perfsOf, recordsOf, studentsOf, useStore } from "../store";
+import { achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
 import { aiReady, generateDraft, labelDraft } from "../lib/ai";
 import { pickFile } from "../lib/platform";
@@ -27,31 +27,27 @@ function useDraftReview(student: Student | null, text: string, sentences: DraftS
   return useMemo(() => {
     if (!student) return null;
     const others = doc.drafts.filter((d) => d.class === student.class && d.no !== student.no && d.text).map((d) => ({ text: d.text, label: `${d.no}번` }));
-    return reviewText(text, sentences, {
-      target: targetOverride || doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, level: student.level,
-      recordCount: recordsOf(doc, student.class, student.no).filter((r) => r.status !== "skipped").length,
-      lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: student.name,
-    });
+    return reviewText(text, sentences, reviewCtxOf(doc, student, targetOverride || limitOf(doc), recordsOf(doc, student.class, student.no).filter((r) => r.status !== "skipped").length, others));
   }, [doc, student?.class, student?.no, text, sentences, targetOverride]);
 }
 
 async function runGenerate(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined) {
   const { doc } = useStore.getState();
   const req = buildDraftRequest({
-    level: student.level, targetLength: w.target || doc.settings.targetLength["세특"] || 500, lengthMode: doc.settings.lengthMode, subject: doc.settings.school.subject,
+    achievement: achievementOf(doc, student).value, targetLength: w.target || limitOf(doc), lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand,
+    styleGuide: schoolStyle(doc.settings.schoolLevel).styleGuide, subject: doc.settings.school.subject,
     school: doc.settings.school,
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
   });
-  return generateDraft(req, doc.settings.ai, { guide: doc.settings.draftPrompt });
+  return generateDraft(req, doc.settings.ai, { guide: guideOf(doc) });
 }
 
 function makeDraft(student: Student, w: Working, review: ReturnType<typeof reviewText>, prev?: Draft): Draft {
   const { doc } = useStore.getState();
-  const cc = countChars(w.text);
   return {
     id: prev?.id || uuid(), class: student.class, no: student.no, field: "세특", text: w.text,
-    length: doc.settings.lengthMode === "withSpaces" ? cc.withSpaces : cc.withoutSpaces,
+    length: lengthOfText(doc, w.text),
     sentences: w.sentences, evidence: [...new Set(w.sentences.flatMap((s) => s.evidence))], status: "saved", targetLength: w.target,
     review: { result: review.result, issues: review.issues, at: nowIso() }, history: w.history, updatedAt: nowIso(),
   };
@@ -67,7 +63,7 @@ export function DraftPage() {
   const exportExcel = async () => {
     const sheets = Array.from(new Set(doc.students.map((s) => s.class))).sort().map((c) => ({
       name: c, widths: [8, 10, 6, 10, 90, 8, 10],
-      rows: studentsOf(doc, c).map((s) => { const d = draftOf(doc, c, s.no); return { 번호: s.no, 이름: s.name, 수준: s.level, 누가기록: recordsOf(doc, c, s.no).length, 세특: d?.text || "", 글자수: d?.length || 0, 상태: d ? "완료" : "대기" }; }),
+      rows: studentsOf(doc, c).map((s) => { const d = draftOf(doc, c, s.no); return { 번호: s.no, 이름: s.name, 누가기록: recordsOf(doc, c, s.no).length, 세특: d?.text || "", 글자수: d?.length || 0, 상태: d ? "완료" : "대기" }; }),
     }));
     if (await exportSheets(`세특초안-${nowIso().slice(0, 10)}.xlsx`, sheets)) toast({ text: "엑셀 내보내기 완료" });
   };
@@ -110,9 +106,10 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
   // 학생이 바뀌는 렌더에서는 w 가 아직 이전 학생 것이므로 주인이 같을 때만 기록한다
   useEffect(() => { if (student && w.owner === keyOf(student)) workingCache.set(w.owner, w); }, [w, student]);
 
-  const target = w.target || doc.settings.targetLength["세특"] || 500;
+  const target = w.target || limitOf(doc);
   const review = useDraftReview(student, w.text, w.sentences.length ? w.sentences : null, target);
-  const len = doc.settings.lengthMode === "withSpaces" ? countChars(w.text).withSpaces : countChars(w.text).withoutSpaces;
+  const len = lengthOfText(doc, w.text);
+  const chars = countChars(w.text).withSpaces;
   const toggle = (id: string) => setChecked((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const generate = async (instruction?: string) => {
@@ -139,12 +136,12 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     saveDraft(makeDraft(student, w, review, saved));
     workingCache.set(keyOf(student), { ...w, dirty: false, owner: keyOf(student) });
     setW((x) => ({ ...x, dirty: false }));
-    toast({ text: `${student.name} 초안 저장 · ${len}자` });
+    toast({ text: `${student.name} 초안 저장 · ${len.toLocaleString("ko-KR")}${unitOf(doc)}` });
   };
   /** 바로 저장했으면 true, 확인이 필요하면(수준 A·미달) false */
   const save = (): boolean => {
     if (!student || !review) return false;
-    if (student.level === "A" && review.issues.some((i) => i.kind === "levelA")) { setConfirmA(true); return false; }
+    if (review.issues.some((i) => i.kind === "levelA")) { setConfirmA(true); return false; }
     doSave(); return true;
   };
   const onTextEdit = (t: string) => setW((x) => ({ ...x, text: t, sentences: resplit(x.sentences, t), dirty: true }));
@@ -164,7 +161,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     finally { setLabeling(false); }
   };
 
-  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling };
+  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling };
 }
 
 const SUGGESTIONS = ["체크한 기록으로 세특 만들어줘", "협동 부분 줄이고 질문 쪽을 강조해줘", "더 간결하게 줄여줘", "마지막 문장 다시 써줘"];
@@ -185,7 +182,7 @@ function Individual() {
   const [addPerf, setAddPerf] = useState(false);
   const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
-  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
+  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
   const aiOn = aiReady(doc.settings.ai);
@@ -219,7 +216,7 @@ function Individual() {
             return (
               <button key={s.no} data-stu={s.no} className={`stu ${s.no === student.no ? "active" : ""}`} onClick={() => select({ class: s.class, no: s.no })}>
                 <span className="no num">{s.no}</span><span className="n"><StudentTag student={s} size="sm" /></span>
-                {cache?.dirty ? <span className="dot" style={{ background: "var(--accent)" }} title="저장 안 됨" /> : d?.text ? <span style={{ color: "var(--accent)" }}>✓</span> : s.level === "A" && low ? <span title="A · 기록 부족" style={{ color: "var(--warn)" }}><Icon name="warn" size={14} /></span> : null}
+                {cache?.dirty ? <span className="dot" style={{ background: "var(--accent)" }} title="저장 안 됨" /> : d?.text ? <span style={{ color: "var(--accent)" }}>✓</span> : (achievementOf(doc, s).value ?? 0) >= 80 && low ? <span title="도달 정도 높음 · 기록 부족" style={{ color: "var(--warn)" }}><Icon name="warn" size={14} /></span> : null}
               </button>
             );
           })}
@@ -264,8 +261,8 @@ function Individual() {
             {expanded && <DragHandle onDrag={(dy) => setDockH((h) => Math.max(220, Math.min(window.innerHeight - 200, h - dy)))} />}
             <div className="bar">
               <button className="btn ghost sm" onClick={() => setExpanded(!expanded)}>{expanded ? "접기" : "펼치기"}</button>
-              <LenBar len={len} target={target} mode={doc.settings.lengthMode} />
-              <span className="flex small muted" title="이 학생의 목표 글자수 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(doc.settings.targetLength["세특"] || 500)} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />자</span>
+              <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
+              <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
               {review && w.text && <StatusChip result={review.result} />}
               {view.highlight && w.text && <><SpanRatioBar text={w.text} sentences={w.sentences} /><SpanLegend /></>}
               {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
@@ -316,7 +313,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
   const student = students.find((s) => s.no === no) || null;
   const idx = students.findIndex((s) => s.no === no);
   const ws = useDraftWorkspace(student);
-  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
+  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
   const aiOn = aiReady(doc.settings.ai);
@@ -370,8 +367,8 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
       <div className="dm-body">
         <div className="dm-left">
           <div className="flex dm-bar">
-            <LenBar len={len} target={target} mode={doc.settings.lengthMode} />
-            <span className="flex small muted" title="이 학생의 목표 글자수 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(doc.settings.targetLength["세특"] || 500)} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />자</span>
+            <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
+            <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
             {review && w.text && <StatusChip result={review.result} />}
             {view.highlight && w.text && <SpanRatioBar text={w.text} sentences={w.sentences} />}
             <span className="grow" />
@@ -588,7 +585,7 @@ function Batch() {
     </button>
   );
   const stopRef = useRef(false);
-  const target = doc.settings.targetLength["세특"] || 500;
+  const target = limitOf(doc);
 
   useEffect(() => { setSel(new Set()); setState({}); }, [cls]);
 
@@ -604,7 +601,7 @@ function Batch() {
       const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "local" ? "규칙 기반 생성" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
       const others = d.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
-      const review = reviewText(w.text, w.sentences, { target, lengthMode: d.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: d.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: d.settings.similarityThreshold, studentName: s.name });
+      const review = reviewText(w.text, w.sentences, reviewCtxOf(d, s, target, recs.length, others));
       saveDraft(makeDraft(s, w, review, prev));
       workingCache.delete(keyOf(s));
       setState((x) => ({ ...x, [s.no]: { st: "done" } }));
@@ -655,7 +652,7 @@ function Batch() {
                   <td className={fold.recs ? "folded-cell" : ""} title={fold.recs ? `누가기록 ${recs.length}건` : undefined}>{fold.recs ? <span className="num small">{recs.length}</span> : <span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span>}</td>
                   <td className={fold.perfs ? "folded-cell" : ""} title={fold.perfs ? `PDF기록 ${perfs.length}건` : undefined}>{fold.perfs ? <span className="num small">{perfs.length || "–"}</span> : perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
                   <td className="draft-td" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, { target: d.targetLength || target, lengthMode: doc.settings.lengthMode, level: s.level, recordCount: recs.length, lowRecordThreshold: doc.settings.lowRecordThreshold, otherDrafts: others, similarityThreshold: doc.settings.similarityThreshold, studentName: s.name }); saveDraft(makeDraft(s, w, review, d)); }} />
+                    <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, reviewCtxOf(doc, s, d.targetLength || target, recs.length, others)); saveDraft(makeDraft(s, w, review, d)); }} />
                   </td>
                   <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} /> : <span className="muted">—</span>}</td>
                   <td>

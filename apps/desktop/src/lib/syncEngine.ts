@@ -1,4 +1,4 @@
-import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, type NugaRecord, type SyncMessage } from "@nuga/core";
+import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, routeRecordArea, type NugaRecord, type SyncMessage } from "@nuga/core";
 import { readAreaDoc, useStore, writeAreaDoc } from "../store";
 import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
@@ -144,14 +144,16 @@ class SyncEngine {
   private async apply(incoming: NugaRecord[], tombs: { id: string; deletedAt: string }[]) {
     if (!incoming.length && !tombs.length) return;
     const st = useStore.getState();
-    // 반이 속한 영역으로 라우팅: 현재 영역 우선, 없으면 그 반을 가진 다른 영역, 그래도 없으면 현재 영역
+    // 영역 배정: 기록 시각의 시간표 칸 → 같은 날 직전 수업 → 반 이름 → 현재 영역 (core routeRecordArea)
     const docs = await this.allDocs();
-    const has = (d: NugaDoc, cls: string) => d.settings.classes.some((c) => c.class === cls) || d.students.some((s) => s.class === cls);
+    const routes = docs.map(({ id, doc: d }) => ({
+      id, timetable: d.settings.timetable, periods: d.settings.periods,
+      classes: [...new Set([...d.settings.classes.map((c) => c.class), ...d.students.map((s) => s.class)])],
+    }));
     const mine: NugaRecord[] = []; const others = new Map<string, NugaRecord[]>();
     for (const r of incoming) {
-      if (has(st.doc, r.class)) { mine.push(r); continue; }
-      const t = docs.find((x) => x.id !== st.areaId && has(x.doc, r.class));
-      if (t) others.set(t.id, [...(others.get(t.id) || []), r]); else mine.push(r);
+      const id = routeRecordArea(routes, r, st.areaId);
+      if (id === st.areaId) mine.push(r); else others.set(id, [...(others.get(id) || []), r]);
     }
     for (const [id, recs] of others) {
       const d = docs.find((x) => x.id === id)!.doc;
