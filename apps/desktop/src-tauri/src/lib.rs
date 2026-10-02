@@ -1,3 +1,5 @@
+mod llm;
+
 /// API 키 보안 저장: Windows 자격 증명 관리자(macOS 키체인)에 둔다. 문서 JSON·백업에는 넣지 않는다.
 mod secrets {
   const SERVICE: &str = "kr.nuga.desktop";
@@ -35,7 +37,17 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_opener::init())
-    .invoke_handler(tauri::generate_handler![secrets::secret_get, secrets::secret_set])
+    .manage(llm::LlmState::default())
+    .invoke_handler(tauri::generate_handler![
+      secrets::secret_get,
+      secrets::secret_set,
+      llm::llm_status,
+      llm::llm_download,
+      llm::llm_cancel,
+      llm::llm_start,
+      llm::llm_stop,
+      llm::llm_models_dir
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -46,6 +58,11 @@ pub fn run() {
       }
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while building tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while building tauri application")
+    .run(|app, event| {
+      if let tauri::RunEvent::Exit = event {
+        llm::shutdown(app);
+      }
+    });
 }

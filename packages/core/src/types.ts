@@ -211,6 +211,8 @@ export interface AiSettings {
   models?: Partial<Record<AiProvider, string>>;
   /** 로컬 LLM(llama-server) 주소 */
   localUrl?: string;
+  /** 단계형 생성: auto = 로컬 LLM 일 때만, on = 항상, off = 한 번에 생성 */
+  pipeline?: "auto" | "on" | "off";
 }
 
 export interface Settings {

@@ -3,7 +3,7 @@
 **웹 데모(GitHub Pages):** https://dacisosl.github.io/NUGA/ · **저장소:** https://github.com/dacisosl/NUGA · 설치 파일·APK는 `v*` 태그를 푸시하면 Actions가 빌드해 Releases에 올린다.
 
 수업 중 워치·위젯으로 학생 행동을 10초 안에 기록하고, 수업 후 PC에서 1~2분 안에 보완하며, 학기 말에 그 기록을 근거로 세특 초안을 만들고 검토하는 앱.
-기획서: [누가_앱_제작_기획서.md](누가_앱_제작_기획서.md) · 프로토콜: [docs/PROTOCOL.md](docs/PROTOCOL.md) · 디자인 토큰: [docs/DESIGN.md](docs/DESIGN.md) · 기획서 대비 개선점: [docs/UPGRADES.md](docs/UPGRADES.md)
+**구동안내서: [docs/GUIDE.md](docs/GUIDE.md)** · 기획서: [누가_앱_제작_기획서.md](누가_앱_제작_기획서.md) · 프로토콜: [docs/PROTOCOL.md](docs/PROTOCOL.md) · 디자인 토큰: [docs/DESIGN.md](docs/DESIGN.md) · 기획서 대비 개선점: [docs/UPGRADES.md](docs/UPGRADES.md)
 
 ## 구성
 
@@ -25,7 +25,7 @@ npm run relay        # 릴레이 서버 http://localhost:8787  (같은 Wi-Fi 직
 npm test             # core 단위 테스트 + relay 통합 테스트
 ```
 
-첫 화면에서 **샘플 데이터로 둘러보기**를 누르면 화학Ⅰ · 2개 반 · 기록·수행평가가 채워진 상태로 모든 화면을 볼 수 있다.
+첫 화면에서 **데모 모드로 둘러보기**를 누르면 화학Ⅰ · 2개 반 · 한 학기 합성 기록 · 합성 모의 수업 스크립트 · 추천 카드와 기록 시뮬레이터로 모든 흐름을 볼 수 있다 (모두 합성 데이터).
 
 ### PC 앱을 네이티브(Tauri)로
 
@@ -64,16 +64,16 @@ gradlew.bat :wear:installDebug     # 갤럭시 워치 (Wear OS)
 - AI API 키는 Windows 자격 증명 관리자(웹 버전은 탭 세션)에 둔다. JSON 내보내기·백업에는 들어가지 않는다. 암호화 백업은 PBKDF2 + AES-GCM.
 - AI 제공자: Claude, Gemini, OpenRouter(데이터 수집 거부 옵션), 로컬 LLM(llama-server, 외부 전송 없음). 설정 → AI에서 연결 테스트.
 
-## 빌드 결과물과 검증 상태 (2026-09-30)
+## 빌드 결과물과 검증 상태 (2026-10-02, 0.4.x)
 
 | 항목 | 결과 |
 | --- | --- |
-| `packages/core` 단위 테스트 | 21개 통과 (암호화·페어링·글자수·어체·검토 규칙·로컬 초안·시간표·병합·가져오기) |
-| `apps/relay` 테스트 | 21개 통과 (API·TTL·롱폴링·속도 제한·SQLite) |
-| `android/shared` 테스트 | 25개 통과 (Kotlin 암호화·페어링·시간표 + **TS가 만든 봉투를 Kotlin이 복호화하는 교차 검증**) |
-| PC ↔ 폰 종단간 | 폰 시뮬레이터 → 릴레이 → PC 수신·알림·보완, PC 설정 → 폰 수신 확인 |
-| Windows 설치 파일 | `apps/desktop/src-tauri/target/release/bundle/nsis/Nuga_0.1.0_x64-setup.exe`, `…/msi/Nuga_0.1.0_x64_en-US.msi` |
-| 안드로이드 APK | `android/mobile/build/outputs/apk/debug/mobile-debug.apk`, `android/wear/build/outputs/apk/debug/wear-debug.apk` (컴파일 검증, 실기기 미실행) |
+| `packages/core` 단위 테스트 | 48개 통과 (암호화·페어링·NEIS 바이트·도달 정도·프리셋·검토·반영도·초안 프롬프트·단계형 생성·스크립트·추천·시간 정렬·영역 배정·제공자 요청) |
+| `apps/relay` 테스트 | 22개 통과 (API·TTL·롱폴링·속도 제한·SQLite·스크립트 크기) |
+| `android/shared` 테스트 | 29개 통과 (Kotlin 암호화·페어링·시간표 + **TS가 만든 봉투를 Kotlin이 복호화하는 교차 검증**) |
+| PC ↔ 폰 종단간 | 폰 시뮬레이터 → 릴레이 → PC 수신·알림·보완, 스크립트 분할 전송·수신 확인(transcriptAck), PC 설정(녹음 포함) → 폰 수신 |
+| Windows 설치 파일 | GitHub Releases `Nuga_<버전>_x64-setup.exe` · `.msi` (로컬 LLM 실행기 포함) |
+| 안드로이드 APK | `android/mobile/build/outputs/apk/debug/mobile-debug.apk`, `android/wear/build/outputs/apk/debug/wear-debug.apk` (Android 15 에뮬레이터에서 페어링·설정 수신·녹음 서비스 실행 확인, 실기기 미실행) |
 
 ## 라이선스
 MIT

@@ -22,7 +22,31 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
       - run: npm ci
+      # 로컬 LLM: llama.cpp 의 Windows CPU 빌드(llama-server.exe + DLL)를 설치 파일에 함께 넣는다.
+      # 받지 못하면 로컬 LLM 없이 빌드한다 (앱 데이터 폴더에 직접 넣어도 동작).
+      - name: Fetch llama.cpp (CPU, Windows x64)
+        id: llama
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dest = "apps/desktop/src-tauri/binaries/llama"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          gh release download --repo ggml-org/llama.cpp --pattern "llama-*-bin-win-cpu-x64.zip" --dir tmp-llama
+          $zip = Get-ChildItem tmp-llama -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath tmp-llama/x -Force
+          $exe = Get-ChildItem tmp-llama/x -Recurse -Filter llama-server.exe | Select-Object -First 1
+          Copy-Item $exe.FullName $dest
+          Get-ChildItem $exe.Directory.FullName -Filter *.dll | Copy-Item -Destination $dest
+          Copy-Item (Get-ChildItem tmp-llama/x -Recurse -Filter LICENSE* | Select-Object -First 1).FullName "$dest/LICENSE-llama.cpp.txt" -ErrorAction SilentlyContinue
+          Write-Output "llama.cpp: $($zip.Name)"; Get-ChildItem $dest | Format-Table Name, Length
+      - name: Build Tauri bundles (with local LLM)
+        if: steps.llama.outcome == 'success'
+        working-directory: apps/desktop
+        run: npx tauri build --config src-tauri/tauri.llama.conf.json
       - name: Build Tauri bundles
+        if: steps.llama.outcome != 'success'
         run: npm run tauri -- build
       - uses: actions/upload-artifact@v4
         with:

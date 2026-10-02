@@ -1,4 +1,5 @@
 import {
+  SLOT_JSON_SCHEMA, SLOT_SYSTEM_PROMPT, assembleSlots, parseSlotResponse, planSlots, slotUserPrompt,
   ACH_JSON_SCHEMA, ACH_SYSTEM_PROMPT, achUserPrompt, parseAchResponse, achievementFromSignals, anonymizeRecords,
   type NugaRecord, type Standard,
   SUGGEST_JSON_SCHEMA, SUGGEST_SYSTEM_PROMPT, parseSuggestResponse, ruleSuggestions, scrubTranscriptNames, suggestUserPrompt, topicKeywords,
@@ -15,6 +16,23 @@ export interface DraftProviderResult extends DraftResponse { provider: AiProvide
 export async function generateDraft(req: DraftRequest, ai: AiSettings, opts?: { guide?: string; signal?: AbortSignal }): Promise<DraftProviderResult> {
   const prov = providerFor(ai);
   if (!prov) return { ...generateLocalDraft(req), provider: "rules" };
+  const staged = ai.pipeline === "on" || ((ai.pipeline ?? "auto") === "auto" && prov.id === "local");
+  // 수정 요청(대화)은 한 번에 처리하고, 새로 만들 때만 단계형으로 쓴다
+  if (staged && !req.draft) {
+    const slots = planSlots(req);
+    if (slots.length) {
+      const texts: string[] = [];
+      for (const slot of slots) {
+        const t = await generateJson(prov, {
+          system: SLOT_SYSTEM_PROMPT, user: slotUserPrompt(slot, req, texts), schema: SLOT_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "sentence",
+          maxTokens: 512, signal: opts?.signal,
+        }, parseSlotResponse);
+        texts.push(t);
+      }
+      const out = assembleSlots(slots, texts, req);
+      return { ...out, provider: prov.id, model: `${prov.model} · 단계형 ${slots.length}문장` };
+    }
+  }
   const parsed = await generateJson(prov, {
     system: systemPrompt(opts?.guide), user: userPrompt(req), schema: DRAFT_JSON_SCHEMA as unknown as Record<string, unknown>, schemaName: "draft",
     maxTokens: 8192, signal: opts?.signal,

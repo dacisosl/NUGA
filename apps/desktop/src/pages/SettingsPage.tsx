@@ -17,6 +17,8 @@ import { hasKey, keyStoreLabel, onSecretsChange, setKey, setWebRemember, webReme
 import { isTauri } from "../lib/platform";
 import { syncEngine } from "../lib/syncEngine";
 import { RecordingSection } from "./RecordingSettings";
+import { ModelCompare } from "../components/ModelCompare";
+import { LocalLlmCard } from "../components/LocalLlm";
 import { StandardsSection } from "./StandardsSettings";
 
 /** 공통 설정: 모든 영역이 같은 값을 따른다 */
@@ -784,12 +786,20 @@ function AiSection() {
                 <button className="btn" onClick={runTest} disabled={test.busy}>{test.busy ? "확인 중…" : "연결 테스트"}</button>
                 {test.message && <span className="small" style={{ color: test.ok ? "var(--accent)" : "var(--warn)" }}>{test.ok ? "✓ " : "✕ "}{test.message}{test.ms ? ` · ${(test.ms / 1000).toFixed(1)}초` : ""}</span>}
               </div>
+              <div className="field"><label>생성 방식</label>
+                <span className="seg">
+                  {([["auto", "자동 (로컬 LLM은 단계형)"], ["on", "항상 단계형"], ["off", "한 번에"]] as const).map(([k, l]) => <button key={k} className={(ai.pipeline ?? "auto") === k ? "active" : ""} onClick={() => up({ pipeline: k })}>{l}</button>)}
+                </span>
+                <span className="muted small">단계형: 기록을 문장 슬롯에 나눠 한 문장씩 쓰고 이어 붙입니다. 작은 로컬 모델의 지시 준수가 좋아지지만 요청 횟수가 늘어납니다.</span>
+              </div>
               <div className="muted small">데이터가 가는 곳: {info.where}</div>
             </>
           )}
           <div className="flex"><button className="btn" onClick={showPreview}>전송 내용 미리보기</button><span className="muted small">반·번호·이름은 보내지 않습니다. 기록 내용, 수업 주제, 분량 한도, 표현 방향(도달 정도에 맞는 어휘)만 보냅니다.</span></div>
         </div>
       </div>
+      {ai.enabled && <LocalLlmCard />}
+      <ModelCompare />
       {preview !== null && <Modal title="AI에 전송되는 내용 (예시 학생)" onClose={() => setPreview(null)} width="wide"><pre className="small" style={{ whiteSpace: "pre-wrap", background: "var(--bg)", padding: 12, borderRadius: 8, maxHeight: "60vh", overflow: "auto" }}>{preview}</pre></Modal>}
     </>
   );

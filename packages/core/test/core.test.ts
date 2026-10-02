@@ -414,3 +414,22 @@ describe("achievement signals (AI 추정)", () => {
     expect(a.value).toBeGreaterThan(60); expect(achievementFromSignals([]).confidence).toBe("none");
   });
 });
+
+describe("pipeline (단계형 생성)", () => {
+  it("plans slots by length, balances categories, assembles within limit", async () => {
+    const { planSlots, slotUserPrompt, parseSlotResponse, assembleSlots, buildDraftRequest, makeSampleDoc } = await import("../src");
+    const doc = makeSampleDoc(5);
+    const s = doc.students.find((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.note).length >= 5)!;
+    const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no);
+    const req = buildDraftRequest({ achievement: 70, targetLength: 600, lengthMode: "bytes", subject: "화학Ⅰ", records: recs, performances: [], categories: doc.settings.categories, guide: { avoid: ["열심히"] } });
+    const slots = planSlots(req);
+    expect(slots.length).toBeGreaterThanOrEqual(2);
+    expect(slots.length).toBeLessThanOrEqual(req.records.filter((r) => r.text).length);
+    const p = slotUserPrompt(slots[0], req, []);
+    expect(p).toContain("[이 문장에 쓸 기록]"); expect(p).toContain("열심히"); expect(p).not.toContain(s.name);
+    expect(parseSlotResponse('{"text":"개념을 설명함"}')).toBe("개념을 설명함.");
+    const out = assembleSlots(slots, slots.map(() => "가나다라마바사아자차카타파하 가나다라마바사아자차카타파하 개념을 적용하여 설명함."), req);
+    expect(new TextEncoder().encode(out.text).length).toBeLessThanOrEqual(600 + 50);
+    expect(out.sentences.every((x) => x.evidence.length > 0)).toBe(true);
+  });
+});

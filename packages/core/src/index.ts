@@ -17,3 +17,4 @@ export * from "./transcript";
 export * from "./suggest";
 export * from "./demo";
 export * from "./adherence";
+export * from "./pipeline";
