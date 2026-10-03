@@ -81,41 +81,26 @@ function AchievementPopover({ student, anchor, onClose }: { student: TagStudent;
 }
 
 /**
- * 길게 누르기(0.5초, 마우스·터치). 길게 누른 뒤의 클릭은 막는다 — 번호 버튼을 길게 눌러도 저장되지 않게.
+ * 오른쪽 클릭(마우스)으로 여는 메뉴. 터치 기기에서는 길게 누르면 브라우저가 같은 contextmenu 를 보낸다.
  */
-export function useLongPress(onLong: (el: HTMLElement) => void, ms = 500) {
-  const timer = useRef<number | undefined>(undefined);
-  const fired = useRef(false);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = undefined; } start.current = null; };
-  useEffect(() => cancel, []);
+export function useRightClick(onOpen: (el: HTMLElement) => void) {
   return {
-    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-      if (e.button !== 0) return;
-      fired.current = false;
-      const el = e.currentTarget;
-      start.current = { x: e.clientX, y: e.clientY };
-      timer.current = window.setTimeout(() => { timer.current = undefined; fired.current = true; navigator.vibrate?.(15); onLong(el); }, ms);
-    },
-    onPointerMove: (e: React.PointerEvent<HTMLElement>) => { if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 8) cancel(); },
-    onPointerUp: cancel, onPointerLeave: cancel, onPointerCancel: cancel,
-    onClickCapture: (e: React.MouseEvent) => { if (fired.current) { fired.current = false; e.preventDefault(); e.stopPropagation(); } },
-    onContextMenu: (e: React.MouseEvent) => { if (fired.current || timer.current) e.preventDefault(); },
+    onContextMenu: (e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); e.stopPropagation(); onOpen(e.currentTarget); },
   };
 }
 
-/** 학생을 길게 누르면 도달 정도 슬라이더가 뜬다. bind 를 대상 요소에 펼치고 popover 를 함께 그린다. */
+/** 학생을 오른쪽 클릭하면 도달 정도 슬라이더가 뜬다. bind 를 대상 요소에 펼치고 popover 를 함께 그린다. */
 export function useAchievementPress(student: TagStudent | undefined) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const bind = useLongPress((el) => { if (student) setAnchor(el.getBoundingClientRect()); });
+  const bind = useRightClick((el) => { if (student) setAnchor(el.getBoundingClientRect()); });
   const popover = anchor && student ? <AchievementPopover student={student} anchor={anchor} onClose={() => setAnchor(null)} /> : null;
   return { bind, popover };
 }
 
-/** 길게 누르면 성취도 조절이 되는 학생 영역 (오늘 기록·알림 모달의 번호·이름) */
+/** 오른쪽 클릭으로 성취도 조절이 되는 학생 영역 (오늘 기록·알림 모달의 번호·이름) */
 export function AchPress({ student, className, children, ...rest }: { student: TagStudent | undefined; className?: string; children: React.ReactNode } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children">) {
   const { bind, popover } = useAchievementPress(student);
-  const tip = student ? "길게 누르면 성취도 조절" : undefined;
+  const tip = student ? "오른쪽 클릭: 성취도 조절" : undefined;
   if (rest.onClick) return <><button type="button" className={`lp ${className || ""}`} title={tip} {...rest} {...bind}>{children}</button>{popover}</>;
   return <><span className={`lp ${className || ""}`} title={tip} {...bind}>{children}</span>{popover}</>;
 }
@@ -141,9 +126,9 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
   };
   const name = student.name || `${student.no}번`;
   const lowConf = !ach.edited && ach.confidence === "low";
-  const press = useLongPress((el) => { if (!anchor) setAnchor(el.getBoundingClientRect()); });
+  const press = useRightClick((el) => setAnchor(el.getBoundingClientRect()));
   return (
-    <span className={`stag lp g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title ?? "길게 누르면 성취도 조절"} {...press}>
+    <span className={`stag lp g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title ?? "오른쪽 클릭: 성취도 조절"} {...press}>
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}

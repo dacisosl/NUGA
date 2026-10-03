@@ -182,6 +182,7 @@ function SuggestItem({ s, tr, doc, open: open0 }: { s: Suggestion; tr: Transcrip
   };
   return (
     <div className={`ib-item sg ${open ? "open" : ""} ${s.status === "later" ? "later" : ""}`}>
+      <div className="ib-sg-main">
       <div className="ib-meta" onClick={() => setOpen(!open)}>
         <span className="num">{hms(at)}</span>
         <span className="chip outline">{s.criteria}</span>
@@ -201,15 +202,23 @@ function SuggestItem({ s, tr, doc, open: open0 }: { s: Suggestion; tr: Transcrip
           <button className="btn ghost sm" onClick={() => setCtx(!ctx)}>{ctx ? "문맥 접기" : "앞뒤 문맥"}</button>
         </div>
         <input className="ib-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="관찰 내용" />
-        <div className="ib-nums" title="누구의 발언인지 떠올려 번호를 누르세요 · 길게 누르면 성취도 조절">
-          {students.length === 0 ? <span className="muted small">명단이 없습니다</span> : students.map((st) => <AchPress key={st.no} student={st} onClick={() => save(st.no)}>{st.no}</AchPress>)}
-        </div>
       </>}
       <div className="ib-acts">
         {!open && <button className="btn sm primary" onClick={() => setOpen(true)}>학생 지정</button>}
         {s.status !== "later" && <button className="btn sm" onClick={() => setStatus(tr.id, s.id, "later")}>나중에</button>}
         <button className="btn sm ghost" onClick={() => setStatus(tr.id, s.id, "dismissed")}>무시</button>
       </div>
+      </div>
+      {open && (
+        <div className="ib-roster" title="누구의 발언인지 떠올려 학생을 누르세요 · 오른쪽 클릭: 성취도 조절">
+          <div className="ib-roster-h">{tr.class} 명단 <span className="muted">누르면 저장</span></div>
+          <div className="ib-roster-list">
+            {students.length === 0 ? <span className="muted small">명단이 없습니다</span> : students.map((st) => (
+              <AchPress key={st.no} student={st} onClick={() => save(st.no)}><span className="num">{st.no}</span>{st.name || `${st.no}번`}</AchPress>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
