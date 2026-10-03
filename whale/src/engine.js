@@ -95,7 +95,8 @@ function buildDemoState() {
     }
     // 오늘 수업 중 기록 3건 (보완 대기)
     const u = DEMO_UNITS[2];
-    const today = [[12, 1, '10:05:02', 'whalebook'], [5, 0, '10:12:08', 'watch'], [18, 2, '10:21:05', 'phone']];
+    // 웨일북은 카테고리+번호, 워치·폰은 카테고리+시각만 (번호는 정리할 때 교사가 고른다)
+    const today = [[12, 1, '10:05:02', 'whalebook'], [null, 0, '10:12:08', 'watch'], [null, 2, '10:21:05', 'phone']];
     for (const [no, cat, t, device] of today) {
       const [hh, mm, ss] = t.split(':').map(Number);
       s.records.push({ id: uid(), class: '2-3', no, cat, time: dateAt(DEMO_DAY, hh * 60 + mm, ss).toISOString(), lessonKey: DEMO_KEY, unit: u.unit, std: [u.standards[0]], note: '', noteSource: 'typed', source: 'direct', device, status: 'pending' });

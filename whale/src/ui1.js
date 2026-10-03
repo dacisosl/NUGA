@@ -27,7 +27,7 @@ function render() {
       h('div', { class: 'logo' }, h('i', null, h('b'), h('b'), h('b')), h('span', { class: 'name' }, '누가')),
       h('div', { class: 'status', id: 'status' }, statusLine()),
       S.mode === 'demo' ? h('span', { class: 'demo-tag' }, '합성 데이터 · 실제 학생 정보 없음') : null),
-    h('nav', { class: 'nav', 'aria-label': '메뉴' }, VIEWS.map((v) => h('button', { class: UI.view === v.id ? 'active' : '', onclick: () => go(v.id), 'aria-current': UI.view === v.id ? 'page' : null },
+    h('nav', { class: 'nav', 'aria-label': '메뉴' }, VIEWS.filter((v) => S.sync.role !== 'satellite' || v.id === 'lesson' || v.id === 'settings').map((v) => h('button', { class: UI.view === v.id ? 'active' : '', onclick: () => go(v.id), 'aria-current': UI.view === v.id ? 'page' : null },
       icon(v.icon), h('span', null, v.label), v.id === 'review' && pending ? h('span', { class: 'badge' }, pending) : null))),
     main));
   main.scrollTop = scroll;
@@ -92,7 +92,8 @@ function demoEndLesson() {
   Popup.hold = true; // 전환하는 동안 팝업 보류
   tick();
   toast('수업이 끝났어요. 녹음을 정리하는 중…');
-  setTimeout(() => { Popup.hold = false; toast('자리에 앉았어요 (데모: 입력 감지)'); Popup.check('input'); }, 1600);
+  // 데모는 "자리에 앉음"을 연출하므로 화면이 가려져 있어도 정리 창을 바로 연다
+  setTimeout(() => { Popup.hold = false; toast('자리에 앉았어요 (데모: 입력 감지)'); const q = reviewQueue()[0]; if (q && !Popup.key) Popup.show(q.key); }, 1600);
 }
 function endDemo() {
   Popup.close(); UI.watch = null; switchMode('real'); UI.view = 'lesson'; render();
@@ -123,6 +124,7 @@ function quickRecord(no) {
 
 /* ---------- 수업 화면 ---------- */
 function viewLesson() {
+  if (S.sync.role === 'satellite') return viewSatellite();
   const t = now(); const day = ymd(t);
   const cur = currentLesson(t);
   const why = skipReason(day);
@@ -167,9 +169,28 @@ function viewLesson() {
       today.length ? h('div', { class: 'rec-list' }, today.map(recRow)) : h('div', { class: 'empty' }, '아직 없어요. 카테고리를 고르고 번호를 누르세요.')));
 }
 const DEVICE = { whalebook: '웨일북', phone: '폰', watch: '워치' };
+/** 폰(보조 기기) 화면: 카테고리만 누른다. 번호·이름은 이 기기에 없고 보내지도 않는다 */
+function viewSatellite() {
+  const t = now(); const day = ymd(t); const cur = lessonAtAny(t);
+  const mine = S.records.filter((r) => recDay(r) === day).sort((a, b) => b.time.localeCompare(a.time)).slice(0, 10);
+  const tap = (i) => {
+    const rec = addRecord(null, null, i, { device: 'phone', status: 'pending' }); UI.lastRec = rec.id;
+    toast(`${S.settings.categories[i]} · ${hm(rec.time)} 보냄 대기`, { action: { label: '되돌리기', fn: () => undoRecord(rec.id) } });
+    render(); setTimeout(syncLoop, 300);
+  };
+  return h('div', { class: 'page' },
+    h('div', { class: 'card' },
+      h('div', { class: 'big', style: { fontSize: '20px', fontWeight: 700 } }, cur ? `${perLabel(cur.period)} · ${cur.class}반` : '수업 시간이 아니어도 기록할 수 있어요'),
+      h('div', { class: 'small muted' }, '카테고리만 누르세요. 누구였는지는 PC 정리 창에서 번호를 골라요.'),
+      h('div', { class: 'cats mt12' }, S.settings.categories.map((name, i) => h('button', { class: `cat c${i}`, style: { minHeight: '96px', fontSize: '20px' }, onclick: () => tap(i) }, h('kbd', null, i + 1), name)))),
+    h('div', { class: 'card' }, h('h2', null, '오늘 보낸 기록'),
+      mine.length ? h('div', { class: 'rec-list' }, mine.map((r) => h('div', { class: 'rec-item' }, h('span', { class: 't num' }, hm(r.time)), h('span', { class: `chip c${r.cat}` }, S.settings.categories[r.cat]),
+        h('span', { class: 'note-t' }, S.sync.outbox.includes(r.id) ? '보내는 중' : 'PC로 보냄')))) : h('div', { class: 'empty' }, '아직 없어요.'),
+      h('div', { class: 'xs muted mt8' }, '이 기기는 카테고리와 시각만 암호화해 보내요. 반·번호·이름은 보내지 않아요.')));
+}
 function recRow(r) {
   return h('div', { class: 'rec-item' },
-    h('span', { class: 't num' }, hm(r.time)), h('span', { class: 'who' }, studentLabel(r.class, r.no)),
+    h('span', { class: 't num' }, hm(r.time)), h('span', { class: 'who' }, r.no == null ? h('span', { class: 'chip warn' }, '번호?') : studentLabel(r.class, r.no)),
     h('span', { class: `chip c${r.cat}` }, S.settings.categories[r.cat]),
     h('span', { class: 'note-t' }, r.note || (r.status === 'pending' ? '정리 대기' : '')),
     h('span', { class: 'xs muted' }, DEVICE[r.device] || ''),
@@ -198,6 +219,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   // 키보드: 카테고리 숫자(1~4) → 번호 → Enter. 저장하면 다시 카테고리부터
+  if (S.sync.role === 'satellite') { if (/^[1-4]$/.test(e.key)) { const rec = addRecord(null, null, Number(e.key) - 1, { device: 'phone' }); UI.lastRec = rec.id; toast(`${S.settings.categories[rec.cat]} 보냄 대기`); render(); } return; }
   if (/^[0-9]$/.test(e.key)) {
     if (UI.kb !== 'num') { if (/^[1-4]$/.test(e.key)) { UI.cat = Number(e.key) - 1; UI.kb = 'num'; UI.typed = ''; render(); } return; }
     UI.typed = (UI.typed + e.key).slice(-2); render(); return;
@@ -396,13 +418,19 @@ const Popup = {
       const c = cands[st.picks[r.id]];
       if (st.notes[r.id] === undefined && c) st.notes[r.id] = c.seg.sum || '';
       const done = st.done[r.id]; const skip = st.skip[r.id];
+      const noPick = r.no == null && !done && !skip
+        ? h('div', { class: 'col gap4' }, h('div', { class: 'xs', style: { color: 'var(--warn)', fontWeight: 600 } }, `${DEVICE[r.device] || ''}에서 온 기록이에요. 누구였는지 번호를 골라 주세요.`),
+          h('div', { class: 'rv-pick' }, (classOf(lesson.class)?.students || []).map((s) => h('button', { onclick: () => { r.no = s.no; save(); this.mount(); } }, s.no))))
+        : null;
       return h('div', { class: `rv-rec ${done || skip ? 'done' : ''}` },
         h('div', { class: 'row wrap' }, h('b', null, studentLabel(r.class, r.no)), h('span', { class: `chip c${r.cat}` }, S.settings.categories[r.cat]),
           h('span', { class: 'xs muted' }, `${hms(r.time)} · ${DEVICE[r.device] || ''}`), h('span', { class: 'grow' }),
+          r.no != null && r.device !== 'whalebook' && !done && !skip ? h('button', { class: 'btn xs ghost', onclick: () => { r.no = null; save(); this.mount(); } }, '번호 다시') : null,
           skip ? h('span', { class: 'xs muted' }, '건너뜀') : done ? h('span', { class: 'xs muted' }, '저장됨') : null),
+        noPick,
         c ? h('div', { class: 'rv-quote' }, h('span', { class: 'meta' }, `${c.seg.t0} · ${c.seg.speaker}`), `“${c.seg.text}”`)
           : h('div', { class: 'xs muted' }, ls.processing ? '녹음을 정리하는 중이에요. 끝나면 이 시각의 발언이 여기에 골라져요.' : tr ? '이 시각 앞뒤 발언 후보가 없어요. 한 줄로 적어 주세요.' : '녹음이 없어요. 한 줄로 적어 주세요.'),
-        done || skip ? null : h('input', { type: 'text', 'data-rid': r.id, value: st.notes[r.id] || '', placeholder: '한 줄 보완 (예: 촉매와 평형 위치의 관계를 질문함)', 'aria-label': `${r.no}번 보완` }),
+        done || skip ? null : h('input', { type: 'text', 'data-rid': r.id, value: st.notes[r.id] || '', placeholder: '한 줄 보완 (예: 촉매와 평형 위치의 관계를 질문함)', 'aria-label': `${studentLabel(r.class, r.no)} 보완` }),
         done || skip ? null : h('div', { class: 'row wrap gap4' },
           h('div', { class: 'rv-chips' }, chipWords(r.cat).map((w) => h('button', { onclick: (e) => { const i = e.target.closest('.rv-rec').querySelector('input'); i.value = (i.value.trim() ? i.value.trim() + ' ' : '') + w; st.notes[r.id] = i.value; i.focus(); } }, w))),
           h('span', { class: 'grow' }),
@@ -443,15 +471,17 @@ const Popup = {
   saveAll() {
     const lesson = lessonByKey(this.key); const tr = S.transcripts[this.key]; let n = 0;
     $('#rv')?.querySelectorAll('input[data-rid]').forEach((i) => { this.st.notes[i.dataset.rid] = i.value; });
+    let unmatched = 0;
     for (const r of S.records.filter((x) => x.lessonKey === this.key && x.status === 'pending')) {
       if (this.st.skip[r.id]) { r.status = 'skipped'; continue; }
+      if (r.no == null) { unmatched++; continue; } // 번호를 고르기 전에는 저장하지 않는다
       const cands = candidatesFor(r, tr, lesson); const c = cands[this.st.picks[r.id]];
       const note = (this.st.notes[r.id] || '').trim() || (c ? c.seg.sum : '');
       r.note = note; r.noteSource = c && note === (c.seg.sum || '') ? 'transcript' : 'typed';
       r.transcriptRef = c ? { transcriptId: tr.id, segId: c.seg.id } : null;
       r.status = 'confirmed'; this.st.done[r.id] = true; n++;
     }
-    save(); toast(`${n}건 저장했어요`); this.mount(); renderStatus();
+    save(); toast(`${n}건 저장했어요${unmatched ? ` · 번호를 고르지 않은 ${unmatched}건은 남겨 뒀어요` : ''}`); this.mount(); renderStatus();
   },
   assign(g, no) {
     const lesson = lessonByKey(this.key); const tr = S.transcripts[this.key];
@@ -471,11 +501,12 @@ const Popup = {
     const key = this.key; const lesson = lessonByKey(key);
     const left = S.records.filter((r) => r.lessonKey === key && r.status === 'pending').length;
     if (left) { this.saveAll(); }
+    const unmatched = S.records.filter((r) => r.lessonKey === key && r.status === 'pending' && r.no == null).length;
     const st = S.lessons[key] || (S.lessons[key] = {}); st.popupDone = true; save();
     const sug = suggestionsFor(key).length;
     const low = (classOf(lesson.class)?.students || []).filter((s) => S.records.filter((r) => r.class === lesson.class && r.no === s.no && r.status !== 'skipped').length <= 1).length;
     this.close(); render();
-    toast([sug ? `남은 추천 ${sug}개는 정리 → 추천함에 있어요.` : '정리를 마쳤어요.', low ? `${lesson.class}반 기록 1건 이하 학생 ${low}명` : ''].filter(Boolean).join(' '));
+    toast([sug ? `남은 추천 ${sug}개는 정리 → 추천함에 있어요.` : '정리를 마쳤어요.', unmatched ? `번호를 고르지 않은 기록 ${unmatched}건은 정리 → 보완 대기에 있어요.` : '', low ? `${lesson.class}반 기록 1건 이하 학생 ${low}명` : ''].filter(Boolean).join(' '));
   },
 };
 function chipWords(cat) {
@@ -498,8 +529,11 @@ function renderWatchSim() {
   const size = classOf(cls)?.students.length || 30;
   const colors = ['#4C7BFF', '#1FA89E', '#9B6BD6', '#5C606B'];
   const body = w.step === 'cat'
-    ? [h('div', { class: 'wtop' }, cls ? `${cls}반 ${cur ? perLabel(cur.period) : ''}` : '반 없음'),
-      h('div', { class: 'wcats' }, S.settings.categories.map((c, i) => h('button', { style: { background: colors[i] }, onclick: () => { w.cat = i; w.step = 'num'; w.no = w.no || 1; render(); } }, c)))]
+    ? [h('div', { class: 'wtop' }, '카테고리만 누르기'),
+      h('div', { class: 'wcats' }, S.settings.categories.map((c, i) => h('button', { style: { background: colors[i] }, onclick: () => {
+        const t = now().toISOString(); toast(`워치: ${c} 저장 (카테고리·시각만)`);
+        setTimeout(() => { const l = lessonAtAny(new Date(t)); addRecord(l ? l.class : cls, null, i, { device: 'watch', time: t, lessonKey: l ? l.key : undefined }); toast(`워치 기록 1건 도착 · ${c} ${hm(t)} · 번호는 정리할 때`); render(); }, 900);
+      } }, c)))]
     : [h('div', { class: 'wtop' }, `${cls}반 · ${S.settings.categories[w.cat]}`),
       h('div', { class: 'wrow' }, h('button', { onclick: () => { w.no = w.no > 1 ? w.no - 1 : size; render(); }, 'aria-label': '이전 번호' }, '−'), h('div', { class: 'wnum' }, w.no), h('button', { onclick: () => { w.no = w.no < size ? w.no + 1 : 1; render(); }, 'aria-label': '다음 번호' }, '+')),
       h('button', { class: 'wsave', onclick: () => {

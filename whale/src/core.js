@@ -188,12 +188,33 @@ function lessonAt(cls, t) {
   const m = minOf(t);
   return lessonsOn(ymd(t)).find((l) => l.class === cls && m >= l.start - 5 && m < l.end + 10) || null;
 }
+/** 반을 모를 때(폰·워치 기록): 그 시각에 걸친 수업 */
+function lessonAtAny(t) {
+  const m = minOf(t);
+  const ls = lessonsOn(ymd(t)).filter((l) => m >= l.start - 5 && m < l.end + 10);
+  return ls.find((l) => m >= l.start && m < l.end) || ls[0] || null;
+}
+/**
+ * 폰·워치(보조 기기) → 본체: 카테고리와 시각만 보낸다. 반·번호·이름·메모는 보내지 않는다.
+ * 누구였는지는 교사가 본체의 정리 창에서 기억에 의존해 번호를 고른다.
+ */
+function outgoingRecord(r) { return { id: r.id, cat: r.cat, time: r.time, device: r.device === 'watch' ? 'watch' : 'phone' }; }
+/** 본체가 받은 기록: 시각으로 수업(반)을 찾고, 번호는 비워 둔다 */
+function incomingRecord(msg) {
+  const t = new Date(msg.time);
+  if (!msg.id || Number.isNaN(t.getTime())) return null;
+  const l = lessonAtAny(t);
+  const cls = l ? l.class : null;
+  const p = cls ? progressAt(cls, ymd(t)) : null;
+  return { id: String(msg.id), class: cls, no: null, cat: clamp(Number(msg.cat) || 0, 0, 3), time: t.toISOString(), lessonKey: l ? l.key : null, unit: p?.unit || '', std: p?.standards?.slice(0, 1) || [], note: '', noteSource: 'typed', source: 'direct', device: msg.device === 'watch' ? 'watch' : 'phone', status: 'pending', transcriptRef: null };
+}
 function progressAt(cls, day) {
   return S.progress.find((p) => (p.class === cls || p.class === '*') && p.from <= day && day <= p.to) || null;
 }
 function classIds() { return S.classes.map((c) => c.id); }
 function classOf(id) { return S.classes.find((c) => c.id === id) || null; }
 function studentLabel(cls, no) {
+  if (no === null || no === undefined) return '번호 미정';
   const st = classOf(cls)?.students.find((x) => x.no === no);
   return S.settings.numberOnly || !st?.name ? `${no}번` : `${no} ${st.name}`;
 }

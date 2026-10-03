@@ -37,9 +37,19 @@ function viewReview() {
     h('div', { class: 'card' }, h('h2', null, `보완 대기 기록 ${pending.length}`),
       pending.length ? h('div', { class: 'col' }, pending.slice(0, 30).map((r) => {
         const inp = h('input', { type: 'text', placeholder: '한 줄 보완', 'aria-label': '보완' });
-        return h('div', { class: 'row wrap' }, h('span', { class: 'small num muted' }, `${koDate(recDay(r))} ${hm(r.time)}`), h('b', null, `${r.class} ${studentLabel(r.class, r.no)}`), h('span', { class: `chip c${r.cat}` }, S.settings.categories[r.cat]),
+        // 폰·워치 기록은 반·번호 없이 온다: 교사가 기억으로 고른다
+        const clsSel = r.no == null ? h('select', { 'aria-label': '반' }, h('option', { value: '' }, '반'), classIds().map((id) => h('option', { value: id, selected: id === r.class }, `${id}반`))) : null;
+        const noSel = r.no == null ? h('select', { 'aria-label': '번호' }, h('option', { value: '' }, '번호'), ((classOf(r.class) || classOf(classIds()[0]))?.students || []).map((x) => h('option', { value: x.no }, studentLabel(r.class, x.no)))) : null;
+        if (clsSel) clsSel.addEventListener('change', () => { r.class = clsSel.value || null; save(); render(); });
+        return h('div', { class: 'row wrap' }, h('span', { class: 'small num muted' }, `${koDate(recDay(r))} ${hm(r.time)}`),
+          r.no == null ? h('span', { class: 'xs muted' }, `${DEVICE[r.device] || ''}`) : h('b', null, `${r.class} ${studentLabel(r.class, r.no)}`),
+          clsSel ? h('div', { style: { width: '90px' } }, clsSel) : null, noSel ? h('div', { style: { width: '110px' } }, noSel) : null,
+          h('span', { class: `chip c${r.cat}` }, S.settings.categories[r.cat]),
           h('div', { class: 'grow', style: { minWidth: '200px' } }, inp),
-          h('button', { class: 'btn sm primary', onclick: () => { r.note = inp.value.trim(); r.status = 'confirmed'; save(); render(); } }, '저장'),
+          h('button', { class: 'btn sm primary', onclick: () => {
+            if (r.no == null) { if (!clsSel.value || !noSel.value) { toast('반과 번호를 골라 주세요'); return; } r.class = clsSel.value; r.no = Number(noSel.value); }
+            r.note = inp.value.trim(); r.status = 'confirmed'; save(); render();
+          } }, '저장'),
           h('button', { class: 'btn sm ghost', onclick: () => { r.status = 'skipped'; save(); render(); } }, '건너뛰기'));
       })) : h('div', { class: 'muted small' }, '없어요.')),
     h('div', { class: 'card' }, h('h2', null, '추천함'), h('div', { class: 'muted small' }, '확인하지 않은 놓친 발언이에요. 정리 창에서 누구였는지 번호를 고르거나 지울 수 있어요.'),
@@ -379,14 +389,15 @@ async function pairMain() {
   if (!serverUrl()) return toast('기기 연결에는 누가 서버(전달함)가 필요해요');
   const key = S.sync.key && S.sync.role === 'main' ? S.sync.key : newKey();
   S.sync.role = 'main'; S.sync.key = key; S.sync.channel = await channelOf(key); save();
-  const code = b64uText(JSON.stringify({ k: key, s: serverUrl(), c: S.classes.map((c) => [c.id, c.students.length]), tt: S.timetable, b: S.settings.bell, cats: S.settings.categories, lv: S.settings.level }));
+  // 보조 기기는 카테고리와 시각만 보내므로 반 인원·명단은 넘기지 않는다
+  const code = b64uText(JSON.stringify({ k: key, s: serverUrl(), tt: S.timetable, b: S.settings.bell, cats: S.settings.categories, lv: S.settings.level }));
   const link = `${location.href.split('#')[0]}#pair=${code}`;
   const isHttps = location.protocol === 'https:';
   const qr = h('div', { style: { display: 'flex', justifyContent: 'center', minHeight: isHttps ? '200px' : '0' } });
   openSheet(() => sheet('폰 연결하기', h('div', { class: 'col' },
     isHttps ? h('div', { class: 'small' }, '폰 카메라로 QR을 찍으면 웨일에서 열리고 연결돼요.') : h('div', { class: 'small' }, `${location.protocol === 'file:' ? '파일로 연 앱이라' : 'https 주소가 아니라'} QR 대신 연결 코드를 복사해 폰의 누가 → 설정 → [이 기기를 보조 기기로]에 붙여 넣어 주세요.`),
     qr, h('div', { class: 'row wrap' }, h('button', { class: 'btn', onclick: () => copyText(isHttps ? link : code, '연결 코드를 복사했어요') }, isHttps ? '연결 링크 복사' : '연결 코드 복사')),
-    h('div', { class: 'xs muted' }, '코드에는 암호화 열쇠·서버 주소·반 인원·시간표만 들어 있어요. 학생 이름은 없어요. 다른 사람에게 보여 주지 마세요.'))));
+    h('div', { class: 'xs muted' }, '코드에는 암호화 열쇠·서버 주소·시간표·카테고리만 들어 있어요. 반 인원·번호·이름은 없어요. 다른 사람에게 보여 주지 마세요.'))));
   if (isHttps) loadQr().then((QR) => { if (QR) new QR(qr, { text: link, width: 200, height: 200 }); }).catch(() => {});
 }
 function loadQr() {
@@ -404,10 +415,10 @@ async function acceptPair(code) {
     if (S.mode === 'demo') switchMode('real');
     S.sync = { role: 'satellite', key: j.k, channel: await channelOf(j.k), devices: [], outbox: [] };
     S.settings.server.url = j.s;
-    S.classes = (j.c || []).map(([id, n]) => ({ id, students: Array.from({ length: n }, (_, i) => ({ no: i + 1, name: '' })) }));
+    S.classes = []; // 보조 기기에는 명단을 두지 않는다
     if (j.tt) S.timetable = j.tt; if (j.b) S.settings.bell = j.b; if (j.cats) S.settings.categories = j.cats; if (j.lv) S.settings.level = j.lv;
     S.settings.numberOnly = true; S.setupDone = true; save(); UI.view = 'lesson'; render();
-    toast('본체와 연결했어요. 이 기기에서 남긴 기록은 본체로 보내져요.');
+    toast('본체와 연결했어요. 카테고리를 누르면 시각과 함께 본체로 보내져요 (번호는 본체에서 골라요).');
   } catch (e) { toast(`연결하지 못했어요: ${e.message}`); }
 }
 let syncBusy = false;
@@ -418,8 +429,7 @@ async function syncLoop() {
     if (S.sync.role === 'satellite') {
       for (const id of [...S.sync.outbox]) {
         const r = S.records.find((x) => x.id === id); if (!r) { S.sync.outbox = S.sync.outbox.filter((x) => x !== id); continue; }
-        const dev = /Mobi|Android/i.test(navigator.userAgent) ? 'phone' : r.device;
-        await api(`/box/${S.sync.channel}`, { body: { msg: await seal(S.sync.key, { ...r, device: dev === 'whalebook' ? 'phone' : dev }) } });
+        await api(`/box/${S.sync.channel}`, { body: { msg: await seal(S.sync.key, outgoingRecord(r)) } });
         S.sync.outbox = S.sync.outbox.filter((x) => x !== id);
       }
       save();
@@ -429,12 +439,10 @@ async function syncLoop() {
       for (const it of r.items || []) {
         ids.push(it.id);
         try {
-          const rec = await unseal(S.sync.key, it.msg);
-          if (S.records.some((x) => x.id === rec.id)) continue;
-          // 본체가 모르는 수업 키면 기록 시각으로 본체 수업에 붙인다 (직접 시작한 수업 대응)
-          if (!rec.lessonKey || !lessonsOn(rec.lessonKey.slice(0, 10)).some((l) => l.key === rec.lessonKey)) { const l = lessonAt(rec.class, new Date(rec.time)); rec.lessonKey = l ? l.key : rec.lessonKey; }
-          const { unit, std } = stdFor(rec.class, recDay(rec));
-          S.records.push({ ...rec, unit: rec.unit || unit, std: rec.std && rec.std.length ? rec.std : std, status: 'pending' });
+          // 카테고리·시각만 온다. 시각으로 본체 수업(반)에 붙이고 번호는 비워 둔다 (직접 시작한 수업 포함)
+          const rec = incomingRecord(await unseal(S.sync.key, it.msg));
+          if (!rec || S.records.some((x) => x.id === rec.id)) continue;
+          S.records.push(rec);
           const kind = rec.device === 'watch' ? 'watch' : 'phone';
           if (!S.sync.devices.some((d) => d.kind === kind)) S.sync.devices.push({ name: kind === 'watch' ? '워치' : '폰', kind });
           n++;

@@ -54,11 +54,12 @@ eq([g('fromMin')(pt[1].start), g('fromMin')(pt[4].start)], ['09:50', '13:40'], '
 const tr = g('demoTranscript')(); demo1.transcripts['2026-10-13_2-3_2'] = tr;
 const lesson = g('lessonByKey')('2026-10-13_2-3_2');
 eq(g('teacherSpeaker')(tr), '화자1', '교사 화자 = 발화량 최대');
-const rec5 = demo1.records.find((r) => r.lessonKey === '2026-10-13_2-3_2' && r.no === 5);
+const rec5 = demo1.records.find((r) => r.lessonKey === '2026-10-13_2-3_2' && r.device === 'watch');
 const c5 = g('candidatesFor')(rec5, tr, lesson);
-eq(c5[0]?.seg.speaker, '화자6', '5번 질문 → 10:11:45 화자6 의문형');
-const rec18 = demo1.records.find((r) => r.lessonKey === '2026-10-13_2-3_2' && r.no === 18);
-eq(g('candidatesFor')(rec18, tr, lesson)[0]?.seg.text.includes('역할'), true, '18번 협동 → 역할 발언');
+eq(c5[0]?.seg.speaker, '화자6', '워치 질문 → 10:11:45 화자6 의문형');
+eq(rec5.no, null, '데모 워치 기록은 번호 없음');
+const rec18 = demo1.records.find((r) => r.lessonKey === '2026-10-13_2-3_2' && r.device === 'phone');
+eq(g('candidatesFor')(rec18, tr, lesson)[0]?.seg.text.includes('역할'), true, '폰 협동 → 역할 발언');
 ok(g('candidatesFor')({ ...rec5, time: new Date(rec5.time).getTime() + 30 * 60e3 }, tr, lesson).every((c) => c.seg.speaker !== '화자1'), '교사 발언은 후보 아님');
 
 // 6. 놓친 발언 추천
@@ -117,6 +118,14 @@ eq(JSON.parse(g('unb64uText')(link.split('#card=')[1])).n, '질문해 보기', '
 named.records = [{ id: 'r1', class: '2-3', no: 7, cat: 0, time: '2026-10-13T01:00:00Z', note: '이서연이 촉매를 질문함', std: [] }];
 const pr = g('promptFor')(named.records);
 ok(!/이서연|2-3|7번/.test(pr), '복사용 프롬프트에 이름·반·번호 없음');
+
+// 12. 폰·워치 → 본체: 카테고리와 시각만
+ctx.__set(demo1);
+const out = g('outgoingRecord')({ id: 'x1', class: '2-3', no: 5, cat: 0, time: '2026-10-13T01:12:08.000Z', note: '이서연 질문', device: 'watch', lessonKey: 'k' });
+eq(Object.keys(out).sort(), ['cat', 'device', 'id', 'time'], '보내는 기록은 id·카테고리·시각·기기만');
+const inc = g('incomingRecord')({ id: 'x2', cat: 2, time: new Date(2026, 9, 13, 10, 21, 5).toISOString(), device: 'phone', class: '9-9', no: 99 });
+ok(inc.class === '2-3' && inc.no === null && inc.lessonKey === '2026-10-13_2-3_2' && inc.status === 'pending', `받은 기록: 시각으로 수업, 번호 비움 ${JSON.stringify(inc)}`);
+eq(g('incomingRecord')({ id: 'x3', cat: 0, time: new Date(2026, 9, 13, 13, 0).toISOString(), device: 'watch' }).class, null, '수업 밖 기록은 반도 비움');
 
 console.log(`${pass} passed, ${fail} failed`);
 console.log(fail ? 'FAIL' : 'ALL PASS');
