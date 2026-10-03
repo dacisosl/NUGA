@@ -1,0 +1,21 @@
+# 누가 서버 — Cloudflare Worker 설정 (자세한 배포 순서는 README.md)
+name = "nuga-server"
+main = "worker.js"
+compatibility_date = "2025-06-01"
+
+# wrangler kv namespace create NUGA_KV 를 실행하면 나오는 id를 넣는다.
+[[kv_namespaces]]
+binding = "NUGA_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# 비밀이 아닌 설정 값. 비밀 값(GEMINI_API_KEY, NEIS_KEY, HOLIDAY_KEY, TOKEN_SECRET,
+# WHALE_CLIENT_ID, WHALE_CLIENT_SECRET)은 여기 적지 말고 `wrangler secret put`으로 넣는다.
+[vars]
+AI_ACCESS = "token"            # token: 웨일 스페이스 교사 토큰 필요 / open: 심사·시연용(IP당 하루 한도)
+OPEN_AI_DAILY = "30"           # open 모드에서 IP당 하루 AI 호출 수
+ALLOWED_RETURN = "https://example.github.io"   # 로그인 뒤 돌아갈 앱 주소(origin), 쉼표로 여러 개
+GEMINI_MODEL = "gemini-2.5-flash"
+WHALE_AUTH_URL = "https://auth.whalespace.io/oauth2/v1.1/authorize"     # 미검증
+WHALE_TOKEN_URL = "https://auth.whalespace.io/oauth2/v1.1/token"        # 미검증
+WHALE_USERINFO_URL = "https://www.whalespaceapis.com/v1/users/me"       # 미검증
+WHALE_SCOPE = "openid profile"                                          # 미검증

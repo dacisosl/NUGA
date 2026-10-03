@@ -1,7 +1,38 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "desktop-web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "-w", "@nuga/desktop"], "port": 1420 },
-    { "name": "relay", "runtimeExecutable": "npm", "runtimeArgs": ["start", "-w", "@nuga/relay"], "port": 8787 }
+    {
+      "name": "desktop-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "-w",
+        "@nuga/desktop"
+      ],
+      "port": 1420
+    },
+    {
+      "name": "relay",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "start",
+        "-w",
+        "@nuga/relay"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "whale",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "5180",
+        "-d",
+        "whale/dist"
+      ],
+      "port": 5180
+    }
   ]
 }

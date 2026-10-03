@@ -1,0 +1,13 @@
+{
+  "name": "nuga-server",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "description": "누가 서버 — Cloudflare Worker 참고 구현 (전달함·AI 대행·나이스·웨일 스페이스·학생 피드백)",
+  "main": "worker.js",
+  "scripts": {
+    "test": "node test/harness.mjs",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}
