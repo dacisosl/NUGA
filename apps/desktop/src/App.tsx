@@ -6,6 +6,7 @@ import { TodayPage } from "./pages/TodayPage";
 import { DraftPage } from "./pages/DraftPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { MobilePage } from "./pages/MobilePage";
 import { Onboarding } from "./pages/Onboarding";
 import { InboxModal, useBacklogCount } from "./components/InboxModal";
 import { AreaSwitcher } from "./components/AreaSwitcher";
@@ -44,6 +45,7 @@ export default function App() {
         {page === "draft" && <DraftPage />}
         {page === "review" && <ReviewPage />}
         {page === "settings" && <SettingsPage />}
+        {page === "mobile" && <MobilePage />}
       </main>
       <Toasts />
       {inbox && <InboxModal />}
@@ -79,6 +81,7 @@ function Sidebar() {
         </button>
       )}
       <div className="spacer" />
+      <button className={`nav ${page === "mobile" ? "active" : ""}`} onClick={() => setPage("mobile")} title="모바일 확인 (테스트용)"><Icon name="phone" /><span className="lbl">모바일 확인</span></button>
       <div className="syncbox">
         <div className="st" title={sync.lastAt ? `마지막 ${sync.lastAt.slice(11, 16)}` : ""}>
           <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : ""}`} style={sync.state === "error" ? { background: "var(--warn)" } : undefined} />

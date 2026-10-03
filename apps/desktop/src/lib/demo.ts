@@ -62,6 +62,23 @@ export async function startDemo(): Promise<DemoInfo> {
   return info;
 }
 
+/**
+ * 모바일 확인(폰 미리보기)의 녹음: 녹음을 멈추면 폰이 음성을 변환해 스크립트를 보낸 것처럼
+ * 합성 모의 수업 스크립트를 그 반·시각으로 저장하고 추천 카드를 만든다. 실제 음성은 쓰지 않는다.
+ */
+export async function simulateLessonTranscript(cls: string, period: number, start: Date): Promise<{ id: string; count: number }> {
+  const id = uuid();
+  const tr: Transcript = parseTranscription(JSON.stringify({ segments: demoLesson.segments }), {
+    id, class: cls, period, startedAt: nowIso(start), endedAt: nowIso(new Date(start.getTime() + demoLesson.durationSec * 1000)),
+    provider: "demo", model: "합성 모의 수업 (폰 미리보기)", createdAt: nowIso(),
+  });
+  const ts = useTranscripts.getState();
+  if (!ts.loaded) await ts.load();
+  await ts.save(tr, useStore.getState().areaId);
+  const r = await runSuggestions(id);
+  return { id, count: r.count };
+}
+
 export async function endDemo() {
   const prev = demoInfo();
   if (prev) await useTranscripts.getState().remove(prev.transcriptId).catch(() => {});

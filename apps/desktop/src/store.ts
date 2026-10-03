@@ -7,7 +7,7 @@ import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
 
-export type Page = "today" | "records" | "draft" | "review" | "settings";
+export type Page = "today" | "records" | "draft" | "review" | "settings" | "mobile";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
 
 /** 알림 모달(쉬는 시간 기록). records = 수동 1차 기록 id, transcripts = 자동 추천이 붙은 수업 스크립트 id, backlog = 미반영 전체 보기 */
