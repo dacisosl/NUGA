@@ -9,7 +9,6 @@ Cloudflare Worker 한 파일(`worker.js`)과 KV 하나로 돌아가는 누가 �
 | AI 대행(Gemini) | `POST /ai/transcribe`(multipart `audio`, 약 14MB까지), `/ai/suggest`, `/ai/draft` | 없음(open 모드의 하루 호출 수만) |
 | 학교 정보 | `GET /school/search?name=`, `/school/timetable?office&code&kind&from&to&grade`, `/school/calendar?office&code&from&to` | 없음 |
 | 웨일 스페이스 로그인 | `GET /auth/whalespace?return=&role=`, `/auth/whalespace/callback` | 로그인 state 10분 |
-| 학생 피드백 | `POST /feedback/send`(교사 토큰), `GET /feedback/mine`(학생 토큰) | 학교·반·번호별 카드 30일 (이름 없음) |
 
 모든 응답은 JSON이고 CORS(`*`)가 붙습니다. 오류는 `{ "error": "코드" }` 모양입니다.
 
@@ -65,7 +64,7 @@ npm test        # node test/harness.mjs — 가짜 KV·가짜 외부 응답으�
 - 전달함 KV 값은 앱이 봉한 `iv.암호문`(b64url) 문자열 그대로입니다. 서버는 열쇠가 없어 내용을 읽을 수 없습니다.
 - AI 요청에는 정해진 필드만 골라 보냅니다(`name` 등 다른 필드는 버림). 화자는 `화자1·화자2…`로 다시 매기고, 교사 화자·모르는 구간 id의 추천은 버립니다. 세특 초안은 근거 기록 id가 없거나 요청에 없는 id를 댄 문장, 금지 내용(대회·수상·자격증·어학시험·사교육·부모·교외 등)이 든 문장을 버립니다.
 - 토큰은 HMAC-SHA256 서명, 12시간. 웨일 스페이스 아이디는 SHA-256 앞 16자(`sid`)로만 남고, 이름은 읽지 않습니다.
-- 피드백 카드는 `fb:{학교 코드}:{반}:{번호}:{기간}` 키로 30일. 학생은 자기 학교·반·번호 카드만 봅니다.
+- 학생 정보(학번·반·번호·이름)는 서버에 오지 않습니다. 교사만 로그인하고, 학생 피드백은 앱이 만드는 QR 쪽지로 전달합니다(서버 저장 없음).
 
 ## 확인하지 못한 것 (실제 배포 전 점검 필요)
 

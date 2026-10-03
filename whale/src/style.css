@@ -235,11 +235,25 @@ table.tbl th { font-size: 12px; color: var(--text2); font-weight: 600; backgroun
 /* 학생 화면 */
 .student { max-width: 560px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; }
 
+/* 학생용 QR 쪽지 */
+.slips { position: fixed; inset: 0; z-index: 90; background: var(--bg); overflow-y: auto; padding: 16px; }
+.slips-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 960px; margin: 0 auto 12px; }
+.slips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; max-width: 960px; margin: 0 auto; }
+.slip { background: #fff; color: #1A1C21; border: 1px dashed #999; border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 1fr 120px; grid-template-rows: auto 1fr; gap: 6px 10px; break-inside: avoid; }
+.slip-no { grid-column: 1 / -1; font-weight: 700; font-size: 13px; }
+.slip-body { font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; gap: 6px; }
+.slip-body .next { background: #F4F3EF; border-radius: 6px; padding: 4px 8px; }
+.slip-qr { width: 120px; height: 120px; }
+.slip-qr img, .slip-qr canvas { width: 120px !important; height: 120px !important; }
+
 /* 인쇄용 쪽지 */
 @media print {
   body { background: #fff; }
   .shell { display: block; height: auto; }
   .topbar, .nav, .demobar, .watch-sim, .toasts, .no-print { display: none !important; }
+  body:has(#slips) #app { display: none; }
+  .slips { position: static; padding: 0; background: #fff; }
+  .slips-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
   .main { overflow: visible; padding: 0; }
   .fb-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .fb { box-shadow: none; border: 1px dashed #999; page-break-inside: avoid; }

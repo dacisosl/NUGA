@@ -6,7 +6,7 @@
 const VERSION = '0.9.0';
 const DAY = 86400;
 const BOX_TTL = 7 * DAY, BOX_MAX_MSG = 16384, BOX_MAX_ITEMS = 500;
-const STATE_TTL = 600, FB_TTL = 30 * DAY;
+const STATE_TTL = 600;
 const TOKEN_MS = 12 * 3600 * 1000;
 const MAX_AUDIO = 14 * 1024 * 1024;
 const CATS = ['질문', '발표', '협동', '탐구'];
@@ -89,7 +89,7 @@ async function verifyToken(env, token) {
     const ok = await crypto.subtle.verify('HMAC', await hmacKey(env), unb64u(m[2]), enc.encode(m[1]));
     if (!ok) return null;
     const p = JSON.parse(dec.decode(unb64u(m[1])));
-    if (!p || (p.t !== 'tea' && p.t !== 'stu') || !(Number(p.exp) > Date.now())) return null;
+    if (!p || p.t !== 'tea' || !(Number(p.exp) > Date.now())) return null; // 교사 토큰만 (학생 정보는 서버에 오지 않는다)
     return p;
   } catch { return null; }
 }
@@ -416,9 +416,8 @@ async function wsStart(url, env) {
   const ret = url.searchParams.get('return') || '';
   if (!returnAllowed(ret, env)) fail(400, 'bad_return');
   if (!env.WHALE_CLIENT_ID || !env.TOKEN_SECRET) fail(503, 'whalespace_off');
-  const role = url.searchParams.get('role') === 'student' ? 'student' : 'teacher';
   const state = randHex(16);
-  await env.NUGA_KV.put(`st:${state}`, JSON.stringify({ return: ret, role }), { expirationTtl: STATE_TTL });
+  await env.NUGA_KV.put(`st:${state}`, JSON.stringify({ return: ret }), { expirationTtl: STATE_TTL });
   const q = new URLSearchParams({
     client_id: env.WHALE_CLIENT_ID, redirect_uri: `${url.origin}/auth/whalespace/callback`,
     response_type: 'code', state, scope: env.WHALE_SCOPE || 'openid profile',
@@ -426,7 +425,8 @@ async function wsStart(url, env) {
   return redirect(`${env.WHALE_AUTH_URL || 'https://auth.whalespace.io/oauth2/v1.1/authorize'}?${q}`);
 }
 
-// userinfo 응답 모양이 확정되지 않아 여러 이름을 너그럽게 받는다. 사용자 이름은 읽지 않는다.
+// userinfo 응답 모양이 확정되지 않아 여러 이름을 너그럽게 받는다.
+// 사용자 이름·반·번호는 읽지 않는다 (학생 정보는 교사 기기에만 둔다는 원칙). 학교 정보와 교사 여부만 본다.
 function mapUser(raw) {
   const d = raw?.data ?? raw?.user ?? raw?.result ?? raw ?? {};
   const pick = (o, ...ks) => { for (const k of ks) { const v = o?.[k]; if (v != null && v !== '') return v; } return undefined; };
@@ -441,16 +441,7 @@ function mapUser(raw) {
     office: str(pick(s, 'officeCode', 'eduOfficeCode', 'office', 'ATPT_OFCDC_SC_CODE'), 20),
     kind: kindOf(pick(s, 'schoolKind', 'school_kind', 'schoolType', 'school_type', 'schoolLevel', 'SCHUL_KND_SC_NM')) || kindOf(sName),
   };
-  const st = pick(d, 'student', 'studentInfo') || d;
-  let cls = '';
-  const cm = /(\d{1,2})\D+(\d{1,2})/.exec(String(pick(st, 'className', 'class_name', 'classroom') ?? ''));
-  if (cm) cls = `${+cm[1]}-${+cm[2]}`;
-  else {
-    const g = clampInt(pick(st, 'grade', 'schoolYear'), 0, 12, 0), c = clampInt(pick(st, 'classNum', 'classNo', 'class_no', 'class', 'ban'), 0, 99, 0);
-    if (g && c) cls = `${g}-${c}`;
-  }
-  const no = clampInt(pick(st, 'number', 'studentNumber', 'studentNo', 'student_no', 'attendanceNumber', 'no'), 0, 99, 0);
-  return { id: str(pick(d, 'userId', 'user_id', 'id', 'sub', 'uid', 'email'), 200), type, school, cls, no };
+  return { id: str(pick(d, 'userId', 'user_id', 'id', 'sub', 'uid', 'email'), 200), type, school };
 }
 
 async function wsCallback(url, env) {
@@ -478,51 +469,10 @@ async function wsCallback(url, env) {
   const u = mapUser(info);
   if (!u.id) return back({ error: 'login_failed' });
   const exp = Date.now() + TOKEN_MS;
-  if (saved.role === 'student') {
-    if (u.type !== 'stu') return back({ error: 'wrong_role' });
-    if (!u.cls || !u.no) return back({ error: 'no_class' });
-    const token = await signToken(env, { t: 'stu', sc: u.school.code, cls: u.cls, no: u.no, exp });
-    return back({ userType: 'stu', className: u.cls, number: u.no, token, exp });
-  }
-  if (u.type !== 'tea') return back({ error: 'wrong_role' });
+  if (u.type !== 'tea') return back({ error: 'wrong_role' }); // 교사만 로그인한다
   const sid = (await sha256hex(u.id)).slice(0, 16); // 원래 아이디는 내보내지 않는다
   const token = await signToken(env, { t: 'tea', sc: u.school.code, sid, exp });
   return back({ userType: 'tea', sid, token, exp, school: u.school });
-}
-
-// ---------- 학생 피드백 카드 ----------
-const CLS = /^\d{1,2}-\d{1,2}$/;
-async function feedbackSend(req, env) {
-  const who = await auth(req, env);
-  if (!who) fail(401, 'login_required');
-  if (who.t !== 'tea') fail(403, 'teacher_only');
-  if (!who.sc) fail(400, 'no_school');
-  const body = await readJson(req, 1_000_000);
-  if (!Array.isArray(body.cards)) fail(400, 'bad_cards');
-  let saved = 0;
-  const at = Date.now();
-  for (const c of body.cards.slice(0, 300)) {
-    const cls = str(c?.class, 5), no = clampInt(c?.no, 0, 99, 0), period = str(c?.period, 40).replace(/:/g, '_');
-    if (!CLS.test(cls) || !no || !period) continue;
-    // 정해진 필드만 저장한다(name 등은 버림).
-    const card = { class: cls, no, period, good: str(c.good, 1000), next: str(c.next, 1000), text: str(c.text, 2000), label: str(c.label, 60), at };
-    await env.NUGA_KV.put(`fb:${who.sc}:${cls}:${no}:${period}`, JSON.stringify(card), { expirationTtl: FB_TTL });
-    saved++;
-  }
-  return json({ ok: true, saved });
-}
-async function feedbackMine(req, env) {
-  const who = await auth(req, env);
-  if (!who) fail(401, 'login_required');
-  if (who.t !== 'stu') fail(403, 'student_only');
-  if (!who.sc || !CLS.test(who.cls || '') || !who.no) return json({ cards: [] });
-  const cards = [];
-  for (const k of await listAll(env.NUGA_KV, `fb:${who.sc}:${who.cls}:${who.no}:`)) {
-    const v = await env.NUGA_KV.get(k.name, 'json');
-    if (v) cards.push(v);
-  }
-  cards.sort((a, b) => (b.at || 0) - (a.at || 0));
-  return json({ cards });
 }
 
 // ---------- 길 찾기 ----------
@@ -548,8 +498,6 @@ async function route(req, env, url) {
 
   if (p === '/auth/whalespace') { only('GET'); return wsStart(url, env); }
   if (p === '/auth/whalespace/callback') { only('GET'); return wsCallback(url, env); }
-  if (p === '/feedback/send') { only('POST'); return feedbackSend(req, env); }
-  if (p === '/feedback/mine') { only('GET'); return feedbackMine(req, env); }
   fail(404, 'not_found');
 }
 

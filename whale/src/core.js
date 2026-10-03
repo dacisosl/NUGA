@@ -279,6 +279,24 @@ async function unseal(keyB64, msg) {
   return JSON.parse(dec.decode(pt));
 }
 
+/* ---------- 학생 정보는 기기 밖으로 나가지 않는다 ----------
+ * 학번(반·번호)과 이름은 이 브라우저에만 저장한다. 서버·AI 로 가는 글은 내용만 보내고,
+ * 교사가 메모에 이름을 적었거나 수업 중 이름이 불린 경우를 대비해 명단 이름을 ○○ 로 지운다.
+ */
+function rosterNames() {
+  const out = new Set();
+  for (const c of S.classes) for (const s of c.students) {
+    const n = String(s.name || '').trim(); if (n.length < 2) continue;
+    out.add(n); if (n.length >= 3) out.add(n.slice(1)); // 성을 뺀 이름 (지우야 → 지우)
+  }
+  return [...out].sort((a, b) => b.length - a.length);
+}
+function scrubNames(text) {
+  const names = rosterNames(); let t = String(text || '');
+  for (const n of names) t = t.split(n).join('○○');
+  return t;
+}
+
 /* ---------- 문자열 비교 ---------- */
 function grams(s, n = 2) { const t = String(s).replace(/\s+/g, ''); const out = new Set(); for (let i = 0; i + n <= t.length; i++) out.add(t.slice(i, i + n)); return out; }
 function jaccard(a, b, n = 2) { const A = grams(a, n), B = grams(b, n); if (!A.size || !B.size) return 0; let x = 0; for (const g of A) if (B.has(g)) x++; return x / (A.size + B.size - x); }

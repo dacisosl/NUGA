@@ -250,6 +250,14 @@ function feedbackFor(cls, no, range) {
   return { cls, no, good: edit?.good ?? good, next: edit?.next ?? next, evidence: picked.map((r) => `${koDate(recDay(r))} ${S.settings.categories[r.cat]}`), records: picked };
 }
 function feedbackText(card) { return card.none ? '' : `${card.good}\n다음 도전: ${card.next}`; }
+/**
+ * 학생용 쪽지 링크: 카드 내용을 주소의 # 뒤에 담는다. # 뒤는 어떤 서버로도 전송되지 않는다.
+ * 반·번호·이름은 넣지 않는다 (누구의 쪽지인지는 교사가 손으로 건네는 종이로만 알 수 있다).
+ */
+function cardPayload(card, range) {
+  return { v: 1, p: range.label, s: S.settings.subject || '', d: ymd(now()), g: scrubNames(card.good), n: scrubNames(card.next) };
+}
+function cardLink(card, range, base = location.href.split('#')[0]) { return `${base}#card=${b64uText(JSON.stringify(cardPayload(card, range)))}`; }
 /** 성취기준별 관찰 근거표: 학생 × 성취기준 기록 수 */
 function stdMatrix(cls, range) {
   const codes = [...new Set(S.progress.filter((p) => p.from <= range.to && p.to >= range.from).flatMap((p) => p.standards))];
@@ -320,7 +328,7 @@ function promptFor(recs) {
     s.teacherGuide ? `- 교사 지침: ${s.teacherGuide}` : null,
     '',
     '[관찰 기록] (날짜 | 분류 | 성취기준 | 내용)',
-    ...recs.map((r) => `- ${recDay(r)} | ${s.categories[r.cat]} | ${(r.std || []).map((c) => `${c} ${S.standards[c] || ''}`.trim()).join(', ') || '-'} | ${cleanNote(r.note) || '(내용 없음)'}`),
+    ...recs.map((r) => `- ${recDay(r)} | ${s.categories[r.cat]} | ${(r.std || []).map((c) => `${c} ${S.standards[c] || ''}`.trim()).join(', ') || '-'} | ${scrubNames(cleanNote(r.note)) || '(내용 없음)'}`),
   ].filter((x) => x !== null);
   return lines.join('\n');
 }

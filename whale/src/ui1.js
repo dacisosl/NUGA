@@ -17,7 +17,7 @@ function render() {
   const app = $('#app'); if (!app) return;
   const scroll = $('.main')?.scrollTop || 0;
   app.replaceChildren();
-  if (location.hash.startsWith('#student')) { app.appendChild(renderStudent()); return; }
+  if (location.hash.startsWith('#card=')) { app.appendChild(renderStudent()); return; }
   if (!S.setupDone) { app.appendChild(renderOnboarding()); return; }
   const pending = reviewQueue().length + [...new Set(S.suggestions.map((x) => x.lessonKey))].reduce((n, k) => n + suggestionsFor(k).length, 0);
   const views = { lesson: viewLesson, review: viewReview, class: viewClass, feedback: viewFeedback, draft: viewDraft, settings: viewSettings };
@@ -281,7 +281,7 @@ async function processAudio(key) {
       S.transcripts[key] = { id: uid(), lessonKey: key, source: 'ai', segments: (r.segments || []).map((g, i) => ({ id: `s${i + 1}`, t0: hms(new Date(base + (Number(g.start) || 0) * 1000)), speaker: g.speaker, text: g.text, sum: g.summary || '' })) };
       const tr = S.transcripts[key];
       try {
-        const sg = await api('/ai/suggest', { body: { segments: tr.segments.map((g) => ({ id: g.id, t0: g.t0, speaker: g.speaker, text: g.text })), teacherSpeaker: teacherSpeaker(tr), unit: progressAt(lesson.class, lesson.date)?.unit || '', categories: S.settings.categories, max: 10 } });
+        const sg = await api('/ai/suggest', { body: { segments: tr.segments.map((g) => ({ id: g.id, t0: g.t0, speaker: g.speaker, text: scrubNames(g.text) })), teacherSpeaker: teacherSpeaker(tr), unit: progressAt(lesson.class, lesson.date)?.unit || '', categories: S.settings.categories, max: 10 } });
         const items = (sg.items || []).map((x) => { const seg = tr.segments.find((g) => g.id === x.segId); return seg ? { id: uid(), lessonKey: key, segId: seg.id, t0: seg.t0, speaker: seg.speaker, text: seg.text, sum: x.sum || seg.sum, criteria: x.criteria, cat: clamp(Number(x.cat) || 0, 0, 3), score: Number(x.score) || 0.5, status: 'new', recordId: null } : null; }).filter(Boolean);
         if (items.length) S.suggestions.push(...items); else ensureSuggestions(key);
       } catch { ensureSuggestions(key); }
@@ -352,7 +352,7 @@ const Popup = {
   key: null, hold: false, st: null,
   /** 뜰 조건: 팝업 켬 · 수업 중 아님 · 다음 수업까지 여유 · 끝난 수업에 정리할 것 · 자리 신호 */
   check(reason) {
-    if (!S || !S.setupDone || this.key || this.hold || UI.sheet || location.hash.startsWith('#student')) return;
+    if (!S || !S.setupDone || this.key || this.hold || UI.sheet || location.hash.startsWith('#card=')) return;
     const p = S.settings.popup; if (!p.enabled) return;
     const t = now(); if (currentLesson(t)) return;
     const n = nextLesson(t); if (n && n.date === ymd(t) && n.start - minOf(t) < p.quietMin) return;

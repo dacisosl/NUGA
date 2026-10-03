@@ -118,8 +118,7 @@ async function main() {
   const env = baseEnv();
   const day = Date.now() + 3600e3;
   const tea = await hmacToken(env.TOKEN_SECRET, { t: 'tea', sc: '7010000', sid: 'abcd', exp: day });
-  const stu7 = await hmacToken(env.TOKEN_SECRET, { t: 'stu', sc: '7010000', cls: '2-3', no: 7, exp: day });
-  const stu8 = await hmacToken(env.TOKEN_SECRET, { t: 'stu', sc: '7010000', cls: '2-3', no: 8, exp: day });
+  const stu7 = await hmacToken(env.TOKEN_SECRET, { t: 'stu', sc: '7010000', cls: '2-3', no: 7, exp: day }); // 예전 형식 — 이제 거부돼야 함
 
   console.log('# 기본');
   {
@@ -168,12 +167,12 @@ async function main() {
   console.log('# 토큰');
   {
     const forged = tea.slice(0, -3) + (tea.endsWith('AAA') ? 'BBB' : 'AAA');
-    const f = await call(env, '/feedback/send', { method: 'POST', token: forged, body: { cards: [] } });
+    const f = await call(env, '/ai/draft', { method: 'POST', token: forged, body: { records: [] } });
     ok(f.status === 401 && f.data.error === 'bad_token', '위조 토큰 401 bad_token');
     const other = await hmacToken('other-secret', { t: 'tea', sc: '7010000', sid: 'x', exp: day });
-    ok((await call(env, '/feedback/send', { method: 'POST', token: other, body: { cards: [] } })).data.error === 'bad_token', '다른 비밀로 서명한 토큰 거부');
+    ok((await call(env, '/ai/draft', { method: 'POST', token: other, body: { records: [] } })).data.error === 'bad_token', '다른 비밀로 서명한 토큰 거부');
     const expired = await hmacToken(env.TOKEN_SECRET, { t: 'tea', sc: '7010000', sid: 'x', exp: Date.now() - 1 });
-    ok((await call(env, '/feedback/send', { method: 'POST', token: expired, body: { cards: [] } })).data.error === 'bad_token', '만료 토큰 거부');
+    ok((await call(env, '/ai/draft', { method: 'POST', token: expired, body: { records: [] } })).data.error === 'bad_token', '만료 토큰 거부');
     ok((await call(env, '/ai/draft', { method: 'POST', token: 'garbage', body: { records: [] } })).data.error === 'bad_token', '형식 틀린 토큰 거부');
   }
 
@@ -181,7 +180,7 @@ async function main() {
   {
     const r0 = await call(env, '/ai/suggest', { method: 'POST', body: { segments: [] } });
     ok(r0.status === 401 && r0.data.error === 'login_required', '토큰 없는 AI 거부');
-    ok((await call(env, '/ai/suggest', { method: 'POST', token: stu7, body: { segments: [] } })).data.error === 'login_required', '학생 토큰으로 AI 거부');
+    ok((await call(env, '/ai/suggest', { method: 'POST', token: stu7, body: { segments: [] } })).status === 401, '학생 토큰(예전 형식)으로 AI 거부');
     const noKey = baseEnv({ GEMINI_API_KEY: '' });
     ok((await call(noKey, '/ai/draft', { method: 'POST', token: tea, body: { records: [] } })).data.error === 'ai_off', '키 없으면 503 ai_off');
 
@@ -326,45 +325,24 @@ async function main() {
     const s2 = await start();
     ok(fragment((await call(env, `/auth/whalespace/callback?error=access_denied&state=${s2.state}`)).headers.get('Location')).error === 'cancelled', '취소 → cancelled');
 
+    // 학생 로그인은 없다: 학생 계정은 어떤 경로로도 토큰을 받지 못하고, 반·번호를 돌려주지 않는다
     const s3 = await start('student');
-    whaleUser = { userId: 'stu-raw-1', userType: 'STUDENT', schoolCode: '7010000', grade: 2, classNum: 3, number: 7 };
+    whaleUser = { userId: 'stu-raw-1', userType: 'STUDENT', schoolCode: '7010000', grade: 2, classNum: 3, number: 7, name: '김학생' };
     const sf = fragment((await call(env, `/auth/whalespace/callback?code=good&state=${s3.state}`)).headers.get('Location'));
-    ok(sf.userType === 'stu' && sf.className === '2-3' && sf.number === 7 && sf.token && !JSON.stringify(sf).includes('stu-raw-1'), '학생 결과');
-    const mine = await call(env, '/feedback/mine', { token: sf.token });
-    ok(mine.status === 200 && Array.isArray(mine.data.cards), '학생 토큰으로 내 카드 조회');
-
-    const s4 = await start('student');
-    whaleUser = { userId: 't1', userType: 'TEACHER', schoolCode: '7010000' };
-    ok(fragment((await call(env, `/auth/whalespace/callback?code=good&state=${s4.state}`)).headers.get('Location')).error === 'wrong_role', '학생 화면에 교사 → wrong_role');
+    ok(sf.error === 'wrong_role' && !sf.token && !JSON.stringify(sf).match(/2-3|김학생|stu-raw/), '학생 계정 → wrong_role, 반·번호·이름 없음');
     const s5 = await start();
-    whaleUser = { userId: 's1', userType: 'STUDENT', schoolCode: '7010000', grade: 2, classNum: 3, number: 7 };
-    ok(fragment((await call(env, `/auth/whalespace/callback?code=good&state=${s5.state}`)).headers.get('Location')).error === 'wrong_role', '교사 화면에 학생 → wrong_role');
-    const s6 = await start('student');
-    whaleUser = { userId: 's2', userType: 'STUDENT', schoolCode: '7010000' };
-    ok(fragment((await call(env, `/auth/whalespace/callback?code=good&state=${s6.state}`)).headers.get('Location')).error === 'no_class', '반·번호 없음 → no_class');
+    whaleUser = { userId: 't9', userType: 'TEACHER', schoolCode: '7010000', grade: 2, classNum: 3, number: 7 };
+    const tf = fragment((await call(env, `/auth/whalespace/callback?code=good&state=${s5.state}`)).headers.get('Location'));
+    ok(tf.userType === 'tea' && !('className' in tf) && !('number' in tf), '교사 결과에 반·번호 없음');
     const s7 = await start();
     ok(fragment((await call(env, `/auth/whalespace/callback?code=bad&state=${s7.state}`)).headers.get('Location')).error === 'login_failed', '코드 교환 실패 → login_failed');
   }
 
-  console.log('# 학생 피드백');
+  console.log('# 학생 정보는 서버에 없음');
   {
-    const card = { class: '2-3', no: 7, period: 'unit-3', good: '그래프로 설명한 점이 좋았어요.', next: '다른 의견에 덧붙여 말해 보기', text: '', label: '3단원', name: '홍길동', secret: 1 };
-    ok((await call(env, '/feedback/send', { method: 'POST', token: stu7, body: { cards: [card] } })).status === 403, '학생은 보내기 거부(403)');
-    ok((await call(env, '/feedback/send', { method: 'POST', body: { cards: [card] } })).status === 401, '토큰 없이 보내기 거부');
-    const sd = await call(env, '/feedback/send', { method: 'POST', token: tea, body: { cards: [card, { ...card, no: 8, good: '8번 카드' }, { class: 'x', no: 1, period: 'p' }] } });
-    ok(sd.status === 200 && sd.data.ok === true && sd.data.saved === 2, '교사 보내기 저장 수');
-    const kv = env.NUGA_KV._map.get('fb:7010000:2-3:7:unit-3');
-    ok(kv && kv.ttl === 30 * 86400 && !kv.value.includes('홍길동') && !kv.value.includes('"name"') && !kv.value.includes('secret'), '카드 키·30일·이름 필드 버림');
-    const m7 = await call(env, '/feedback/mine', { token: stu7 });
-    ok(m7.data.cards.length === 1 && m7.data.cards[0].no === 7 && m7.data.cards[0].good.includes('그래프'), '학생 7번은 자기 카드만');
-    const m8 = await call(env, '/feedback/mine', { token: stu8 });
-    ok(m8.data.cards.length === 1 && m8.data.cards[0].good === '8번 카드', '학생 8번은 7번 카드를 못 봄');
-    const stu70 = await hmacToken(env.TOKEN_SECRET, { t: 'stu', sc: '7010000', cls: '2-3', no: 70, exp: day });
-    ok((await call(env, '/feedback/mine', { token: stu70 })).data.cards.length === 0, '70번은 7번 카드와 섞이지 않음');
-    const otherSchool = await hmacToken(env.TOKEN_SECRET, { t: 'stu', sc: '9999999', cls: '2-3', no: 7, exp: day });
-    ok((await call(env, '/feedback/mine', { token: otherSchool })).data.cards.length === 0, '다른 학교 같은 반·번호는 못 봄');
-    ok((await call(env, '/feedback/mine', { token: tea })).status === 403, '교사 토큰으로 mine 거부');
-    ok((await call(env, '/feedback/mine')).status === 401, '토큰 없이 mine 거부');
+    ok((await call(env, '/feedback/send', { method: 'POST', token: tea, body: { cards: [{ class: '2-3', no: 7 }] } })).status === 404, '학생 피드백 저장 주소 없음 (404)');
+    ok((await call(env, '/feedback/mine', { token: stu7 })).status === 404, '학생 카드 조회 주소 없음 (404)');
+    ok(![...env.NUGA_KV._map.keys()].some((k) => k.startsWith('fb:')), 'KV 에 학생 카드 없음');
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

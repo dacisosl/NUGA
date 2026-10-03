@@ -101,6 +101,23 @@ const msg = await g('seal')(key, { id: 'r1', class: '2-3', no: 5 });
 ok(/^[\w-]+\.[\w-]+$/.test(msg) && !msg.includes('2-3'), "봉한 메시지 'iv.암호문'");
 eq((await g('unseal')(key, msg)).no, 5, '풀기');
 
+// 11. 학번·이름은 기기 밖으로 나가지 않음
+const named = g('defaultState')('real');
+named.classes = [{ id: '2-3', students: [{ no: 7, name: '이서연' }, { no: 8, name: '김지우' }] }];
+named.settings.subject = '화학Ⅰ';
+ctx.__set(named);
+eq(g('scrubNames')('이서연이 발표하고 지우야 하고 불렀음'), '○○이 발표하고 ○○야 하고 불렀음', '명단 이름·성 뺀 이름 지움');
+const card = { good: '이서연은 근거를 들어 발표한 점이 좋았어요.', next: '질문해 보기' };
+const pay = g('cardPayload')(card, { label: '최근 7일' });
+const raw = JSON.stringify(pay);
+ok(!/이서연|서연|2-3|"no"|"cls"|"class"/.test(raw) && pay.g.includes('○○'), `쪽지에 반·번호·이름 없음 ${raw}`);
+const link = g('cardLink')(card, { label: '최근 7일' }, 'https://example.org/nuga/');
+ok(link.startsWith('https://example.org/nuga/#card=') && !link.includes('?'), '쪽지 내용은 # 뒤에만 (서버로 안 감)');
+eq(JSON.parse(g('unb64uText')(link.split('#card=')[1])).n, '질문해 보기', '쪽지 다시 읽기');
+named.records = [{ id: 'r1', class: '2-3', no: 7, cat: 0, time: '2026-10-13T01:00:00Z', note: '이서연이 촉매를 질문함', std: [] }];
+const pr = g('promptFor')(named.records);
+ok(!/이서연|2-3|7번/.test(pr), '복사용 프롬프트에 이름·반·번호 없음');
+
 console.log(`${pass} passed, ${fail} failed`);
 console.log(fail ? 'FAIL' : 'ALL PASS');
 process.exit(fail ? 1 : 0);

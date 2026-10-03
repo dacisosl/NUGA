@@ -86,32 +86,26 @@ function viewFeedback() {
   const ok = cards.filter((c) => !c.none);
   const sent = ok.filter((c) => S.feedbackSent[`${cls}_${c.no}_${range.id}`]).length;
   const mx = stdMatrix(cls, range);
-  const send = async () => {
-    const payload = ok.map((c) => ({ class: cls, no: c.no, period: range.id, label: range.label, good: c.good, next: c.next, text: feedbackText(c) }));
-    try {
-      if (S.mode !== 'demo') {
-        if (!serverUrl() || S.account.userType !== 'tea') { toast('학생에게 보내려면 누가 서버와 웨일 스페이스 로그인이 필요해요. 복사·인쇄는 바로 쓸 수 있어요.'); return; }
-        await api('/feedback/send', { body: { cards: payload } });
-      }
-      for (const p of payload) S.feedbackSent[`${cls}_${p.no}_${range.id}`] = { at: now().toISOString(), text: p.text, good: p.good, next: p.next, period: range.label };
-      save(); render(); toast(`${payload.length}명에게 보냈어요${S.mode === 'demo' ? ' (데모: 이 기기 안에서만)' : ''}`);
-    } catch (e) { toast(`보내지 못했어요: ${e.message}`); }
+  const slips = () => {
+    for (const c of ok) S.feedbackSent[`${cls}_${c.no}_${range.id}`] = { at: now().toISOString(), period: range.label };
+    save(); printSlips(cls, ok, range);
   };
   return h('div', { class: 'page' },
     h('div', { class: 'page-h' }, h('h1', null, '피드백'), tabs),
     h('div', { class: 'card no-print' },
       h('div', { class: 'row wrap' }, h('div', { class: 'seg' }, ranges.map((r) => h('button', { class: r.id === range.id ? 'on' : '', onclick: () => { UI.fbRange = r.id; render(); } }, r.label))), h('span', { class: 'grow' }),
-        h('span', { class: 'small muted' }, `카드 ${ok.length}명 · 근거 없음 ${cards.length - ok.length}명${sent ? ` · 보냄 ${sent}명` : ''}`)),
+        h('span', { class: 'small muted' }, `카드 ${ok.length}명 · 근거 없음 ${cards.length - ok.length}명${sent ? ` · 쪽지 ${sent}명` : ''}`)),
       h('div', { class: 'row wrap mt12' },
         h('button', { class: 'btn', onclick: () => copyText(ok.map((c) => `[${studentLabel(cls, c.no)}] ${feedbackText(c)}`).join('\n\n'), `${ok.length}명 카드를 복사했어요`) }, icon('copy'), '전체 복사'),
         h('button', { class: 'btn', onclick: () => download(`누가_피드백_${cls}_${ymd(now())}.csv`, '﻿' + ['번호,잘한 장면,다음 도전,근거', ...ok.map((c) => [c.no, c.good, c.next, c.evidence.join(' / ')].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n'), 'text/csv') }, 'CSV'),
-        h('button', { class: 'btn', onclick: () => window.print() }, '인쇄용 쪽지'),
-        h('button', { class: 'btn primary', onclick: send, disabled: !ok.length }, `${ok.length}명에게 보내기`))),
+        h('button', { class: 'btn primary', onclick: slips, disabled: !ok.length }, `학생용 QR 쪽지 ${ok.length}명`)),
+      h('div', { class: 'xs muted mt8' }, '학생은 쪽지의 QR을 찍어 자기 카드를 봐요. 카드 내용은 QR 안에만 있고 서버에 저장되지 않아요. 반·번호·이름은 QR에 넣지 않아요.')),
     h('div', { class: 'fb-grid' }, cards.map((c) => c.none
       ? h('div', { class: 'fb none' }, h('div', { class: 'who' }, studentLabel(cls, c.no)), h('div', { class: 'small muted' }, '이 기간 근거 기록이 없어요.'),
         h('button', { class: 'btn sm no-print', onclick: () => { const ex = S.watchExtra[cls] || []; if (!ex.includes(c.no)) S.watchExtra[cls] = [...ex, c.no]; save(); toast('다음 수업 관찰 대상에 올렸어요'); } }, '다음 수업 관찰 대상에 올리기'))
       : h('div', { class: 'fb' },
-        h('div', { class: 'who' }, studentLabel(cls, c.no), S.feedbackSent[`${cls}_${c.no}_${range.id}`] ? h('span', { class: 'chip ok' }, '보냄') : null, h('span', { class: 'grow' }),
+        h('div', { class: 'who' }, studentLabel(cls, c.no), S.feedbackSent[`${cls}_${c.no}_${range.id}`] ? h('span', { class: 'chip ok' }, '쪽지') : null, h('span', { class: 'grow' }),
+          h('button', { class: 'btn xs ghost no-print', onclick: () => copyText(cardLink(c, range), '학생용 링크를 복사했어요 (반·번호·이름 없음)') }, '링크'),
           h('button', { class: 'btn xs ghost no-print', onclick: () => openSheet(() => fbEditSheet(cls, c, range)) }, '고치기')),
         h('div', { class: 'good' }, c.good), h('div', { class: 'next' }, h('b', null, '다음 도전 '), c.next), h('div', { class: 'ev' }, `근거: ${c.evidence.join(' · ')}`)))),
     mx.codes.length ? h('div', { class: 'card no-print' }, h('h2', null, '성취기준별 관찰 근거'), h('div', { class: 'small muted' }, '0칸은 이 기간에 그 성취기준 기록이 없는 학생이에요.'),
@@ -159,7 +153,8 @@ function viewDraft() {
     let out = null;
     if (aiOn()) {
       try {
-        const r = await api('/ai/draft', { body: { records: use.map((x) => ({ id: x.id, text: x.note, cat: x.cat, std: x.std, date: recDay(x) })), standards: S.standards, limit: S.settings.length.limit, level: S.settings.level, guide: S.settings.teacherGuide, subject: S.settings.subject } });
+        // 반·번호·이름은 보내지 않는다. 기록 내용만 (메모 속 이름도 지움)
+        const r = await api('/ai/draft', { body: { records: use.map((x) => ({ id: x.id, text: scrubNames(x.note), cat: x.cat, std: x.std, date: recDay(x) })), standards: S.standards, limit: S.settings.length.limit, level: S.settings.level, guide: S.settings.teacherGuide, subject: S.settings.subject } });
         if (r.sentences && r.sentences.length) out = { text: r.sentences.map((s) => s.text).join(' '), sentences: r.sentences };
       } catch (e) { toast(`${e.message} — 규칙으로 정리했어요`); }
     }
@@ -219,7 +214,7 @@ function viewSettings() {
     settingsServer(),
     section('백업',
       h('div', { class: 'row wrap' },
-        h('button', { class: 'btn', onclick: () => { const copy = JSON.parse(JSON.stringify(S)); copy.settings.ai.key = ''; copy.sync.key = null; copy.account = { provider: 'none' }; delete copy.studentLogin; download(`누가_백업_${ymd(now())}.json`, JSON.stringify(copy, null, 1), 'application/json'); } }, '백업 내려받기'),
+        h('button', { class: 'btn', onclick: () => { const copy = JSON.parse(JSON.stringify(S)); copy.settings.ai.key = ''; copy.sync.key = null; copy.account = { provider: 'none' }; download(`누가_백업_${ymd(now())}.json`, JSON.stringify(copy, null, 1), 'application/json'); } }, '백업 내려받기'),
         h('label', { class: 'btn' }, '백업 불러오기', h('input', { type: 'file', accept: '.json,application/json', class: 'sr', onchange: async (e) => { const f = e.target.files[0]; if (!f) return; try { const j = JSON.parse(await f.text()); if (j.v !== 1 || !Array.isArray(j.records)) throw new Error('누가 백업이 아니에요'); j.mode = S.mode; S = { ...defaultState(S.mode), ...j, sync: S.sync, account: S.account }; saveNow(); render(); toast('불러왔어요'); } catch (err) { toast(err.message); } } }))),
       h('div', { class: 'xs muted' }, '백업 파일에는 AI 키·기기 연결 열쇠·로그인 정보를 넣지 않아요. 학생 이름이 들어 있으니 안전한 곳에 두세요.')),
     section('데모',
@@ -236,8 +231,8 @@ function settingsAccount() {
   return section('웨일 스페이스',
     logged ? h('div', { class: 'row wrap' }, h('span', { class: 'chip ok' }, a.provider === 'whalespace-demo' ? '데모 로그인' : '로그인됨'), h('span', { class: 'small' }, S.school?.name || ''), h('span', { class: 'grow' }),
       h('button', { class: 'btn sm', onclick: () => { S.account = { provider: 'none' }; save(); render(); } }, '로그아웃'))
-      : h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => whaleLogin('teacher') }, '웨일 스페이스로 로그인'), h('span', { class: 'small muted' }, '학교가 저절로 잡히고, 학생에게 피드백을 보낼 수 있어요.')),
-    h('div', { class: 'xs muted' }, '웨일 스페이스 App Console 연동 승인이 필요합니다. 승인 전에는 데모 로그인으로 흐름을 볼 수 있어요.'));
+      : h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => whaleLogin('teacher') }, '웨일 스페이스로 로그인'), h('span', { class: 'small muted' }, '교사 계정으로 학교가 저절로 잡히고, 서버 AI를 쓸 수 있어요.')),
+    h('div', { class: 'xs muted' }, '교사만 로그인해요. 학생 계정·반·번호·이름은 서버로 받지 않아요. App Console 연동 승인 전에는 데모 로그인으로 흐름을 볼 수 있어요.'));
 }
 function whaleLogin(role) {
   if (!serverUrl()) {
@@ -249,10 +244,9 @@ function whaleLogin(role) {
     return;
   }
   const ret = location.href.split('#')[0];
-  location.href = `${serverUrl()}/auth/whalespace?return=${encodeURIComponent(ret)}&role=${role}`;
+  location.href = `${serverUrl()}/auth/whalespace?return=${encodeURIComponent(ret)}`;
 }
-function demoLogin(role) {
-  if (role === 'student') { S.studentLogin = { class: '2-3', no: 12, label: '2-3반 12번 (데모)', demo: true }; save(); location.hash = '#student'; render(); return; }
+function demoLogin() {
   S.account = { provider: 'whalespace-demo', userType: 'tea', sid: 'demo' };
   if (!S.school) S.school = { name: '해밀고등학교', code: 'DEMO', office: '', kind: 'high', source: 'demo' };
   save(); render(); toast('데모 로그인: 실제 계정 정보는 쓰지 않아요');
@@ -507,46 +501,55 @@ function startDemo() {
   toast('데모: 10/13(화) 10:29, 2교시 2-3반 수업 중이에요. 위쪽 [수업 끝내고 자리로 ▶]를 눌러 보세요.', { ms: 7000 });
 }
 
-/* ---------- 학생 화면 ---------- */
+/* ---------- 학생 화면 (QR 쪽지) ----------
+ * 주소 # 뒤에 담긴 카드만 보여 준다. # 뒤는 서버로 가지 않고, 이 화면은 아무것도 저장하지 않는다.
+ */
 function renderStudent() {
   const box = h('div', { class: 'student' }, h('div', { class: 'logo' }, h('i', null, h('b'), h('b'), h('b')), '누가 · 내 피드백'));
-  const login = S.studentLogin;
-  if (!login) {
-    box.appendChild(h('div', { class: 'card col' }, h('div', null, '웨일 스페이스 학생 계정으로 로그인하면 선생님이 보낸 내 피드백 카드만 볼 수 있어요.'),
-      h('div', { class: 'row wrap' }, h('button', { class: 'btn primary', onclick: () => whaleLogin('student') }, '웨일 스페이스로 로그인'),
-        S.mode === 'demo' ? h('button', { class: 'btn', onclick: () => demoLogin('student') }, '데모 학생으로 보기') : null,
-        h('button', { class: 'btn ghost', onclick: () => { location.hash = ''; render(); } }, '선생님 화면으로'))));
-    return box;
-  }
-  const list = h('div', { class: 'col' }, h('div', { class: 'muted small' }, '불러오는 중…'));
-  box.appendChild(h('div', { class: 'row' }, h('b', { class: 'grow' }, login.label || `${login.class}반 ${login.no}번`), h('button', { class: 'btn sm', onclick: () => { delete S.studentLogin; save(); location.hash = ''; render(); } }, '로그아웃')));
-  box.appendChild(list);
-  const show = (cards) => list.replaceChildren(...(cards.length ? cards.map((c) => h('div', { class: 'fb' }, h('div', { class: 'small muted' }, c.label || c.period || ''), h('div', { class: 'good' }, c.good), h('div', { class: 'next' }, h('b', null, '다음 도전 '), c.next))) : [h('div', { class: 'card empty' }, '아직 받은 피드백이 없어요.')]));
-  if (login.demo) {
-    show(Object.entries(S.feedbackSent).filter(([k]) => k.startsWith(`${login.class}_${login.no}_`)).map(([, v]) => ({ good: v.good, next: v.next, label: v.period })));
-  } else {
-    api('/feedback/mine', { token: login.token }).then((r) => show(r.cards || [])).catch((e) => list.replaceChildren(h('div', { class: 'note' }, e.status === 401 ? '로그인이 끝났어요. 다시 로그인해 주세요.' : `불러오지 못했어요: ${e.message}`)));
-  }
+  let c = null;
+  try { c = JSON.parse(unb64uText(location.hash.slice(6))); } catch { /* 잘못된 쪽지 */ }
+  if (!c || c.v !== 1) { box.appendChild(h('div', { class: 'card empty' }, '쪽지를 읽지 못했어요. 선생님께 다시 받아 주세요.')); return box; }
+  box.appendChild(h('div', { class: 'fb' },
+    h('div', { class: 'small muted' }, [c.s, c.p, c.d && koDate(c.d)].filter(Boolean).join(' · ')),
+    h('div', { class: 'good' }, c.g), h('div', { class: 'next' }, h('b', null, '다음 도전 '), c.n)));
+  box.appendChild(h('div', { class: 'xs muted' }, '이 카드는 쪽지의 QR 안에만 있어요. 서버에 저장되지 않고, 이름·번호도 들어 있지 않아요.'));
   return box;
+}
+
+/** 학생용 QR 쪽지 인쇄: 종이에는 교사가 건넬 수 있게 번호를 적고, QR(링크)에는 내용만 담는다 */
+async function printSlips(cls, cards, range) {
+  const base = location.href.split('#')[0];
+  const local = location.protocol === 'file:' || /^(localhost|127\.)/.test(location.hostname);
+  const QR = await loadQr();
+  const wrap = h('div', { class: 'slips', id: 'slips' },
+    h('div', { class: 'slips-bar no-print' }, h('b', null, `${cls}반 학생용 쪽지 · ${range.label}`), h('span', { class: 'grow' }),
+      local ? h('span', { class: 'xs', style: { color: 'var(--warn)' } }, '배포한 https 주소에서 만들어야 학생 폰에서 QR이 열려요') : null,
+      h('button', { class: 'btn primary sm', onclick: () => window.print() }, '인쇄'), h('button', { class: 'btn sm', onclick: () => wrap.remove() }, '닫기')),
+    h('div', { class: 'slips-grid' }, cards.map((c) => {
+      const q = h('div', { class: 'slip-qr' });
+      if (QR) new QR(q, { text: cardLink(c, range, base), width: 120, height: 120, correctLevel: QR.CorrectLevel.L });
+      return h('div', { class: 'slip' }, h('div', { class: 'slip-no' }, `${cls} · ${c.no}번`),
+        h('div', { class: 'slip-body' }, h('div', { class: 'good' }, c.good), h('div', { class: 'next' }, h('b', null, '다음 도전 '), c.next)), q);
+    })));
+  if (!QR) wrap.querySelector('.slips-bar').appendChild(h('span', { class: 'xs', style: { color: 'var(--warn)' } }, 'QR 도구를 불러오지 못해 글만 인쇄돼요 (인터넷 연결 확인)'));
+  document.body.appendChild(wrap);
 }
 
 /* ---------- 주소 # 처리 (연결 코드 · 웨일 스페이스 로그인) ---------- */
 function handleHash() {
   const hs = location.hash;
   if (hs.startsWith('#pair=')) { const code = hs.slice(6); history.replaceState(null, '', location.pathname + location.search); acceptPair(code); return; }
+  if (hs.startsWith('#card=')) return; // 학생용 쪽지는 render 에서 그린다
   if (hs.startsWith('#ws=')) {
     history.replaceState(null, '', location.pathname + location.search);
     let j; try { j = JSON.parse(unb64uText(hs.slice(4))); } catch { toast('로그인 정보를 읽지 못했어요. 다시 로그인해 주세요.'); return; }
-    const ERR = { cancelled: '로그인을 취소했어요.', no_class: '학생 계정에 반·번호가 없어요. 담임 선생님께 확인해 주세요.', wrong_role: '이 계정으로는 이 화면에 들어올 수 없어요 (학생은 학생 화면으로).', bad_return: '허용되지 않은 주소예요.' };
+    const ERR = { cancelled: '로그인을 취소했어요.', wrong_role: '교사 계정으로만 로그인할 수 있어요. 학생은 선생님이 준 QR 쪽지로 카드를 봐요.', bad_return: '허용되지 않은 주소예요.', login_failed: '로그인하지 못했어요. 잠시 뒤 다시 해 주세요.' };
     if (j.error) { toast(ERR[j.error] || `로그인 오류: ${j.error}`); return; }
     if (S.mode === 'demo') switchMode('real');
     if (j.userType === 'tea') {
       S.account = { provider: 'whalespace', userType: 'tea', sid: j.sid, token: j.token, exp: j.exp };
       if (j.school) S.school = { name: j.school.name, code: j.school.code, office: j.school.office, kind: j.school.kind, source: 'whalespace' };
       save(); render(); toast(`웨일 스페이스로 로그인했어요${S.school ? ` · ${S.school.name}` : ''}`);
-    } else if (j.userType === 'stu') {
-      S.studentLogin = { class: j.className, no: j.number, token: j.token, label: `${j.className}반 ${j.number}번` };
-      save(); location.hash = '#student'; render();
     }
   }
 }
