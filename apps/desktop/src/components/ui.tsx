@@ -81,6 +81,46 @@ function AchievementPopover({ student, anchor, onClose }: { student: TagStudent;
 }
 
 /**
+ * 길게 누르기(0.5초, 마우스·터치). 길게 누른 뒤의 클릭은 막는다 — 번호 버튼을 길게 눌러도 저장되지 않게.
+ */
+export function useLongPress(onLong: (el: HTMLElement) => void, ms = 500) {
+  const timer = useRef<number | undefined>(undefined);
+  const fired = useRef(false);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = undefined; } start.current = null; };
+  useEffect(() => cancel, []);
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      if (e.button !== 0) return;
+      fired.current = false;
+      const el = e.currentTarget;
+      start.current = { x: e.clientX, y: e.clientY };
+      timer.current = window.setTimeout(() => { timer.current = undefined; fired.current = true; navigator.vibrate?.(15); onLong(el); }, ms);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => { if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 8) cancel(); },
+    onPointerUp: cancel, onPointerLeave: cancel, onPointerCancel: cancel,
+    onClickCapture: (e: React.MouseEvent) => { if (fired.current) { fired.current = false; e.preventDefault(); e.stopPropagation(); } },
+    onContextMenu: (e: React.MouseEvent) => { if (fired.current || timer.current) e.preventDefault(); },
+  };
+}
+
+/** 학생을 길게 누르면 도달 정도 슬라이더가 뜬다. bind 를 대상 요소에 펼치고 popover 를 함께 그린다. */
+export function useAchievementPress(student: TagStudent | undefined) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const bind = useLongPress((el) => { if (student) setAnchor(el.getBoundingClientRect()); });
+  const popover = anchor && student ? <AchievementPopover student={student} anchor={anchor} onClose={() => setAnchor(null)} /> : null;
+  return { bind, popover };
+}
+
+/** 길게 누르면 성취도 조절이 되는 학생 영역 (오늘 기록·알림 모달의 번호·이름) */
+export function AchPress({ student, className, children, ...rest }: { student: TagStudent | undefined; className?: string; children: React.ReactNode } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className" | "children">) {
+  const { bind, popover } = useAchievementPress(student);
+  const tip = student ? "길게 누르면 성취도 조절" : undefined;
+  if (rest.onClick) return <><button type="button" className={`lp ${className || ""}`} title={tip} {...rest} {...bind}>{children}</button>{popover}</>;
+  return <><span className={`lp ${className || ""}`} title={tip} {...bind}>{children}</span>{popover}</>;
+}
+
+/**
  * 학생 이름표: 바탕색이 도달 정도(파랑 5단계)를 나타낸다. 값이 없으면 흰 바탕에 회색 빗금.
  * 오른쪽 위 배지에 숫자를 표시하고, 누르면 조정 창이 열린다. 교사가 조정한 값에는 연필, 근거가 부족한 자동값은 점선 테두리.
  */
@@ -101,8 +141,9 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
   };
   const name = student.name || `${student.no}번`;
   const lowConf = !ach.edited && ach.confidence === "low";
+  const press = useLongPress((el) => { if (!anchor) setAnchor(el.getBoundingClientRect()); });
   return (
-    <span className={`stag g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title}>
+    <span className={`stag lp g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title ?? "길게 누르면 성취도 조절"} {...press}>
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}
@@ -128,7 +169,7 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   );
 }
 
-export function Modal({ title, children, footer, onClose, width, header }: { title?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; onClose: () => void; width?: "wide" | "narrow" | "xl"; header?: React.ReactNode }) {
+export function Modal({ title, children, footer, onClose, width, header }: { title?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; onClose: () => void; width?: "wide" | "narrow" | "xl" | "inbox"; header?: React.ReactNode }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
