@@ -358,20 +358,20 @@ textarea { resize: vertical; }
 .stag.sm { height: 26px; padding: 0 12px 0 9px; font-size: 14px; }
 .stag.lg { height: 38px; padding: 0 18px 0 14px; font-size: 18px; font-weight: 800; border-radius: 10px; }
 /* 도달 정도 5단계 (낮음 g0 → 높음 g4), gx = 추정 불가 */
-.stag.g0 { background: #F1F4FD; color: #1A1C21; border-color: #DCE3F7; }
-.stag.g1 { background: #D3DCF7; color: #1A1C21; }
-.stag.g2 { background: #A7B8EE; color: #1A1C21; }
-.stag.g3 { background: #6F8BE0; color: #fff; }
-.stag.g4 { background: #2448C9; color: #fff; }
+.stag.g0 { background: #F3F3F1; color: #1A1C21; border-color: #E2E2DE; }
+.stag.g1 { background: #D9D9D5; color: #1A1C21; }
+.stag.g2 { background: #ADADA8; color: #1A1C21; }
+.stag.g3 { background: #5F5F5C; color: #fff; }
+.stag.g4 { background: #1A1A1A; color: #fff; }
 .stag.gx { background: repeating-linear-gradient(135deg, #fff 0 5px, #ECEDF1 5px 7px); color: #1A1C21; border-color: #D6D8DE; }
-.stag.lowconf { border: 1.5px dashed #2448C9; }
-.stag.g4.lowconf, .stag.g3.lowconf { border-color: #F1F4FD; }
+.stag.lowconf { border: 1.5px dashed #1A1A1A; }
+.stag.g4.lowconf, .stag.g3.lowconf { border-color: #F3F3F1; }
 .stag-name { border: none; background: none; padding: 0; font: inherit; color: inherit; overflow: hidden; text-overflow: ellipsis; }
 button.stag-name { cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
 button.stag-name:hover { text-decoration-color: currentColor; }
 .stag-lv { position: absolute; top: -8px; right: -9px; min-width: 20px; height: 17px; padding: 0 3px; border-radius: 6px; font-size: 10.5px; font-weight: 800; line-height: 15px; text-align: center; cursor: pointer; border: 1px solid; box-shadow: 0 1px 2px rgba(0,0,0,.15); user-select: none; }
 .stag.lg .stag-lv { min-width: 20px; height: 20px; line-height: 18px; font-size: 12px; top: -8px; right: -8px; }
-.stag .stag-lv { background: #fff; color: #1A1C21; border-color: #2448C9; display: inline-flex; align-items: center; gap: 1px; justify-content: center; }
+.stag .stag-lv { background: #fff; color: #1A1C21; border-color: #1A1A1A; display: inline-flex; align-items: center; gap: 1px; justify-content: center; }
 .stag.gx .stag-lv { color: #5E6270; border-color: #9EA2AD; }
 .stag-lv .pen { margin-left: 1px; opacity: .75; }
 .stag-lv:hover { transform: scale(1.12); }
@@ -429,18 +429,12 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .span-legend .hl, .ratio-txt { white-space: nowrap; }
 
 /* 도달 정도 조정 */
-.ach-pop { position: fixed; z-index: 400; background: #15171C; color: #F4F5F7; border: 1px solid #000; border-radius: 12px; box-shadow: 0 12px 34px rgba(0,0,0,.35); padding: 12px 14px; }
-.ach-pop .muted { color: #A9ADB8; }
-.ach-pop .btn { background: #2A2D35; border-color: #3A3E48; color: #F4F5F7; }
-.ach-pop .btn:hover { background: #343844; }
-.ach-pop .ach-auto { background: #fff; }
-.ach-pop .ach-num { color: #fff !important; }
-.ach-pop input[type=range] { accent-color: #8FA6F0; }
-.ach-pop .x { border: none; background: none; font-size: 18px; cursor: pointer; color: #A9ADB8; }
+.ach-pop { position: fixed; z-index: 400; background: var(--surface, #fff); border: 1px solid var(--line, #E3E4E8); border-radius: 12px; box-shadow: 0 10px 30px rgba(20,24,40,.18); padding: 12px 14px; }
+.ach-pop .x { border: none; background: none; font-size: 18px; cursor: pointer; color: var(--muted); }
 .ach-ctl .ach-num { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
 .ach-ctl.compact .ach-num { font-size: 22px; }
 .ach-track { position: relative; margin-top: 10px; }
-.ach-track input[type=range] { width: 100%; margin: 0; accent-color: #2448C9; position: relative; z-index: 1; }
+.ach-track input[type=range] { width: 100%; margin: 0; accent-color: #1A1A1A; position: relative; z-index: 1; }
 .ach-track input.unset { opacity: .45; }
 .ach-scale { display: grid; grid-template-columns: repeat(5, 1fr); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 2px; }
 .ach-auto { position: absolute; top: -4px; width: 2px; height: 10px; background: #1A1C21; transform: translateX(-1px); border-radius: 1px; z-index: 2; pointer-events: none; }
