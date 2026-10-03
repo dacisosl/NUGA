@@ -148,15 +148,20 @@ export function makeSampleDoc(seed = 42, now: Date = new Date()): NugaDoc {
   const records: NugaRecord[] = [];
   for (const c of doc.settings.classes) {
     const studs = doc.students.filter((s) => s.class === c.class).map((s) => ({ s, lv: levelOf.get(`${s.class}|${s.no}`) || "B" as Level }));
-    for (const p of progress.filter((x) => x.class === c.class && x.date >= fromKey && x.date <= todayKey)) {
+    const lessons = progress.filter((x) => x.class === c.class && x.date >= fromKey && x.date <= todayKey).flatMap((p) => {
       const w = new Date(p.date + "T00:00:00").getDay();
       const cell = tt.find((t) => t.class === c.class && t.weekday === w);
       const per = cell && pmap.get(cell.period);
-      if (!per) continue;
+      if (!per) return [];
+      if (p.date === todayKey && nowM < hm(per.start) + 5) return []; // 아직 시작 안 한 수업
+      return [{ p, per }];
+    });
+    lessons.forEach(({ p, per }, li) => {
       const start = hm(per.start), end = hm(per.end);
       const isToday = p.date === todayKey;
-      if (isToday && nowM < start + 5) continue; // 아직 시작 안 한 수업
       const last = isToday ? Math.min(end, nowM - 1) : end;
+      // 반의 가장 최근 수업은 전부 수동 기록(보완 대기) — 추천 스크립트와 같은 줄에 나란히 보이게
+      const latest = li === lessons.length - 1;
       // 학생 고르기: 도달 수준이 높을수록 자주 (같은 날 중복 없이)
       const n = 2 + Math.floor(r() * 3);
       const pool = [...studs];
@@ -174,7 +179,7 @@ export function makeSampleDoc(seed = 42, now: Date = new Date()): NugaDoc {
         const m = start + 3 + Math.floor(r() * Math.max(1, last - start - 4));
         const d = new Date(p.date + "T00:00:00"); d.setHours(Math.floor(m / 60), m % 60, Math.floor(r() * 60), 0);
         const time = nowIso(d);
-        const pending = recent && r() < 0.8;
+        const pending = latest || (recent && r() < 0.8);
         const roll = r();
         records.push({
           id: uuid(), class: c.class, no: s.no, category: cat, time,
@@ -187,7 +192,7 @@ export function makeSampleDoc(seed = 42, now: Date = new Date()): NugaDoc {
           createdAt: time, updatedAt: time,
         });
       }
-    }
+    });
   }
   doc.records = records.sort((a, b) => a.time.localeCompare(b.time));
 
