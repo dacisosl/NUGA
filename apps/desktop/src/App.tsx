@@ -7,7 +7,7 @@ import { DraftPage } from "./pages/DraftPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Onboarding } from "./pages/Onboarding";
-import { SupplementModal } from "./components/SupplementModal";
+import { InboxModal, useBacklogCount } from "./components/InboxModal";
 import { AreaSwitcher } from "./components/AreaSwitcher";
 import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
@@ -19,7 +19,7 @@ export default function App() {
   const onboarded = useStore((s) => s.doc.settings.onboarded);
   const page = useStore((s) => s.page);
   const setPage = useStore((s) => s.setPage);
-  const queue = useStore((s) => s.supplementQueue);
+  const inbox = useStore((s) => s.inbox);
 
   useEffect(() => { init(); }, [init]);
   useEffect(() => { if (loaded) { syncEngine.start(); return () => syncEngine.stop(); } }, [loaded]);
@@ -46,7 +46,7 @@ export default function App() {
         {page === "settings" && <SettingsPage />}
       </main>
       <Toasts />
-      {queue.length > 0 && <SupplementModal />}
+      {inbox && <InboxModal />}
     </div>
   );
 }
@@ -56,13 +56,11 @@ function Sidebar() {
   const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem("nuga.sidebar", v ? "1" : "0"); } catch { /* ignore */ } };
   const page = useStore((s) => s.page);
   const setPage = useStore((s) => s.setPage);
-  const doc = useStore((s) => s.doc);
   const sync = useStore((s) => s.syncStatus);
-  const pending = useMemo(() => doc.records.filter((r) => r.status === "pending").length, [doc.records]);
-  const openSupplement = useStore((s) => s.openSupplement);
-  const supp = doc.settings.supplementEnabled;
+  const backlog = useBacklogCount();
+  const openInbox = useStore((s) => s.openInbox);
   const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"] }[] = [
-    { key: "today", label: "오늘", icon: "sun" },
+    { key: "today", label: "오늘 기록", icon: "sun" },
     { key: "records", label: "누가기록", icon: "list" },
     { key: "draft", label: "초안 작성", icon: "pen" },
     { key: "review", label: "검토", icon: "check" },
@@ -75,9 +73,9 @@ function Sidebar() {
           <Icon name={it.icon} /><span className="lbl">{it.label}</span>
         </button>
       ))}
-      {supp && pending > 0 && (
-        <button className="btn primary sm" style={{ margin: "8px 12px" }} onClick={() => openSupplement(doc.records.filter((r) => r.status === "pending").sort((a, b) => a.time.localeCompare(b.time)).map((r) => r.id))}>
-          보완 {pending}건
+      {backlog > 0 && (
+        <button className="btn warn-outline sm side-backlog" onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">
+          <span className="lbl">미반영 </span><b className="num">{backlog}</b>
         </button>
       )}
       <div className="spacer" />

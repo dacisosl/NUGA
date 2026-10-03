@@ -167,7 +167,8 @@ class SyncEngine {
     if (done.length) {
       await client.send({ v: 1, type: "transcriptAck", deviceId: st.deviceId, sentAt: nowIso(), payload: { ids: done } }, "pc");
       // 도착한 스크립트마다 추천 카드를 만든다 (실패해도 동기화는 계속)
-      for (const id of done) runSuggestions(id).catch(() => {});
+      // 추천이 나오면 알림 모달(쉬는 시간 기록)을 띄운다
+      for (const id of done) runSuggestions(id).then((r) => { if (r.count > 0) useStore.getState().openInbox({ transcripts: [id] }); }).catch(() => {});
       const metas = useTranscripts.getState().index.filter((m) => done.includes(m.id));
       const text = `수업 스크립트 ${done.length}건 도착 — ${metas.map((m) => `${m.class} ${m.period ? `${m.period}교시` : ""}`.trim()).join(", ")}`;
       notify("누가 스크립트 도착", text);
@@ -231,7 +232,8 @@ class SyncEngine {
       const body = `${pending.length}건 도착 — ${names}${pending.length > 3 ? " 외" : ""}`;
       notify("누가 기록 도착", body);
       const s = useStore.getState();
-      s.toast({ text: body, kind: "notice", ttl: 15000, action: supp ? { label: "보완하기", onClick: () => useStore.getState().openSupplement(pending) } : { label: "보기", onClick: () => useStore.getState().setPage("records") } });
+      if (supp) s.openInbox({ records: pending }); // 알림 모달에 바로 합친다 (이미 열려 있으면 이어서)
+      else s.toast({ text: body, kind: "notice", ttl: 15000, action: { label: "보기", onClick: () => useStore.getState().setPage("records") } });
     }
   }
 }

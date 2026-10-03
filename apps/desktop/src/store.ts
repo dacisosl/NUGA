@@ -10,6 +10,9 @@ import { isTauri } from "./lib/platform";
 export type Page = "today" | "records" | "draft" | "review" | "settings";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
 
+/** 알림 모달(쉬는 시간 기록). records = 수동 1차 기록 id, transcripts = 자동 추천이 붙은 수업 스크립트 id, backlog = 미반영 전체 보기 */
+export interface Inbox { records: string[]; transcripts: string[]; backlog: boolean }
+
 export interface Outbox { messages: SyncMessage[]; tombstones: Tombstone[] }
 
 /** 영역 = 독립 문서(명단·기록·초안·시간표). 동기화·AI·표시 옵션은 모든 영역이 공유한다. */
@@ -67,7 +70,7 @@ interface State {
   /** 초안 보기: 한 문장씩 · 구별하기(형광펜). 이 기기에만 저장 */
   view: { split: boolean; highlight: boolean };
   toasts: Toast[];
-  supplementQueue: string[];
+  inbox: Inbox | null;
   syncStatus: { state: "off" | "idle" | "busy" | "error"; message: string; lastAt?: string };
   outbox: Outbox;
   deviceId: string;
@@ -91,7 +94,10 @@ interface State {
   setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
   toast(t: Omit<Toast, "id">): number;
   dismissToast(id: number): void;
+  /** 수동 기록 id 로 알림 모달 열기 (이미 열려 있으면 합친다) */
   openSupplement(ids: string[]): void;
+  openInbox(p: Partial<Inbox>): void;
+  closeInbox(): void;
   setSyncStatus(s: State["syncStatus"]): void;
   queueMessage(m: SyncMessage): void;
   drainOutbox(): Outbox;
@@ -155,7 +161,7 @@ export const useStore = create<State>((set, get) => ({
   settingsTab: "subject",
   view: (() => { try { return { split: false, highlight: false, ...JSON.parse(localStorage.getItem("nuga.view") || "{}") }; } catch { return { split: false, highlight: false }; } })(),
   toasts: [],
-  supplementQueue: [],
+  inbox: null,
   syncStatus: { state: "off", message: "연결 안 됨" },
   recordsFilter: null,
   setRecordsFilter: (f) => set({ recordsFilter: f }),
@@ -211,7 +217,7 @@ export const useStore = create<State>((set, get) => ({
     await writeAreaDoc(id, d);
     const areas = [...get().areas, { id, name: d.settings.school.subject || "영역", createdAt: nowIso() }];
     await p.saveAux("areas", areas); await p.saveAux("currentArea", id);
-    set({ areas, areaId: id, doc: d, cls: d.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+    set({ areas, areaId: id, doc: d, cls: d.settings.classes[0]?.class || "", selected: null, inbox: null });
   },
 
   async switchArea(id) {
@@ -220,7 +226,7 @@ export const useStore = create<State>((set, get) => ({
     const p = await getPersist();
     const doc = (await readAreaDoc(id)) || applyGlobal(emptyDoc(), lastGlobal);
     await p.saveAux("currentArea", id);
-    set({ areaId: id, doc, cls: doc.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+    set({ areaId: id, doc, cls: doc.settings.classes[0]?.class || "", selected: null, inbox: null });
   },
 
   renameArea(id, name) {
@@ -277,7 +283,7 @@ export const useStore = create<State>((set, get) => ({
     const target = areas.some((a) => a.id === b.currentArea) ? b.currentArea : areas[0].id;
     const doc = (await readAreaDoc(target)) || emptyDoc();
     await p.saveAux("currentArea", target);
-    set({ areas, areaId: target, doc, cls: doc.settings.classes[0]?.class || "", selected: null, supplementQueue: [] });
+    set({ areas, areaId: target, doc, cls: doc.settings.classes[0]?.class || "", selected: null, inbox: null });
   },
 
   async resetEverything() {
@@ -290,7 +296,7 @@ export const useStore = create<State>((set, get) => ({
     lastGlobal = null;
     await p.saveAux("global", null); await p.saveAux("areas", areas); await p.saveAux("currentArea", DEFAULT_AREA);
     await p.saveAux("outbox", { messages: [], tombstones: [] });
-    set({ areas, areaId: DEFAULT_AREA, doc: d, cls: "", page: "settings", settingsTab: "subject", selected: null, supplementQueue: [], outbox: { messages: [], tombstones: [] } });
+    set({ areas, areaId: DEFAULT_AREA, doc: d, cls: "", page: "settings", settingsTab: "subject", selected: null, inbox: null, outbox: { messages: [], tombstones: [] } });
   },
 
   update(mut, opts) {
@@ -312,7 +318,17 @@ export const useStore = create<State>((set, get) => ({
     return id;
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-  openSupplement: (ids) => set({ supplementQueue: ids }),
+  openSupplement: (ids) => (ids.length ? get().openInbox({ records: ids }) : set({ inbox: null })),
+  openInbox(p) {
+    const cur = get().inbox;
+    const uniq = (a: string[]) => [...new Set(a)];
+    set({ inbox: {
+      records: uniq([...(cur?.records || []), ...(p.records || [])]),
+      transcripts: uniq([...(cur?.transcripts || []), ...(p.transcripts || [])]),
+      backlog: p.backlog ?? cur?.backlog ?? false,
+    } });
+  },
+  closeInbox: () => set({ inbox: null }),
   setSyncStatus: (syncStatus) => set({ syncStatus }),
   queueMessage(m) {
     const outbox = { ...get().outbox, messages: [...get().outbox.messages, m] };
