@@ -16,8 +16,8 @@ android {
         applicationId = "kr.nuga.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.6.1"
+        versionCode = 9
+        versionName = "0.6.2"
     }
 
     buildTypes {
