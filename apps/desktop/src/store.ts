@@ -437,7 +437,8 @@ export const useStore = create<State>((set, get) => ({
   loadSample() {
     const cur = get().doc;
     const sample = applyGlobal(makeSampleDoc(), lastGlobal ?? pickGlobal(cur, null));
-    if (!sample.settings.supplementEnabled) for (const r of sample.records) if (r.status === "pending") r.status = "confirmed";
+    // 보완을 쓰지 않으면 수동 기록을 완료로 바꾸고 메모를 관찰 내용으로 옮긴다
+    if (!sample.settings.supplementEnabled) for (const r of sample.records) if (r.status === "pending") { r.status = "confirmed"; r.note = r.note || r.memo || r.voiceMemo?.transcript || ""; }
     set({ doc: sample, cls: sample.settings.classes[0].class, page: "records" });
     scheduleSave(sample, get().outbox);
   },

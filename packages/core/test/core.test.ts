@@ -7,6 +7,9 @@ import {
   type NugaRecord, type SyncMessage,
 } from "../src";
 
+/** 견본 기록은 9월부터 이 날짜까지 만든다. 실행 날짜에 따라 결과가 달라지지 않게 고정. */
+const SAMPLE_NOW = new Date("2026-12-20T18:00:00");
+
 describe("crypto", () => {
   it("keyId is 16 hex from sha256 prefix", async () => {
     const key = new Uint8Array(32).fill(7);
@@ -89,7 +92,7 @@ describe("review", () => {
 });
 
 describe("draft", () => {
-  const doc = makeSampleDoc(1);
+  const doc = makeSampleDoc(1, SAMPLE_NOW);
   it("local generator respects target and maps evidence", () => {
     const s = doc.students.find((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.status === "confirmed").length >= 3)!;
     const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no && r.status === "confirmed");
@@ -108,7 +111,7 @@ describe("draft", () => {
 });
 
 describe("timetable & sync", () => {
-  const doc = makeSampleDoc(3);
+  const doc = makeSampleDoc(3, SAMPLE_NOW);
   it("resolves current lesson", () => {
     const mon = new Date("2026-05-11T11:00:00"); // 월 3교시 10:50–11:40 → 2-3
     const n = resolveNow(doc.settings, mon);
@@ -142,7 +145,7 @@ describe("import/export", () => {
     expect(p[0]).toEqual({ date: "2026-05-08", class: "2-3", unit: "3단원", lesson: 2, title: "화학 평형" });
   });
   it("json round trip strips api key", () => {
-    const doc = makeSampleDoc(5); doc.settings.ai.apiKey = "secret";
+    const doc = makeSampleDoc(5, SAMPLE_NOW); doc.settings.ai.apiKey = "secret";
     const text = toExportJson(doc, "t");
     expect(text).not.toContain("secret");
     const back = parseImportJson(text);
@@ -273,7 +276,7 @@ describe("presets & byte length", () => {
     expect(formatLength("가나다 abc", 1500, "bytes")).toBe("13 / 1,500 B · 약 7자");
   });
   it("local generator stays within byte limit", () => {
-    const doc = makeSampleDoc(3);
+    const doc = makeSampleDoc(3, SAMPLE_NOW);
     const s = doc.students.find((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.note).length >= 4)!;
     const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no);
     const out = generateLocalDraft(buildDraftRequest({ achievement: 60, targetLength: 300, lengthMode: "bytes", subject: "화학Ⅰ", records: recs, performances: [], categories: doc.settings.categories }));
@@ -418,7 +421,7 @@ describe("achievement signals (AI 추정)", () => {
 describe("pipeline (단계형 생성)", () => {
   it("plans slots by length, balances categories, assembles within limit", async () => {
     const { planSlots, slotUserPrompt, parseSlotResponse, assembleSlots, buildDraftRequest, makeSampleDoc } = await import("../src");
-    const doc = makeSampleDoc(5);
+    const doc = makeSampleDoc(5, SAMPLE_NOW);
     const s = doc.students.find((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.note).length >= 5)!;
     const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no);
     const req = buildDraftRequest({ achievement: 70, targetLength: 600, lengthMode: "bytes", subject: "화학Ⅰ", records: recs, performances: [], categories: doc.settings.categories, guide: { avoid: ["열심히"] } });

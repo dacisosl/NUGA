@@ -39,7 +39,9 @@ function demoSlot(): { start: Date; period: number } {
 
 export async function startDemo(): Promise<DemoInfo> {
   const st = useStore.getState();
-  st.loadSample();
+  // 데모는 "수동 기록 → 쉬는 시간 보완" 흐름을 보여 주므로 보완 대기를 켠다 (공통 설정에 남는다)
+  if (!st.doc.settings.supplementEnabled) st.update((d) => { d.settings.supplementEnabled = true; });
+  useStore.getState().loadSample();
   useStore.getState().setPage("today");
   const { start, period } = demoSlot();
   const dur = demoLesson.durationSec;
