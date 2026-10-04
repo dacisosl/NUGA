@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
 import { RecordsPage } from "./pages/RecordsPage";
-import { TodayPage } from "./pages/TodayPage";
 import { DraftPage } from "./pages/DraftPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -27,7 +26,7 @@ export default function App() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const map: Record<string, Page> = { "0": "today", "1": "records", "2": "draft", "3": "review", "4": "settings" };
+      const map: Record<string, Page> = { "0": "records", "1": "records", "2": "draft", "3": "review", "4": "settings" };
       if (map[e.key]) { e.preventDefault(); setPage(map[e.key]); }
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -40,8 +39,7 @@ export default function App() {
     <div className="app">
       <Sidebar />
       <main className="main">
-        {page === "today" && <TodayPage />}
-        {page === "records" && <RecordsPage />}
+        {(page === "today" || page === "records") && <RecordsPage />}
         {page === "draft" && <DraftPage />}
         {page === "review" && <ReviewPage />}
         {page === "settings" && <SettingsPage />}
@@ -62,7 +60,6 @@ function Sidebar() {
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
   const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"] }[] = [
-    { key: "today", label: "오늘 기록", icon: "sun" },
     { key: "records", label: "누가기록", icon: "list" },
     { key: "draft", label: "초안 작성", icon: "pen" },
     { key: "review", label: "검토", icon: "check" },
@@ -71,7 +68,7 @@ function Sidebar() {
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="brand"><span className="dot" />{!collapsed && "누가"}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
       {items.map((it) => (
-        <button key={it.key} className={`nav ${page === it.key ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
+        <button key={it.key} className={`nav ${page === it.key || (it.key === "records" && page === "today") ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
           <Icon name={it.icon} /><span className="lbl">{it.label}</span>
         </button>
       ))}
