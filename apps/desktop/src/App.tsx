@@ -1,3 +1,5 @@
+// 전역 스타일을 맨 먼저: 화면별 스타일(계단·모바일 미리보기)이 뒤에 붙어 같은 특정도에서 이긴다
+import "./styles.css";
 import React, { useEffect, useMemo, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
@@ -32,13 +34,14 @@ export default function App() {
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [setPage]);
 
-  if (!loaded) return <div className="onb"><span className="spin" /></div>;
+  // 불러오는 동안도 밤 장면: html 바탕(남색) → 밝은 종이 → 남색 틀로 번쩍이지 않게
+  if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
   if (!onboarded) return <><Onboarding /><Toasts /></>;
 
   return (
     <div className="app">
       <Sidebar />
-      <main className="main">
+      <main className="main" data-page={page}>
         {(page === "today" || page === "records") && <RecordsPage />}
         {page === "draft" && <DraftPage />}
         {page === "review" && <ReviewPage />}
@@ -66,7 +69,7 @@ function Sidebar() {
   ];
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
-      <div className="brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /></svg>{!collapsed && <>누가<span className="brand-en">NUGA</span></>}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
+      <div className="brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>{!collapsed && <>누가<span className="brand-en">NUGA</span></>}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
       {items.map((it) => (
         <button key={it.key} className={`nav ${page === it.key || (it.key === "records" && page === "today") ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
           <Icon name={it.icon} /><span className="lbl">{it.label}</span>
@@ -81,13 +84,22 @@ function Sidebar() {
       <button className={`nav ${page === "mobile" ? "active" : ""}`} onClick={() => setPage("mobile")} title="모바일 확인 (테스트용)"><Icon name="phone" /><span className="lbl">모바일 확인</span></button>
       <div className="syncbox">
         <div className="st" title={sync.lastAt ? `마지막 ${sync.lastAt.slice(11, 16)}` : ""}>
-          <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : ""}`} style={sync.state === "error" ? { background: "var(--warn)" } : undefined} />
+          <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
           <span className="ellipsis lbl">{sync.state === "error" ? `오류 · ${sync.message}` : sync.message}</span>
         </div>
         <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" /><span className="lbl">설정</span></button>
       </div>
     </aside>
   );
+}
+
+/**
+ * 작업면: 3px 유리 베젤(.sheet)에 끼운 빛나는 종이(.paper). 머리 띠(TopBar) 아래의 모든 내용을 감싼다.
+ * .sheet/.paper 에는 transform·filter·contain·will-change·backdrop-filter·isolation·z-index 를 주지 않는다
+ * (Modal 의 .overlay 가 포털 없이 이 안에 그려지므로).
+ */
+export function Sheet({ children }: { children: React.ReactNode }) {
+  return <div className="sheet"><div className="paper">{children}</div></div>;
 }
 
 /** 모든 페이지에서 같은 자리: 제목 · 과목 · (페이지 슬롯) · 엑셀 · JSON */

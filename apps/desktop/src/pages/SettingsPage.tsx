@@ -5,7 +5,7 @@ import {
   LEGACY_LEVEL_SCORE, LENGTH_PRESET, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
   type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
-import { TopBar } from "../App";
+import { Sheet, TopBar } from "../App";
 import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup, arrivalModeOf } from "../store";
 import { ACH_COLORS, Confirm, EditableCell, Icon, Modal, StudentTag, Switch } from "../components/ui";
 import { AreaModal } from "../components/AreaSwitcher";
@@ -43,6 +43,7 @@ export function SettingsPage() {
   return (
     <>
       <TopBar title="설정" />
+      <Sheet>
       <div className="tabsrow">
         <button className={`tab ${group === "common" ? "active" : ""}`} onClick={() => group !== "common" && setTab(COMMON_TABS[0].key)}>공통 설정</button>
         <button className={`tab ${group === "area" ? "active" : ""}`} onClick={() => group !== "area" && setTab(AREA_TABS[0].key)}>개별 설정<span className="cnt">{areaName}</span></button>
@@ -74,6 +75,7 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+      </Sheet>
     </>
   );
 }
@@ -380,7 +382,7 @@ export function TimetableSection() {
             <button className="btn primary sm" disabled={!name.trim()} onClick={() => apply(name)}>반으로 지정</button>
             <span className="grow" />
             <button className="btn sm" onClick={() => apply(null)}>칸 비우기</button>
-            <button className="btn ghost sm" style={{ color: "#fff" }} onClick={() => setSel(new Set())}>선택 해제</button>
+            <button className="btn ghost sm" onClick={() => setSel(new Set())}>선택 해제</button>
           </div>
         )}
         <div className="muted small" style={{ marginTop: 10 }}>반을 지정하면 진도표에 그 반의 수업 날짜별 빈 행이 자동으로 만들어집니다.</div>

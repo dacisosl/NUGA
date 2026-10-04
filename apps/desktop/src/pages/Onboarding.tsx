@@ -47,7 +47,7 @@ export function Onboarding() {
       <div className="onb hero-dark">
         <div className="box">
           <div>
-            <div className="onb-brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /></svg>누가<span className="brand-en">NUGA</span></div>
+            <div className="onb-brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>누가<span className="brand-en">NUGA</span></div>
             <div className="eyebrow">학생의 다음 한 걸음을 위한 기록</div>
             <h1 className="onb-title">좋은 기록이,<br />성장의 다음<br /><em>발판이 됩니다.</em></h1>
             <p className="onb-lead">수업 중 10초 기록 · 쉬는 시간 1분 보완 · 학기 말 세특 초안.<br />교사의 관찰이 학생의 성장으로 이어지도록, 누가가 돕습니다.</p>
@@ -58,10 +58,11 @@ export function Onboarding() {
             <div className="onb-note">학생 이름은 이 PC에만 저장됩니다. 워치·폰·서버에는 반·번호만 오갑니다.</div>
           </div>
           <div className="onb-stairs" aria-hidden="true">
-            <div className="onb-step s1"><i />수업 중 질문<small>···</small></div>
-            <div className="onb-step s2"><i />수업 중 발표<small>···</small></div>
-            <div className="onb-step s3"><i />모둠 협동<small>···</small></div>
-            <div className="onb-step s4"><i />교사의 피드백<small>···</small></div>
+            {/* 히어로의 유리 계단: 쪽 번호와 푸른 빛점 (아바타 없음) */}
+            <div className="onb-step s1"><em className="idx">01</em>수업 중 질문<small className="dots" aria-hidden><i /><i /><i /></small></div>
+            <div className="onb-step s2"><em className="idx">02</em>수업 중 발표<small className="dots" aria-hidden><i /><i /><i /></small></div>
+            <div className="onb-step s3"><em className="idx">03</em>모둠 협동<small className="dots" aria-hidden><i /><i /><i /></small></div>
+            <div className="onb-step s4"><em className="idx">04</em>교사의 피드백<small className="dots" aria-hidden><i /><i /><i /></small></div>
             <div className="onb-caption">관찰의 기록 — 교사의 피드백 — 학생의 성장</div>
           </div>
         </div>

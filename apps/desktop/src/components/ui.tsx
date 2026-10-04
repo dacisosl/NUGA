@@ -16,8 +16,11 @@ export function CatChip({ cat }: { cat: Category }) {
   return <Chip cat={cat} label={label} />;
 }
 
-/** 도달 정도 5단계 바탕색 (낮음 → 높음). 파란 버튼과 겹치지 않게 연한 회청 → 남색 검정(랜딩 페이지 색). 글씨는 앞 3단계 검정, 뒤 2단계 흰색 */
-export const ACH_COLORS = ["#EEF3FA", "#D3DEEC", "#A5B6CC", "#4A6385", "#0D1C2E"];
+/**
+ * 도달 정도 5단계 바탕색 (낮음 → 높음): 남색 계열이 아닌 슬레이트→흑연 5단계. 실행 파랑(버튼)과 겹치지 않는다.
+ * 글씨는 앞 3단계 남색, 뒤 2단계 밝은색. styles.css 의 --g0..--g4 와 같아야 한다.
+ */
+export const ACH_COLORS = ["#EEF2F7", "#CBD5E1", "#8E9DB0", "#475569", "#161B22"];
 const CONF_LABEL: Record<string, string> = { ok: "근거 충분", low: "근거 부족 · 참고용", none: "추정 불가" };
 
 type TagStudent = Pick<Student, "class" | "no" | "name" | "achievement" | "level">;
@@ -32,6 +35,18 @@ type TagStudent = Pick<Student, "class" | "no" | "name" | "achievement" | "level
  */
 const useAchPreview = create<{ key: string | null; value: number | null }>(() => ({ key: null, value: null }));
 const achKey = (s: Pick<TagStudent, "class" | "no">) => `${s.class}|${s.no}`;
+
+/**
+ * 이름표·계단 판이 함께 쓰는 도달 정도 단계: 저장값 또는 슬라이더 미리보기 값.
+ * step 은 -1(추정 불가) 또는 0~4 → className `g${step < 0 ? "x" : step}`.
+ */
+export function useAchStep(student: TagStudent) {
+  const doc = useStore((s) => s.doc);
+  const ach = achievementOf(doc, student);
+  const preview = useAchPreview((s) => (s.key === achKey(student) ? s.value : null));
+  const shown = preview ?? ach.value;
+  return { step: gradeStep(shown), shown, edited: ach.edited, lowConf: !ach.edited && ach.confidence === "low" };
+}
 
 export function AchievementControl({ student, compact }: { student: TagStudent; compact?: boolean }) {
   const doc = useStore((s) => s.doc);
@@ -48,7 +63,8 @@ export function AchievementControl({ student, compact }: { student: TagStudent; 
   return (
     <div className={`ach-ctl ${compact ? "compact" : ""}`}>
       <div className="flex" style={{ gap: 8, alignItems: "baseline" }}>
-        <b className="ach-num" style={{ color: step >= 0 ? ACH_COLORS[Math.max(3, step)] : "var(--muted)" }}>{v ?? "—"}</b>
+        <i className={`ach-sw g${step < 0 ? "x" : step}`} aria-hidden />
+        <b className="ach-num">{v ?? "—"}</b>
         <span className="muted small">{ach.edited ? "교사 조정값" : "자동값"} · {ach.edited ? `자동 ${ach.auto ?? "—"}` : CONF_LABEL[ach.confidence]} · 기록 {n}건</span>
       </div>
       <div className="ach-track">
@@ -57,7 +73,6 @@ export function AchievementControl({ student, compact }: { student: TagStudent; 
           onChange={(e) => { const n = Number(e.target.value); setV(n); useAchPreview.setState({ key, value: n }); }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         {ach.auto !== null && <i className="ach-auto" style={{ left: `${ach.auto}%` }} title={`자동값 ${ach.auto}`} />}
-        <div className="ach-scale">{ACH_COLORS.map((c) => <span key={c} style={{ background: c }} />)}</div>
       </div>
       {student.achievement?.byStandard && Object.keys(student.achievement.byStandard).length > 0 && (
         <div className="small muted" style={{ marginTop: 6 }}>성취기준별(AI 추정): {Object.entries(student.achievement.byStandard).map(([k, v]) => `${k} ${v}`).join(" · ")}</div>
@@ -117,37 +132,33 @@ export function AchPress({ student, className, children, ...rest }: { student: T
 }
 
 /**
- * 학생 이름표: 바탕색이 도달 정도(파랑 5단계)를 나타낸다. 값이 없으면 흰 바탕에 회색 빗금.
- * 오른쪽 위 배지에 숫자를 표시하고, 누르면 조정 창이 열린다. 교사가 조정한 값에는 연필, 근거가 부족한 자동값은 점선 테두리.
+ * 학생 이름표: 바탕색이 도달 정도(슬레이트→흑연 5단계)를 나타낸다. 값이 없으면 흰 바탕에 회색 빗금.
+ * 오른쪽 위 배지에 숫자를 표시하고, 누르면 조정 창이 열린다. 교사가 조정한 값에는 연필, 근거가 부족한 자동값은 안쪽 점선.
+ * 색·미리보기·근거 부족 판단은 계단의 판과 같은 useAchStep 하나로 한다.
  */
 export function StudentTag({ student, size = "md", onNameClick, title }: {
   student: TagStudent;
   size?: "sm" | "md" | "lg"; onNameClick?: () => void; title?: string;
 }) {
-  const doc = useStore((s) => s.doc);
+  const showBadge = useStore((s) => s.doc.settings.options.showLevelBadge !== false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const closedAt = useRef(0);
-  const showBadge = doc.settings.options.showLevelBadge !== false;
-  const ach = achievementOf(doc, student);
-  const preview = useAchPreview((s) => (s.key === achKey(student) ? s.value : null));
-  const shown = preview ?? ach.value;
-  const step = gradeStep(shown);
+  const { step, shown, edited, lowConf } = useAchStep(student);
   const open = (e: React.SyntheticEvent) => {
     e.stopPropagation(); e.preventDefault();
     if (Date.now() - closedAt.current < 300) return; // 바깥 클릭으로 막 닫힌 경우 다시 열지 않음
     setAnchor(anchor ? null : (e.currentTarget as HTMLElement).getBoundingClientRect());
   };
   const name = student.name || `${student.no}번`;
-  const lowConf = !ach.edited && ach.confidence === "low";
   const press = useRightClick((el) => setAnchor(el.getBoundingClientRect()));
   return (
     <span className={`stag lp g${step < 0 ? "x" : step} ${size} ${showBadge ? "" : "nob"} ${lowConf ? "lowconf" : ""}`} title={title ?? "오른쪽 클릭: 성취도 조절"} {...press}>
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}
-      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`도달 정도 ${shown ?? "없음"}, 눌러서 조정`} title={`도달 정도 ${shown ?? "—"}${ach.edited ? " (교사 조정)" : lowConf ? " (근거 부족)" : ""} · 눌러서 조정`}
+      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`도달 정도 ${shown ?? "없음"}, 눌러서 조정`} title={`도달 정도 ${shown ?? "—"}${edited ? " (교사 조정)" : lowConf ? " (근거 부족)" : ""} · 눌러서 조정`}
         onClick={open} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }}>{shown ?? "—"}{ach.edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }}>{shown ?? "—"}{edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}
       {anchor && <AchievementPopover student={student} anchor={anchor} onClose={() => { closedAt.current = Date.now(); setAnchor(null); }} />}
     </span>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ISSUE_LABEL, RESULT_LABEL, countChars, nowIso, reviewText, splitSentences, summarize, truncate, type Draft, type ReviewIssue, type ReviewResult, type Student } from "@nuga/core";
-import { ClassTabs, TopBar, useClassStudents } from "../App";
+import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, draftOf, lengthOfText, limitOf, recordsOf, reviewCtxOf, studentsOf, useStore } from "../store";
 import { AdherenceChecklist, CategoryCompare, MetricBars, SemesterTimeline, SentenceEvidenceGraph } from "../components/Charts";
 import { Empty, Icon, LenBar, StatusChip, StudentTag } from "../components/ui";
@@ -57,6 +57,7 @@ export function ReviewPage() {
   return (
     <>
       <TopBar title="검토" onExcel={exportExcel} right={<><ViewToggles /><button className="btn primary" onClick={runReview}><Icon name="check" />{sel.size ? `선택 ${sel.size}명 검토` : "전체 검토"}</button></>} />
+      <Sheet>
       <ClassTabs extra={(c) => { const n = studentsOf(doc, c).filter((s) => { const d = draftOf(doc, c, s.no); return d?.text && d.review.result === "fix"; }).length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content noscroll">
         <div className="review-layout">
@@ -92,6 +93,7 @@ export function ReviewPage() {
           </div>
         </div>
       </div>
+      </Sheet>
     </>
   );
 }
@@ -103,7 +105,7 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
   const [focus, setFocus] = useState<number[] | null>(null);
   const rep = useMemo(() => (row.d?.text ? adherenceOf(doc, row.s, row.d.text, row.d.sentences.length ? row.d.sentences : null, row.d.targetLength || target) : null), [doc, row.s, row.d, target]);
   const { s, d } = row;
-  if (!d?.text) return <div className="card pad"><div className="flex"><StudentTag student={s} /><StatusChip result="none" /></div><div className="muted" style={{ marginTop: 8 }}>저장된 초안이 없습니다.</div><button className="btn primary" style={{ marginTop: 12 }} onClick={() => onOpen(s)}>초안 작성</button></div>;
+  if (!d?.text) return <div className="card pad"><div className="flex"><StudentTag student={s} /><StatusChip result="none" /></div><div className="muted" style={{ marginTop: 8 }}>저장된 초안이 없습니다.</div><button className="btn" style={{ marginTop: 12 }} onClick={() => onOpen(s)}>초안 작성</button></div>;
   const sents = splitSentences(d.text);
   const issues = d.review.issues;
   const cc = countChars(d.text);
@@ -161,7 +163,7 @@ function SidePanel({ row, target, onNext, onOpen, onUpdate }: { row: Row; target
           </div>
         </div>
       ))}
-      <div className="flex"><button className="btn" onClick={() => onOpen(s)}><Icon name="pen" />초안 열기</button><span className="grow" /><button className="btn primary" onClick={onNext}>다음 항목<Icon name="right" /></button></div>
+      <div className="flex"><button className="btn" onClick={() => onOpen(s)}><Icon name="pen" />초안 열기</button><span className="grow" /><button className="btn" onClick={onNext}>다음 항목<Icon name="right" /></button></div>
     </>
   );
 }

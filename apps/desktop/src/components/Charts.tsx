@@ -8,14 +8,15 @@ import { catLabel, evidenceOf } from "../store";
  */
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-const CAT_COLORS: Record<string, string> = { 1: "#2448C9", 2: "#0D6660", 3: "#6C33A3", 4: "#4A4E5A", perf: "#1A1C21" };
+// SVG 속성은 var()를 안정적으로 못 읽으므로 토큰(--c1~c4, --perf)과 같은 hex를 직접 쓴다
+const CAT_COLORS: Record<string, string> = { 1: "#2F63B8", 2: "#16756C", 3: "#6A48B0", 4: "#56708D", perf: "#152D4A" };
 
 export function AdherenceChecklist({ rep, onPick }: { rep: AdherenceReport; onPick?: (sentences: number[]) => void }) {
   const [all, setAll] = useState(false);
   const rules = all ? rep.rules : rep.rules.filter((r) => !r.pass || !r.checkable);
   return (
     <div className="chart-card">
-      <div className="flex between"><b>반영도 체크리스트</b><span className={`chip ${rep.score >= 0.95 ? "pass" : rep.score >= 0.8 ? "check" : "fix"}`}>{rep.passed}/{rep.total} · {pct(rep.score)}</span></div>
+      <div className="flex between"><span className="eyebrow">반영도 체크리스트</span><span className={`chip ${rep.score >= 0.95 ? "pass" : rep.score >= 0.8 ? "check" : "fix"}`}>{rep.passed}/{rep.total} · {pct(rep.score)}</span></div>
       <ul className="checklist">
         {rules.map((r) => (
           <li key={r.key} className={!r.checkable ? "na" : r.pass ? "ok" : "bad"} onClick={() => r.sentences?.length && onPick?.(r.sentences)} style={{ cursor: r.sentences?.length ? "pointer" : undefined }}>
@@ -39,11 +40,11 @@ export function MetricBars({ rep }: { rep: AdherenceReport }) {
   ];
   return (
     <div className="chart-card">
-      <b>지표</b>
+      <span className="eyebrow">지표</span>
       {rows.map(([label, v, tip, goal]) => (
         <div key={label} className="metric" title={tip}>
           <span className="ml">{label}</span>
-          <span className="mbar"><i style={{ width: pct(Math.max(0, Math.min(1, v))), background: v >= goal ? "#2448C9" : "#E0873A" }} /><b style={{ left: pct(goal) }} /></span>
+          <span className="mbar"><i style={{ width: pct(Math.max(0, Math.min(1, v))), background: v >= goal ? "#245AA7" : "#C8661F" }} /><b style={{ left: pct(goal) }} /></span>
           <span className="mv num">{pct(v)}</span>
         </div>
       ))}
@@ -66,7 +67,7 @@ export function SentenceEvidenceGraph({ doc, s, d, support, focus, onFocus }: { 
   const labelOf = (id: string) => { const r = recById.get(id); return r ? `${r.time.slice(5, 10).replace("-", "/")} ${catLabel(doc, r.category)}` : "PDF기록"; };
   return (
     <div className="chart-card">
-      <div className="flex between"><b>문장–근거 연결도</b><span className="muted small">선 굵기 = 일치도</span></div>
+      <div className="flex between"><span className="eyebrow">문장–근거 연결도</span><span className="muted small">선 굵기 = 일치도</span></div>
       <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="seg-graph" role="img" aria-label="문장과 근거 기록 연결">
         {sents.map((x, i) => x.evidence.map((id) => {
           const j = right.indexOf(id); if (j < 0) return null;
@@ -76,15 +77,15 @@ export function SentenceEvidenceGraph({ doc, s, d, support, focus, onFocus }: { 
         }))}
         {sents.map((x, i) => (
           <g key={i} onMouseEnter={() => onFocus([i])} onMouseLeave={() => onFocus(null)} style={{ cursor: "default" }}>
-            <rect x={4} y={ly(i) - 9} width={116} height={18} rx={5} fill={x.evidence.length ? "#F1F4FD" : "#FDEEE3"} stroke={focus?.includes(i) ? "#2448C9" : "none"} />
-            <text x={10} y={ly(i) + 4} fontSize={11} fill="#1A1C21">{i + 1}. {Array.from(x.text).slice(0, 9).join("")}…</text>
+            <rect x={4} y={ly(i) - 9} width={116} height={18} rx={5} fill={x.evidence.length ? "#F1F6FD" : "#FCEDE2"} stroke={focus?.includes(i) ? "#245AA7" : "none"} />
+            <text x={10} y={ly(i) + 4} fontSize={11} fill="#152D4A">{i + 1}. {Array.from(x.text).slice(0, 9).join("")}…</text>
             <title>{x.text}</title>
           </g>
         ))}
         {right.map((id, j) => (
           <g key={id}>
-            <rect x={222} y={ry(j) - 9} width={114} height={18} rx={5} fill={used.includes(id) ? "#fff" : "#F4F3EF"} stroke={colorOf(id)} strokeOpacity={used.includes(id) ? 1 : 0.3} />
-            <text x={228} y={ry(j) + 4} fontSize={11} fill={used.includes(id) ? "#1A1C21" : "#9EA2AD"}>{labelOf(id)}</text>
+            <rect x={222} y={ry(j) - 9} width={114} height={18} rx={5} fill={used.includes(id) ? "#fff" : "#EEF3FA"} stroke={colorOf(id)} strokeOpacity={used.includes(id) ? 1 : 0.3} />
+            <text x={228} y={ry(j) + 4} fontSize={11} fill={used.includes(id) ? "#152D4A" : "#4E6886"}>{labelOf(id)}</text>
             <title>{evidence[id]}</title>
           </g>
         ))}
@@ -104,7 +105,7 @@ export function CategoryCompare({ doc, s, d }: { doc: NugaDoc; s: Student; d: Dr
   const bar = (vals: number[]) => { const t = vals.reduce((a, b) => a + b, 0) || 1; return <span className="stack">{vals.map((v, i) => v ? <i key={i} style={{ width: pct(v / t), background: CAT_COLORS[cats[i].key] }} title={`${cats[i].label} ${v}`} /> : null)}</span>; };
   return (
     <div className="chart-card">
-      <b>카테고리 구성</b>
+      <span className="eyebrow">카테고리 구성</span>
       <div className="metric"><span className="ml">전체 기록</span>{bar(all)}<span className="mv num">{all.reduce((a, b) => a + b, 0)}</span></div>
       <div className="metric"><span className="ml">초안 근거</span>{bar(used)}<span className="mv num">{used.reduce((a, b) => a + b, 0)}</span></div>
       <div className="legend-row">{cats.map((c) => <span key={c.key}><i style={{ background: CAT_COLORS[c.key] }} />{c.label}</span>)}</div>
@@ -126,10 +127,10 @@ export function SemesterTimeline({ doc, s, d }: { doc: NugaDoc; s: Student; d: D
   for (let d0 = new Date(t0); d0.getTime() <= t1; d0 = new Date(d0.getFullYear(), d0.getMonth() + 1, 1)) months.push({ x: x(new Date(d0.getFullYear(), d0.getMonth(), 1).toISOString()), m: d0.getMonth() + 1 });
   return (
     <div className="chart-card">
-      <div className="flex between"><b>학기 타임라인</b><span className="muted small">진한 점 = 초안에 쓴 기록</span></div>
+      <div className="flex between"><span className="eyebrow">학기 타임라인</span><span className="muted small">진한 점 = 초안에 쓴 기록</span></div>
       <svg width="100%" viewBox="0 0 340 54" role="img" aria-label="학기 기록 타임라인">
-        <line x1={8} x2={332} y1={26} y2={26} stroke="#D9D6CE" />
-        {months.filter((m) => m.x >= 8 && m.x <= 332).map((m) => <g key={m.x}><line x1={m.x} x2={m.x} y1={22} y2={30} stroke="#C9CBD2" /><text x={m.x + 2} y={48} fontSize={10} fill="#7C8090">{m.m}월</text></g>)}
+        <line x1={8} x2={332} y1={26} y2={26} stroke="#CFDBEB" />
+        {months.filter((m) => m.x >= 8 && m.x <= 332).map((m) => <g key={m.x}><line x1={m.x} x2={m.x} y1={22} y2={30} stroke="#CFDBEB" /><text x={m.x + 2} y={48} fontSize={10} fill="#4E6886">{m.m}월</text></g>)}
         {recs.map((r, i) => <circle key={r.id} cx={x(r.time)} cy={26 - (i % 2 ? 7 : -7) * 0} r={usedIds.has(r.id) ? 5 : 3.5} fill={CAT_COLORS[r.category]} opacity={usedIds.has(r.id) ? 0.95 : 0.3}><title>{`${r.time.slice(0, 10)} ${catLabel(doc, r.category)}: ${r.note || r.memo}`}</title></circle>)}
       </svg>
     </div>

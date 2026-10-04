@@ -108,28 +108,32 @@ class NugaWidget : GlanceAppWidget() {
     }
 }
 
+/**
+ * 위젯은 늘 밤 유리(어떤 배경화면에서도 같은 대비): 밤 잉크 글자, 지금 수업은 하늘빛 제목,
+ * 카테고리 4버튼은 카테고리 색 유리에 흰 글자.
+ */
 @Composable
 private fun WidgetContent(state: NugaWidget.State) {
     val context = LocalContext.current
-    val text = ColorProvider(NugaColors.Text)
-    val text2 = ColorProvider(NugaColors.Text2)
+    val ink = ColorProvider(NugaColors.Ink)
+    val ink2 = ColorProvider(NugaColors.Ink2)
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(ImageProvider(R.drawable.widget_bg))
-            .padding(12.dp)
+            .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
             .clickable(actionStartActivity(openIntent(context, null))),
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
                     text = state.headline,
-                    style = TextStyle(color = if (state.inClass) ColorProvider(NugaColors.Accent) else text, fontSize = 17.sp, fontWeight = FontWeight.Bold),
+                    style = TextStyle(color = if (state.inClass) ColorProvider(NugaColors.Sky) else ink, fontSize = 17.sp, fontWeight = FontWeight.Bold),
                     maxLines = 1,
                 )
                 Text(
                     text = state.subline,
-                    style = TextStyle(color = text2, fontSize = 12.sp),
+                    style = TextStyle(color = ink2, fontSize = 12.sp, fontWeight = FontWeight.Medium),
                     maxLines = 1,
                 )
             }
@@ -138,8 +142,8 @@ private fun WidgetContent(state: NugaWidget.State) {
                 Spacer(modifier = GlanceModifier.width(10.dp))
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(text = "${state.todayCount}", style = TextStyle(color = text, fontSize = 20.sp, fontWeight = FontWeight.Bold))
-                Text(text = "오늘", style = TextStyle(color = text2, fontSize = 11.sp))
+                Text(text = "${state.todayCount}", style = TextStyle(color = ColorProvider(NugaColors.InkNum), fontSize = 22.sp, fontWeight = FontWeight.Bold))
+                Text(text = "오늘", style = TextStyle(color = ColorProvider(NugaColors.Ink3), fontSize = 11.sp, fontWeight = FontWeight.Medium))
             }
         }
         Spacer(modifier = GlanceModifier.height(10.dp))
@@ -156,7 +160,7 @@ private fun WidgetContent(state: NugaWidget.State) {
 @Composable
 private fun RecordButton(rec: String) {
     val context = LocalContext.current
-    val red = ColorProvider(androidx.compose.ui.graphics.Color(0xFFC62828))
+    val red = ColorProvider(NugaColors.RecOnDark)
     val (label, action) = when (rec) {
         "recording" -> "● 녹음 중" to actionStartService(Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_STOP))
         "paused" -> "일시정지" to actionStartService(Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_RESUME))
@@ -164,10 +168,10 @@ private fun RecordButton(rec: String) {
         else -> "● 녹음" to actionStartActivity(RecordStartActivity.intent(context))
     }
     Box(
-        modifier = GlanceModifier.background(ImageProvider(R.drawable.widget_cat4_bg)).padding(horizontal = 10.dp, vertical = 6.dp).clickable(action),
+        modifier = GlanceModifier.background(ImageProvider(R.drawable.widget_btn_bg)).padding(horizontal = 10.dp, vertical = 7.dp).clickable(action),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = label, style = TextStyle(color = if (rec == "recording") red else ColorProvider(NugaColors.Text), fontSize = 13.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+        Text(text = label, style = TextStyle(color = if (rec == "recording") red else ColorProvider(NugaColors.Btn2Ink), fontSize = 13.sp, fontWeight = FontWeight.Bold), maxLines = 1)
     }
 }
 
@@ -189,7 +193,7 @@ private fun CategoryButton(key: Int, label: String, modifier: GlanceModifier) {
         Text(
             text = label,
             style = TextStyle(
-                color = ColorProvider(NugaColors.category(key)),
+                color = ColorProvider(androidx.compose.ui.graphics.Color.White),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,

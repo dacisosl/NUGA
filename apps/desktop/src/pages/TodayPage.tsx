@@ -10,6 +10,8 @@ import { DemoSimulator } from "../components/DemoSimulator";
 const hm = (s: string) => { const [h, m] = s.split(":").map(Number); return h * 60 + m; };
 const SRC_LABEL: Record<string, string> = { watch: "워치", widget: "위젯", phone: "폰", pc: "PC", suggestion: "추천" };
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+/** 빠른 추가로 방금 만든 기록: 그 줄이 처음 그려질 때 한 번만 빛난다 (.df-row.fresh) */
+const lastAdded = { id: "" };
 
 /** 오늘 기록 칸 (누가기록 화면 왼쪽): 날짜 · 반별 기록 필드(시간표 순서) */
 export function TodayPanel({ onCollapse }: { onCollapse?: () => void }) {
@@ -94,7 +96,7 @@ function ClassField({ cls, slot, day, isToday, sameClassSlots }: { cls: string; 
         <span className="grow" />
         <span className="muted small">기록 {recs.length}</span>
         {metas.length > 0 && <button className="btn ghost sm" onClick={() => setScript(metas[0].id)}><Icon name="mic" size={13} />스크립트</button>}
-        {todo > 0 && <button className="btn sm primary" onClick={() => openInbox({ records: pending.map((r) => r.id), transcripts: metas.map((m) => m.id), backlog: false })}>미반영 {todo}</button>}
+        {todo > 0 && <button className="btn sm warn-outline" onClick={() => openInbox({ records: pending.map((r) => r.id), transcripts: metas.map((m) => m.id), backlog: false })}>미반영 {todo}</button>}
       </header>
       <div className="df-rows">
         {recs.map((r) => <RecordRow key={r.id} rec={r} />)}
@@ -111,6 +113,8 @@ function RecordRow({ rec }: { rec: NugaRecord }) {
   const deleteRecord = useStore((s) => s.deleteRecord);
   const [note, setNote] = useState(rec.note);
   const [del, setDel] = useState(false);
+  const [fresh] = useState(() => rec.id === lastAdded.id);
+  useEffect(() => { if (fresh) lastAdded.id = ""; }, [fresh]);
   useEffect(() => { setNote(rec.note); }, [rec.note]);
   const commit = () => {
     const v = note.trim();
@@ -122,7 +126,7 @@ function RecordRow({ rec }: { rec: NugaRecord }) {
   const memo = rec.memo || rec.voiceMemo?.transcript || "";
   const stu = doc.students.find((s) => s.class === rec.class && s.no === rec.no);
   return (
-    <div className={`df-row ${rec.status === "pending" ? "pending" : ""}`}>
+    <div className={`df-row ${rec.status === "pending" ? "pending" : ""} ${fresh ? "fresh" : ""}`}>
       <AchPress student={stu} className="df-no num">{rec.no}</AchPress>
       <AchPress student={stu} className="df-name ellipsis">{studentName(doc, rec.class, rec.no)}</AchPress>
       <Chip cat={rec.category} label={cats.find((c) => c.key === rec.category)?.label || rec.category} onClick={nextCat} />
@@ -150,7 +154,7 @@ function AddRow({ cls, slot, day, isToday }: { cls: string; slot: LessonSlot | n
     if (!st) { noRef.current?.focus(); return; }
     let t = new Date();
     if (!isToday) { t = new Date(`${day}T${slot?.start || "12:00"}:00`); t.setMinutes(t.getMinutes() + 10); }
-    addRecord({ class: cls, no: st.no, category: cat, time: nowIso(t), lesson: lessonFor(doc.settings.progress, cls, day), memo: "", voiceMemo: null, note: note.trim(), status: "confirmed", source: "pc" });
+    lastAdded.id = addRecord({ class: cls, no: st.no, category: cat, time: nowIso(t), lesson: lessonFor(doc.settings.progress, cls, day), memo: "", voiceMemo: null, note: note.trim(), status: "confirmed", source: "pc" }).id;
     setNo(""); setNote(""); noRef.current?.focus();
   };
   const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); add(); } };
@@ -161,7 +165,7 @@ function AddRow({ cls, slot, day, isToday }: { cls: string; slot: LessonSlot | n
       <AchPress student={st} className={`df-name ellipsis ${st ? "" : "muted"}`}>{st ? st.name : no ? "없는 번호" : ""}</AchPress>
       <span className="df-cats">{doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={c.label} selected={cat === c.key} onClick={() => setCat(c.key)} />)}</span>
       <input className="df-note" value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={onEnter} placeholder="관찰 내용 (Enter 추가)" />
-      <button className="btn sm" onClick={add} disabled={!st}><Icon name="plus" size={13} />추가</button>
+      <button className="btn sm primary" onClick={add} disabled={!st}><Icon name="plus" size={13} />추가</button>
     </div>
   );
 }

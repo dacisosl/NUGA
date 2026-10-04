@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRecord, type Student } from "@nuga/core";
-import { ClassTabs, TopBar, useClassStudents } from "../App";
+import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, standardsFor, useStore } from "../store";
 import { aiReady, estimateAchievementAI } from "../lib/ai";
-import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag, Switch } from "../components/ui";
+import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag } from "../components/ui";
 import { StairsView, useStairsMode } from "../components/StairsView";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
@@ -76,7 +76,12 @@ export function RecordsPage() {
 
   return (
     <>
-      <TopBar title="누가기록" onExcel={exportExcel} center={<span className="stairs-switch" title="기록 건수만큼 계단을 올라간 학생 캐릭터로 반 전체를 한눈에 봅니다"><Switch on={stairs} onChange={setStairs} label="한눈에" /></span>} right={<><button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
+      <TopBar title="누가기록" onExcel={exportExcel} center={
+        <span className="seg stairs-switch" role="tablist" aria-label="보기" title="반 전체 기록 현황을 계단으로 봅니다">
+          <button role="tab" aria-selected={!stairs} className={!stairs ? "active" : ""} onClick={() => setStairs(false)}>표</button>
+          <button role="tab" aria-selected={stairs} className={stairs ? "active" : ""} onClick={() => setStairs(true)}><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden><path d="M3 26h9v-8h8v-8h9" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square" /></svg>한눈에</button>
+        </span>} right={<><button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
+      <Sheet>
       <div className={`rec-split ${split.collapsed ? "collapsed" : ""}`} ref={split.boxRef} style={{ ["--left" as string]: split.collapsed ? "38px" : `${split.width}px` }}>
       <div className="rec-left">
         {/* 접어도 날짜·데모 상태가 남도록 숨기기만 한다 */}
@@ -86,9 +91,16 @@ export function RecordsPage() {
       <div className="rec-resizer" onPointerDown={split.collapsed ? undefined : split.onDown} onDoubleClick={split.reset} title="끌어서 너비 조절 · 두 번 눌러 처음 너비로" role="separator" aria-orientation="vertical" />
       <div className="rec-right">
       <ClassTabs extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
-      <div className="content">
-        {stairs ? <StairsView doc={doc} students={students} onOpen={setOpen} /> : <>
-        <div className="flex" style={{ marginBottom: 12 }}>
+      <div className={`content ${stairs ? "is-stairs" : ""}`}>
+        {stairs ? <>
+          <div className="stairs-tools">
+            <SearchBox value={q} onChange={setQ} placeholder="이름·번호 찾기" />
+            <span className="grow" />
+            <span className="muted small">이름표를 누르면 학생 기록 · 오른쪽 클릭으로 도달 정도</span>
+          </div>
+          <StairsView key={cls} doc={doc} students={students} onOpen={setOpen} q={q} />
+        </> : <>
+        <div className="flex" style={{ marginBottom: 14 }}>
           <SearchBox value={q} onChange={setQ} />
           <span className="seg">
             <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 {students.length}</button>
@@ -129,6 +141,7 @@ export function RecordsPage() {
       </div>
       </div>
       </div>
+      </Sheet>
       {open && <StudentDetail student={open} onClose={() => setOpen(null)} onChange={setOpen} />}
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </>
@@ -216,26 +229,38 @@ function QuickAdd({ onClose }: { onClose: () => void }) {
   );
 }
 
-const SPLIT_KEY = "nuga.split";
+const SPLIT_KEY = "nuga.split.ratio";
 const FOLD_KEY = "nuga.split.folded";
-const SPLIT_DEFAULT = 480;
-/** 왼쪽 오늘 기록 칸 너비: 경계선을 끌어 바꾸고 이 기기에 기억한다 */
+/** 기본 비율: 오늘 기록 27% · 누가기록 73% (교사가 고른 비율) */
+const SPLIT_DEFAULT = 0.27;
+const SPLIT_MIN = 320;
+/** 왼쪽 오늘 기록 칸 너비: 전체에 대한 비율로 기억해 창 크기가 바뀌어도 같은 비율. 경계선을 끌어 바꾼다 */
 function useSplitWidth() {
   const boxRef = React.useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(() => { try { return Number(localStorage.getItem(SPLIT_KEY)) || SPLIT_DEFAULT; } catch { return SPLIT_DEFAULT; } });
-  const save = (w: number) => { try { localStorage.setItem(SPLIT_KEY, String(Math.round(w))); } catch { /* 저장 불가 */ } };
+  const [ratio, setRatio] = useState(() => { try { const r = Number(localStorage.getItem(SPLIT_KEY)); return r > 0 && r < 1 ? r : SPLIT_DEFAULT; } catch { return SPLIT_DEFAULT; } });
+  const [boxW, setBoxW] = useState(0);
+  React.useLayoutEffect(() => {
+    const el = boxRef.current; if (!el) return;
+    setBoxW(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setBoxW(e.contentRect.width));
+    ro.observe(el); return () => ro.disconnect();
+  }, []);
+  const clampW = (w: number, total: number) => Math.round(Math.max(SPLIT_MIN, Math.min(total * 0.62, w)));
+  const width = boxW ? clampW(boxW * ratio, boxW) : Math.round(1200 * ratio);
+  const save = (r: number) => { try { localStorage.setItem(SPLIT_KEY, r.toFixed(4)); } catch { /* 저장 불가 */ } };
   const onDown = (e: React.PointerEvent) => {
     const box = boxRef.current; if (!box) return;
     e.preventDefault();
     const left = box.getBoundingClientRect().left;
-    const max = box.clientWidth * 0.62;
-    let w = width;
-    const move = (ev: PointerEvent) => { w = Math.max(340, Math.min(max, ev.clientX - left)); setWidth(w); };
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.classList.remove("resizing"); save(w); };
+    const total = box.clientWidth;
+    let r = ratio;
+    const move = (ev: PointerEvent) => { r = clampW(ev.clientX - left, total) / total; setRatio(r); };
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.classList.remove("resizing"); save(r); };
     document.body.classList.add("resizing");
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
-  const reset = () => { setWidth(SPLIT_DEFAULT); save(SPLIT_DEFAULT); };
+  const reset = () => { setRatio(SPLIT_DEFAULT); save(SPLIT_DEFAULT); };
   const [collapsed, setC] = useState(() => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } });
   const setCollapsed = (v: boolean) => { setC(v); try { localStorage.setItem(FOLD_KEY, v ? "1" : "0"); } catch { /* 저장 불가 */ } };
   return { boxRef, width, onDown, reset, collapsed, setCollapsed };
