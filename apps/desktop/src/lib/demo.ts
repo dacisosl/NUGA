@@ -1,6 +1,6 @@
 import { nowIso, parseTranscription, resolveNow, slotsForWeekday, uuid, weekdayOf, type NugaRecord, type Transcript } from "@nuga/core";
 import { DEMO_LESSON as demoLesson } from "@nuga/core";
-import { useStore } from "../store";
+import { arrivalModeOf, useStore } from "../store";
 import { useTranscripts } from "./transcripts";
 import { runSuggestions } from "./suggestFlow";
 
@@ -40,7 +40,7 @@ function demoSlot(): { start: Date; period: number } {
 export async function startDemo(): Promise<DemoInfo> {
   const st = useStore.getState();
   // 데모는 "수동 기록 → 쉬는 시간 보완" 흐름을 보여 주므로 보완 대기를 켠다 (공통 설정에 남는다)
-  if (!st.doc.settings.supplementEnabled) st.update((d) => { d.settings.supplementEnabled = true; });
+  if (arrivalModeOf(st.doc.settings) === "direct") st.update((d) => { d.settings.arrivalMode = "popup"; d.settings.supplementEnabled = true; });
   useStore.getState().loadSample();
   useStore.getState().setPage("today");
   const { start, period } = demoSlot();
