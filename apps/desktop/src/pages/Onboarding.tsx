@@ -44,14 +44,26 @@ export function Onboarding() {
 
   if (step < 0) {
     return (
-      <div className="onb">
+      <div className="onb hero-dark">
         <div className="box">
-          <div className="flex" style={{ gap: 14, marginBottom: 16 }}><div className="logo-lg">누</div><div><h1>누가</h1><div className="muted">수업 중 10초 기록 · 수업 후 1분 보완 · 학기 말 세특 초안</div></div></div>
-          <div className="hero">
-            <button onClick={async () => { await startDemo(); setSettings({ onboarded: true }); setPage("today"); }}><b>데모 모드로 둘러보기</b><span className="muted small">화학Ⅰ · 2개 반 · 한 학기 합성 기록 · 합성 모의 수업 스크립트와 추천 카드. 모두 합성 데이터이며 나중에 설정 → 데이터에서 지울 수 있음</span></button>
-            <button onClick={() => setStep(0)}><b>처음부터 설정</b><span className="muted small">학교급 → 영역 → 명단 → 시간표 → 진도. 5단계, 약 5분</span></button>
+          <div>
+            <div className="onb-brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /></svg>누가<span className="brand-en">NUGA</span></div>
+            <div className="eyebrow">학생의 다음 한 걸음을 위한 기록</div>
+            <h1 className="onb-title">좋은 기록이,<br />성장의 다음<br /><em>발판이 됩니다.</em></h1>
+            <p className="onb-lead">수업 중 10초 기록 · 쉬는 시간 1분 보완 · 학기 말 세특 초안.<br />교사의 관찰이 학생의 성장으로 이어지도록, 누가가 돕습니다.</p>
+            <div className="onb-ctas">
+              <button className="onb-cta main" onClick={async () => { await startDemo(); setSettings({ onboarded: true }); setPage("today"); }}><b>데모로 둘러보기</b><span>화학Ⅰ · 2개 반 · 9월부터의 합성 기록 · 합성 모의 수업과 추천 카드. 나중에 설정 → 데이터에서 지울 수 있습니다.</span></button>
+              <button className="onb-cta" onClick={() => setStep(0)}><b>처음부터 설정</b><span>학교급 → 영역 → 명단 → 시간표 → 진도. 5단계, 약 5분</span></button>
+            </div>
+            <div className="onb-note">학생 이름은 이 PC에만 저장됩니다. 워치·폰·서버에는 반·번호만 오갑니다.</div>
           </div>
-          <div className="muted small" style={{ marginTop: 20 }}>학생 이름은 이 PC에만 저장됩니다. 워치·폰·서버에는 반·번호만 오갑니다.</div>
+          <div className="onb-stairs" aria-hidden="true">
+            <div className="onb-step s1"><i />수업 중 질문<small>···</small></div>
+            <div className="onb-step s2"><i />수업 중 발표<small>···</small></div>
+            <div className="onb-step s3"><i />모둠 협동<small>···</small></div>
+            <div className="onb-step s4"><i />교사의 피드백<small>···</small></div>
+            <div className="onb-caption">관찰의 기록 — 교사의 피드백 — 학생의 성장</div>
+          </div>
         </div>
       </div>
     );

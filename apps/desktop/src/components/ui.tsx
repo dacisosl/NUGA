@@ -16,8 +16,8 @@ export function CatChip({ cat }: { cat: Category }) {
   return <Chip cat={cat} label={label} />;
 }
 
-/** 도달 정도 5단계 바탕색 (낮음 → 높음). 파란 버튼과 겹치지 않게 회색 → 검정. 글씨는 앞 3단계 검정, 뒤 2단계 흰색 */
-export const ACH_COLORS = ["#F3F3F1", "#D9D9D5", "#ADADA8", "#5F5F5C", "#1A1A1A"];
+/** 도달 정도 5단계 바탕색 (낮음 → 높음). 파란 버튼과 겹치지 않게 연한 회청 → 남색 검정(랜딩 페이지 색). 글씨는 앞 3단계 검정, 뒤 2단계 흰색 */
+export const ACH_COLORS = ["#EEF3FA", "#D3DEEC", "#A5B6CC", "#4A6385", "#0D1C2E"];
 const CONF_LABEL: Record<string, string> = { ok: "근거 충분", low: "근거 부족 · 참고용", none: "추정 불가" };
 
 type TagStudent = Pick<Student, "class" | "no" | "name" | "achievement" | "level">;

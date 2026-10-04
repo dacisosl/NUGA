@@ -66,7 +66,7 @@ function Sidebar() {
   ];
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
-      <div className="brand"><span className="dot" />{!collapsed && "누가"}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
+      <div className="brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /></svg>{!collapsed && <>누가<span className="brand-en">NUGA</span></>}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
       {items.map((it) => (
         <button key={it.key} className={`nav ${page === it.key || (it.key === "records" && page === "today") ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
           <Icon name={it.icon} /><span className="lbl">{it.label}</span>
