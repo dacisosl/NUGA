@@ -470,10 +470,40 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .btn.warn-outline { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
 .btn.warn-outline b { margin-left: 2px; }
 .side-backlog { margin: 8px 12px; justify-content: center; }
-.day-nav { display: flex; align-items: center; gap: 4px; }
-.day-nav h1 { min-width: 150px; text-align: center; }
-.day-nav h1 .muted { font-weight: 600; font-size: 16px; }
-.content.day-page { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+/* 누가기록 = 왼쪽 오늘 기록 + 오른쪽 누가기록 표 */
+.rec-split { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 480px) 6px minmax(0, 1fr); }
+.rec-left { min-width: 0; overflow: auto; border-right: 1px solid var(--line); background: var(--bg); }
+.rec-right { min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.rec-right .tabsrow { padding-left: 20px; padding-right: 20px; }
+.rec-right .content { padding-left: 20px; padding-right: 20px; }
+.rec-resizer { cursor: col-resize; background: transparent; position: relative; margin-left: -3px; z-index: 2; }
+.rec-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background .15s; }
+.rec-resizer:hover::after, body.resizing .rec-resizer::after { background: var(--text3); }
+body.resizing { cursor: col-resize; user-select: none; }
+@media (max-width: 980px) {
+  .rec-split { display: block; overflow: auto; }
+  .rec-left { border-right: none; border-bottom: 1px solid var(--line); overflow: visible; }
+  .rec-resizer { display: none; }
+  .rec-right { overflow: visible; }
+}
+.today-pane { container-type: inline-size; padding: 14px 16px 32px; display: flex; flex-direction: column; gap: 12px; }
+.day-nav { display: flex; align-items: center; gap: 4px; position: sticky; top: -14px; z-index: 2; background: var(--bg); padding: 6px 0; }
+.day-nav h2 { margin: 0; font-size: 18px; font-weight: 800; min-width: 130px; text-align: center; white-space: nowrap; }
+.day-nav h2 .muted { font-weight: 600; font-size: 14px; }
+.day-page { display: flex; flex-direction: column; gap: 12px; }
+.day-field.sel { outline: 2px solid var(--text); outline-offset: -1px; }
+.day-field .df-head { cursor: pointer; }
+.day-field .df-head:hover { background: var(--head-bg); }
+/* 좁은 칸: 시각 숨기고, 추가 줄은 두 줄로 */
+@container (max-width: 560px) {
+  .df-head { flex-wrap: wrap; row-gap: 4px; padding: 8px 12px; }
+  .df-row { grid-template-columns: 28px 58px auto minmax(0, 1fr) 24px; padding: 5px 10px; gap: 6px; }
+  .df-row .df-time { display: none; }
+  .df-row.add { grid-template-columns: 56px minmax(0, 1fr) auto; row-gap: 6px; padding: 8px 10px; }
+  .df-row.add .df-cats { grid-column: 1 / -1; order: 3; }
+  .df-row.add .df-note { grid-column: 1 / 3; order: 4; }
+  .df-row.add .btn { order: 5; }
+}
 .day-field { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
 .day-field.now { border-color: #2448C9; box-shadow: 0 0 0 2px #E8EDFB; }
 .df-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--key-bg); border-bottom: 1px solid var(--line2); min-width: 0; }
@@ -734,3 +764,12 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .arrival-opt { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; background: var(--surface); }
 .arrival-opt input { margin-top: 3px; accent-color: var(--text); }
 .arrival-opt.on { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+
+/* 오늘 기록 접기 */
+.fold-btn { width: auto; padding: 0 6px; gap: 0; color: var(--text3); }
+.rec-split.collapsed .today-pane { display: none; }
+.rec-split.collapsed .rec-resizer { cursor: default; pointer-events: none; }
+.rec-rail { width: 100%; height: 100%; border: none; background: var(--key-bg); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0; color: var(--text2); font-weight: 700; font-size: 13px; }
+.rec-rail span { writing-mode: vertical-rl; letter-spacing: .1em; }
+.rec-rail:hover { background: var(--head-bg); color: var(--text); }
+@media (max-width: 980px) { .rec-rail { height: auto; flex-direction: row; padding: 10px 16px; } .rec-rail span { writing-mode: horizontal-tb; } }

@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { WEEKDAY_LABELS, dateKey, fmtHM, lessonFor, nowIso, slotsForWeekday, weekdayOf, type Category, type LessonSlot, type NugaRecord } from "@nuga/core";
-import { TopBar } from "../App";
 import { classList, studentName, studentsOf, useStore } from "../store";
 import { AchPress, Chip, Confirm, Icon } from "../components/ui";
 import { TranscriptModal } from "../components/TranscriptView";
 import { useTranscripts } from "../lib/transcripts";
-import { useBacklogCount } from "../components/InboxModal";
 import { demoInfo, startDemo } from "../lib/demo";
 import { DemoSimulator } from "../components/DemoSimulator";
 
@@ -13,12 +11,10 @@ const hm = (s: string) => { const [h, m] = s.split(":").map(Number); return h * 
 const SRC_LABEL: Record<string, string> = { watch: "워치", widget: "위젯", phone: "폰", pc: "PC", suggestion: "추천" };
 const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
 
-/** 0p 오늘 기록: 날짜 · 반별 기록 필드(시간표 순서) */
-export function TodayPage() {
+/** 오늘 기록 칸 (누가기록 화면 왼쪽): 날짜 · 반별 기록 필드(시간표 순서) */
+export function TodayPanel({ onCollapse }: { onCollapse?: () => void }) {
   const doc = useStore((s) => s.doc);
   const toast = useStore((s) => s.toast);
-  const openInbox = useStore((s) => s.openInbox);
-  const backlog = useBacklogCount();
   const [date, setDate] = useState(() => new Date());
   const [demo, setDemo] = useState(() => !!demoInfo());
   const [starting, setStarting] = useState(false);
@@ -35,19 +31,17 @@ export function TodayPage() {
   }, [slots.map((s) => s.class + s.period).join(), doc.records.length, day, doc.settings.classes]);
 
   return (
-    <>
-      <TopBar title="오늘 기록" titleSlot={
-        <div className="day-nav">
-          <button className="btn ghost icon" onClick={() => setDate(addDays(date, -1))} aria-label="전날"><Icon name="left" /></button>
-          <h1>{date.getMonth() + 1}월 {date.getDate()}일 <span className="muted">{WEEKDAY_LABELS[weekdayOf(date)]}요일</span></h1>
-          <button className="btn ghost icon" onClick={() => setDate(addDays(date, 1))} aria-label="다음 날"><Icon name="right" /></button>
-          {!isToday && <button className="btn sm" onClick={() => setDate(new Date())}>오늘</button>}
-        </div>
-      } right={<>
-        {!demo ? <button className="btn ghost" disabled={starting} onClick={beginDemo} title="합성 학급·기록·모의 수업 스크립트로 전체 흐름을 미리 봅니다">{starting ? "불러오는 중…" : "데모"}</button> : <span className="chip check">데모 모드</span>}
-        <button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>
-      </>} />
-      <div className="content day-page">
+    <div className="today-pane">
+      <div className="day-nav">
+        {onCollapse && <button className="btn ghost icon fold-btn" onClick={onCollapse} title="오늘 기록 접기" aria-label="오늘 기록 접기"><Icon name="left" size={14} /><Icon name="left" size={14} /></button>}
+        <button className="btn ghost icon" onClick={() => setDate(addDays(date, -1))} aria-label="전날"><Icon name="left" /></button>
+        <h2>{date.getMonth() + 1}월 {date.getDate()}일 <span className="muted">{WEEKDAY_LABELS[weekdayOf(date)]}요일</span></h2>
+        <button className="btn ghost icon" onClick={() => setDate(addDays(date, 1))} aria-label="다음 날"><Icon name="right" /></button>
+        {!isToday && <button className="btn sm" onClick={() => setDate(new Date())}>오늘</button>}
+        <span className="grow" />
+        {!demo ? <button className="btn ghost sm" disabled={starting} onClick={beginDemo} title="합성 학급·기록·모의 수업 스크립트로 전체 흐름을 미리 봅니다">{starting ? "불러오는 중…" : "데모"}</button> : <span className="chip check">데모 모드</span>}
+      </div>
+      <div className="day-page">
         {fields.length === 0 ? (
           <div className="muted" style={{ padding: 24 }}>설정에서 반·명단과 시간표를 등록하세요.</div>
         ) : <>
@@ -56,7 +50,7 @@ export function TodayPage() {
         </>}
       </div>
       {demo && <DemoSimulator onEnd={() => { setDemo(false); toast({ text: "데모를 끝냈습니다. 샘플 기록은 남아 있습니다." }); }} />}
-    </>
+    </div>
   );
 }
 
@@ -65,6 +59,8 @@ function ClassField({ cls, slot, day, isToday, sameClassSlots }: { cls: string; 
   const doc = useStore((s) => s.doc);
   const areaId = useStore((s) => s.areaId);
   const openInbox = useStore((s) => s.openInbox);
+  const curCls = useStore((s) => s.cls);
+  const setClass = useStore((s) => s.setClass);
   const index = useTranscripts((s) => s.index);
   const [script, setScript] = useState<string | null>(null);
 
@@ -89,8 +85,8 @@ function ClassField({ cls, slot, day, isToday, sameClassSlots }: { cls: string; 
   const todo = pending.length + sgNew;
 
   return (
-    <section className={`day-field ${state === "수업 중" ? "now" : ""}`}>
-      <header className="df-head">
+    <section className={`day-field ${state === "수업 중" ? "now" : ""} ${curCls === cls ? "sel" : ""}`}>
+      <header className="df-head" onClick={() => setClass(cls)} title="오른쪽 누가기록을 이 반으로">
         <b className="df-cls">{cls}</b>
         {slot && <span className="df-slot">{slot.period}교시 <span className="muted num">{slot.start}–{slot.end}</span></span>}
         {lesson?.title && <span className="muted ellipsis">{lesson.title}</span>}
