@@ -215,6 +215,9 @@ export interface AiSettings {
   pipeline?: "auto" | "on" | "off";
 }
 
+/** 폰·워치 기록 도착 처리 (Settings.arrivalMode) */
+export type ArrivalMode = "popup" | "queue" | "direct";
+
 export interface Settings {
   school: { grade: number; subject: string; year: number; semester: number };
   categories: CategoryDef[];
@@ -240,6 +243,11 @@ export interface Settings {
   lowRecordThreshold: number;
   lowRecordEnabled: boolean;
   supplementEnabled: boolean;
+  /**
+   * 폰·워치 기록이 도착했을 때: popup = 알림 팝업을 바로 띄워 먼저 확인, queue = 팝업 없이 미반영에 쌓기,
+   * direct = 바로 기록에 넣기(확정). popup·queue 는 보완 대기(supplementEnabled)를 켠 상태다. 없으면 popup.
+   */
+  arrivalMode?: ArrivalMode;
   similarityThreshold: number;
   /** true면 공통 글자수·기준 대신 이 영역 전용 값을 쓴다 */
   lengthOverride: boolean;
@@ -317,7 +325,8 @@ export function defaultSettings(): Settings {
     lengthBand: [0.96, 1.0],
     lowRecordThreshold: 1,
     lowRecordEnabled: false,
-    supplementEnabled: false,
+    supplementEnabled: true,
+    arrivalMode: "popup",
     similarityThreshold: 0.7,
     lengthOverride: false,
     draftPrompt: "",

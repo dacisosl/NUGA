@@ -1,7 +1,7 @@
 import { RelayClient, applyTombstones, buildConfigMessage, mergeRecords, nowIso, lessonFor, routeRecordArea, type NugaRecord, type SyncMessage, type TranscriptPart } from "@nuga/core";
 import { useTranscripts } from "./transcripts";
 import { runSuggestions } from "./suggestFlow";
-import { readAreaDoc, useStore, writeAreaDoc } from "../store";
+import { arrivalModeOf, readAreaDoc, useStore, writeAreaDoc } from "../store";
 import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
 
@@ -168,7 +168,7 @@ class SyncEngine {
       await client.send({ v: 1, type: "transcriptAck", deviceId: st.deviceId, sentAt: nowIso(), payload: { ids: done } }, "pc");
       // 도착한 스크립트마다 추천 카드를 만든다 (실패해도 동기화는 계속)
       // 추천이 나오면 알림 모달(쉬는 시간 기록)을 띄운다
-      for (const id of done) runSuggestions(id).then((r) => { if (r.count > 0) useStore.getState().openInbox({ transcripts: [id] }); }).catch(() => {});
+      for (const id of done) runSuggestions(id).then((r) => { const s = useStore.getState(); if (r.count > 0 && arrivalModeOf(s.doc.settings) === "popup") s.openInbox({ transcripts: [id] }); }).catch(() => {});
       const metas = useTranscripts.getState().index.filter((m) => done.includes(m.id));
       const text = `수업 스크립트 ${done.length}건 도착 — ${metas.map((m) => `${m.class} ${m.period ? `${m.period}교시` : ""}`.trim()).join(", ")}`;
       notify("누가 스크립트 도착", text);
@@ -232,8 +232,11 @@ class SyncEngine {
       const body = `${pending.length}건 도착 — ${names}${pending.length > 3 ? " 외" : ""}`;
       notify("누가 기록 도착", body);
       const s = useStore.getState();
-      if (supp) s.openInbox({ records: pending }); // 알림 모달에 바로 합친다 (이미 열려 있으면 이어서)
-      else s.toast({ text: body, kind: "notice", ttl: 15000, action: { label: "보기", onClick: () => useStore.getState().setPage("records") } });
+      const mode = arrivalModeOf(s.doc.settings);
+      // popup: 어느 화면이든 알림 모달을 바로 띄운다 (이미 열려 있으면 이어서). queue: 미반영에 쌓고 알림만.
+      if (mode === "popup") s.openInbox({ records: pending });
+      else if (mode === "queue") s.toast({ text: `${body} · 미반영에 추가`, kind: "notice", ttl: 15000, action: { label: "처리하기", onClick: () => useStore.getState().openInbox({ records: pending }) } });
+      else s.toast({ text: body, kind: "notice", ttl: 15000, action: { label: "보기", onClick: () => useStore.getState().setPage("today") } });
     }
   }
 }

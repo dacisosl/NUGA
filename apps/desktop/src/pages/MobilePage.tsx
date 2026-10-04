@@ -4,7 +4,7 @@ import {
   type Category, type LessonSlot, type NugaDoc, type NugaRecord, type RecordSource,
 } from "@nuga/core";
 import { TopBar } from "../App";
-import { classList, studentName, studentsOf, useStore } from "../store";
+import { arrivalModeOf, classList, studentName, studentsOf, useStore } from "../store";
 import { Icon } from "../components/ui";
 import { useTranscripts } from "../lib/transcripts";
 import { simulateLessonTranscript } from "../lib/demo";
@@ -51,7 +51,9 @@ export function MobilePage() {
   const [tab, setTab] = useState<Tab>("home");
   const [showNames, setShowNames] = useState(true);
   const [alarm, setAlarm] = useState(true);
-  const [popup, setPopup] = useState(true); // 도착하면 PC 알림 모달 띄우기
+  const setSettings = useStore((s) => s.setSettings);
+  const mode = arrivalModeOf(doc.settings); // 설정 → 도착한 기록 처리
+  const popup = mode === "popup";
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [snack, setSnack] = useState<{ text: string; id?: string } | null>(null);
   const [sending, setSending] = useState<Set<string>>(new Set());
@@ -104,8 +106,9 @@ export function MobilePage() {
     window.setTimeout(() => {
       setSending((p) => { const n = new Set(p); n.delete(rec.id); return n; });
       if (!useStore.getState().doc.records.some((r) => r.id === rec.id)) return; // 취소됨
-      log(`도착 · ${label}${supp ? " · 보완 대기" : ""}`, "pc");
-      if (supp && popup) { openInbox({ records: [rec.id] }); log("알림 모달(쉬는 시간 기록) 열림", "pc"); }
+      log(`도착 · ${label}${supp ? " · 미반영(수동 기록)" : " · 바로 확정"}`, "pc");
+      if (popup) { openInbox({ records: [rec.id] }); log("알림 팝업(쉬는 시간 기록) 열림 — 처리하면 오늘 기록에 들어감", "pc"); }
+      else if (supp) log("팝업 없이 미반영에 쌓임", "pc");
     }, 1200);
   };
   const undo = (id: string) => { deleteRecord(id); setSnack(null); log("저장 취소 · 기록 삭제", "phone"); };
@@ -129,7 +132,14 @@ export function MobilePage() {
             <button className={view === "app" ? "on" : ""} onClick={() => setView("app")}>폰 앱</button>
             <button className={view === "widget" ? "on" : ""} onClick={() => setView("widget")}>홈 화면 위젯</button>
           </div>
-          <label className="flex small"><input type="checkbox" checked={popup} onChange={(e) => setPopup(e.target.checked)} />도착하면 PC 알림 모달 띄우기</label>
+          <label className="mp-tool">
+            <span className="muted small">도착한 기록</span>
+            <select value={mode} onChange={(e) => { const k = e.target.value as typeof mode; setSettings({ arrivalMode: k, supplementEnabled: k !== "direct" }); }} title="설정 → 동기화 → 도착한 기록 처리와 같은 값">
+              <option value="popup">알림 팝업으로 먼저 확인</option>
+              <option value="queue">팝업 없이 미반영에 쌓기</option>
+              <option value="direct">바로 기록에 넣기</option>
+            </select>
+          </label>
         </div>
 
         <div className="mp-stage">
@@ -163,7 +173,7 @@ export function MobilePage() {
             <ol className="mp-steps">
               <li><b>폰 시각</b>에서 수업 시간을 고르면 홈 화면이 “지금” 수업으로 바뀝니다.</li>
               <li>홈의 카테고리 버튼 → 번호를 누르고 <b>저장</b>. 5초 안에 <b>취소</b>할 수 있습니다.</li>
-              <li>1초 뒤 PC에 도착해 <b>쉬는 시간 기록</b> 알림 모달이 뜹니다.</li>
+              <li>1초 뒤 PC에 도착해 <b>쉬는 시간 기록</b> 알림 팝업이 뜹니다. 팝업에서 저장해야 오늘 기록에 들어갑니다.</li>
               <li><b>녹음</b> 탭에서 녹음 시작 → 정지하면 합성 수업 스크립트가 도착하고 자동 추천이 만들어집니다.</li>
               <li>기록 탭에서 메모를 고치거나 지우면 PC에도 반영됩니다.</li>
             </ol>

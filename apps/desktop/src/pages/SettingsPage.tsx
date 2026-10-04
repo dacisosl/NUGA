@@ -6,7 +6,7 @@ import {
   type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
 import { TopBar } from "../App";
-import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup } from "../store";
+import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup, arrivalModeOf } from "../store";
 import { ACH_COLORS, Confirm, EditableCell, Icon, Modal, StudentTag, Switch } from "../components/ui";
 import { AreaModal } from "../components/AreaSwitcher";
 import { exportSheets, readSheetRows, templateProgress, templateStudents } from "../lib/excel";
@@ -604,7 +604,19 @@ export function SyncSection() {
     <>
       <div className="card pad">
         <h3>도착한 기록 처리</h3>
-        <Switch on={doc.settings.supplementEnabled} onChange={(v) => setSettings({ supplementEnabled: v })} label={doc.settings.supplementEnabled ? "보완 대기 켬 — 워치·폰 기록을 보완 전 상태로 받아 모달로 처리" : "보완 대기 끔 — 도착한 기록을 바로 확정"} />
+        <div className="arrival-opts">
+          {([
+            ["popup", "알림 팝업으로 먼저 확인", "폰·워치 기록이 도착하면 어느 화면에서든 쉬는 시간 기록 팝업이 바로 뜹니다. 팝업에서 내용을 적어 저장한 기록만 오늘 기록에 들어갑니다. (권장)"],
+            ["queue", "팝업 없이 미반영에 쌓기", "도착 알림만 잠깐 보이고, 기록은 [미반영]에 쌓입니다. 시간 날 때 한꺼번에 처리합니다."],
+            ["direct", "바로 기록에 넣기", "확인 없이 바로 확정해 오늘 기록에 넣습니다. 폰에서 쓴 메모가 관찰 내용이 됩니다."],
+          ] as const).map(([k, title, desc]) => (
+            <label key={k} className={`arrival-opt ${arrivalModeOf(doc.settings) === k ? "on" : ""}`}>
+              <input type="radio" name="arrival" checked={arrivalModeOf(doc.settings) === k} onChange={() => setSettings({ arrivalMode: k, supplementEnabled: k !== "direct" })} />
+              <span><b>{title}</b><span className="muted small block">{desc}</span></span>
+            </label>
+          ))}
+        </div>
+        <div className="muted small" style={{ marginTop: 8 }}>자동 추천(수업 녹음)도 같은 설정을 따릅니다. 이 설정은 모든 영역에 공통입니다.</div>
       </div>
       <div className="card pad">
         <h3>릴레이 서버</h3>

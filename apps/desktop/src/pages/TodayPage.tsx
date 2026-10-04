@@ -77,9 +77,11 @@ function ClassField({ cls, slot, day, isToday, sameClassSlots }: { cls: string; 
     const next = sameClassSlots[i + 1];
     return (i === 0 || m >= hm(slot.start) - 5) && (!next || m < hm(next.start) - 5);
   };
-  const recs = doc.records.filter((r) => mine(r) && r.status !== "skipped").sort((a, b) => a.time.localeCompare(b.time));
+  const all = doc.records.filter((r) => mine(r) && r.status !== "skipped").sort((a, b) => a.time.localeCompare(b.time));
+  // 보완 대기(도착했지만 아직 확인 안 한 수동 기록)는 알림 팝업에서 처리한 뒤에 여기에 들어온다
+  const recs = all.filter((r) => r.status !== "pending");
   const metas = index.filter((m) => m.areaId === areaId && m.class === cls && dateKey(m.startedAt) === day && (!slot || !m.period || m.period === slot.period));
-  const pending = recs.filter((r) => r.status === "pending");
+  const pending = all.filter((r) => r.status === "pending");
   const sgNew = metas.reduce((a, m) => a + (m.suggestNew ?? 0), 0);
   const lesson = lessonFor(doc.settings.progress, cls, day);
   const nowM = new Date().getHours() * 60 + new Date().getMinutes();
