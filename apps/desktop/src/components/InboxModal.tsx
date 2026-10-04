@@ -116,7 +116,8 @@ export function InboxModal() {
         <span className="muted small"><span className="kbd">Enter</span> 저장 · 번호를 누르면 추천이 바로 기록됩니다 · <span className="kbd">Esc</span> 닫기</span>
         <span className="grow" />
         {remaining > 0 && <span className="small warn">남은 {remaining}건은 미반영에 남습니다</span>}
-        <button className="btn primary" onClick={closeInbox}>{remaining ? "닫기" : "완료"}</button>
+        {/* 남은 기록이 있으면 닫기는 보조, 다 처리하면 완료가 주 버튼 (카드의 저장이 그 줄의 주 동작) */}
+        <button className={remaining ? "btn" : "btn primary"} onClick={closeInbox}>{remaining ? "닫기" : "완료"}</button>
       </>
     }>
       <div className="ib-grid">
@@ -204,7 +205,7 @@ function SuggestItem({ s, tr, doc, open: open0 }: { s: Suggestion; tr: Transcrip
         <input className="ib-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="관찰 내용" />
       </>}
       <div className="ib-acts">
-        {!open && <button className="btn sm primary" onClick={() => setOpen(true)}>학생 지정</button>}
+        {!open && <button className="btn sm" onClick={() => setOpen(true)}>학생 지정</button>}
         {s.status !== "later" && <button className="btn sm" onClick={() => setStatus(tr.id, s.id, "later")}>나중에</button>}
         <button className="btn sm ghost" onClick={() => setStatus(tr.id, s.id, "dismissed")}>무시</button>
       </div>

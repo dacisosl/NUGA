@@ -1,22 +1,35 @@
 package kr.nuga.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,9 +38,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,6 +62,7 @@ import kr.nuga.app.ui.recordings.RecordingsScreen
 import kr.nuga.app.ui.settings.SettingsScreen
 import kr.nuga.app.ui.sheet.NumberSheet
 import kr.nuga.app.ui.theme.NugaColors
+import kr.nuga.app.ui.theme.nightScene
 import kr.nuga.shared.model.Config
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -86,35 +112,21 @@ fun NugaRoot(vm: MainViewModel) {
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = {
-            NavigationBar(containerColor = NugaColors.Surface, tonalElevation = 0.dp) {
-                Tab.entries.forEachIndexed { index, t ->
-                    NavigationBarItem(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        icon = { Icon(t.icon, contentDescription = t.label) },
-                        label = { Text(t.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = NugaColors.Accent,
-                            selectedTextColor = NugaColors.Accent,
-                            indicatorColor = NugaColors.AccentSoft,
-                            unselectedIconColor = NugaColors.Text2,
-                            unselectedTextColor = NugaColors.Text2,
-                        ),
-                    )
-                }
+    // 밤 장면은 한 번만, 창 전체(상태 표시줄·내비게이션 바 뒤까지)에 깐다
+    Box(Modifier.fillMaxSize().nightScene()) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            contentColor = NugaColors.Ink,
+            snackbarHost = { SnackbarHost(snackbar) { NightSnackbar(it) } },
+            bottomBar = { TabBar(selected = tab, onSelect = { tab = it }) },
+        ) { padding ->
+            val modifier = Modifier.padding(padding)
+            when (Tab.entries[tab]) {
+                Tab.Home -> HomeScreen(vm = vm, modifier = modifier)
+                Tab.Records -> RecordsScreen(vm = vm, modifier = modifier)
+                Tab.Recordings -> RecordingsScreen(vm = vm, modifier = modifier)
+                Tab.Settings -> SettingsScreen(vm = vm, modifier = modifier)
             }
-        },
-    ) { padding ->
-        val modifier = Modifier.padding(padding)
-        when (Tab.entries[tab]) {
-            Tab.Home -> HomeScreen(vm = vm, modifier = modifier)
-            Tab.Records -> RecordsScreen(vm = vm, modifier = modifier)
-            Tab.Recordings -> RecordingsScreen(vm = vm, modifier = modifier)
-            Tab.Settings -> SettingsScreen(vm = vm, modifier = modifier)
         }
     }
 
@@ -142,5 +154,120 @@ fun NugaRoot(vm: MainViewModel) {
             onSave = vm::saveSheet,
             onDismiss = vm::closeSheet,
         )
+    }
+}
+
+/**
+ * 하단 탭: 짙은 밤 유리 띠. 위 테두리는 오른쪽이 밝은 빛줄기,
+ * 켜진 탭만 유리 알약 + 위쪽 하늘빛 광선 하나 (웹 사이드바 .nav.active와 같은 표현).
+ */
+@Composable
+private fun TabBar(selected: Int, onSelect: (Int) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .drawWithCache {
+                val bg = Brush.verticalGradient(listOf(NugaColors.Navy2.copy(alpha = .88f), NugaColors.Navy0))
+                val rim = Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    .15f to NugaColors.DLine2,
+                    .8f to Color(0x66EAF2FF),
+                    1f to Color.Transparent,
+                )
+                onDrawBehind {
+                    drawRect(bg)
+                    drawRect(rim, size = Size(size.width, 1.dp.toPx()))
+                }
+            }
+            .navigationBarsPadding(),
+    ) {
+        Row(Modifier.fillMaxWidth().height(66.dp)) {
+            Tab.entries.forEachIndexed { index, t ->
+                TabItem(t, selected = selected == index, onClick = { onSelect(index) }, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TabItem(t: Tab, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .drawBehind {
+                if (!selected) return@drawBehind
+                // 위쪽 광선: 28dp × 2dp 하늘빛 + 아래로 번지는 빛
+                val w = 28.dp.toPx()
+                val x = (size.width - w) / 2f
+                drawRect(
+                    Brush.radialGradient(
+                        0f to NugaColors.Sky.copy(alpha = .30f), 1f to Color.Transparent,
+                        center = Offset(size.width / 2f, 0f), radius = 30.dp.toPx(),
+                    ),
+                )
+                drawRect(NugaColors.Sky, topLeft = Offset(x, 0f), size = Size(w, 2.dp.toPx()))
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        val shape = RoundedCornerShape(7.dp)
+        Box(
+            modifier = Modifier
+                .size(width = 52.dp, height = 30.dp)
+                .clip(shape)
+                .then(
+                    if (selected) Modifier
+                        .background(Brush.verticalGradient(listOf(NugaColors.Sky.copy(alpha = .17f), NugaColors.Sky.copy(alpha = .06f))))
+                        .border(1.dp, NugaColors.Sky.copy(alpha = .20f), shape)
+                    else Modifier,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(t.icon, contentDescription = null, tint = if (selected) NugaColors.Sky else NugaColors.Ink3, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            t.label,
+            color = if (selected) NugaColors.Ink else NugaColors.Ink3,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            letterSpacing = (-0.01).em,
+        )
+    }
+}
+
+/** 알림 띠: 불투명한 밤 타일 (blur 없음), 왼쪽 하늘빛 2dp 막대, 행동 글자는 하늘빛 */
+@Composable
+private fun NightSnackbar(data: SnackbarData) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(NugaColors.Navy3, NugaColors.Navy2)))
+            .border(1.dp, NugaColors.DLine2, shape)
+            .drawBehind {
+                drawRect(Color(0x1AEAF2FF), size = Size(size.width, 1.dp.toPx()))
+                drawRect(NugaColors.Sky, topLeft = Offset(0f, 12.dp.toPx()), size = Size(2.dp.toPx(), size.height - 24.dp.toPx()))
+            }
+            .padding(start = 16.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            data.visuals.message,
+            color = NugaColors.Ink,
+            fontSize = 14.sp,
+            letterSpacing = (-0.01).em,
+            maxLines = 2,
+            modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+        )
+        data.visuals.actionLabel?.let { label ->
+            TextButton(onClick = { data.performAction() }) {
+                Text(label, color = NugaColors.Sky, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+        }
     }
 }

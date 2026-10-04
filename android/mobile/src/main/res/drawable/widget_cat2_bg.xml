@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 카테고리 2: 윗면이 밝은 유리 + 흰 반사 테두리, 흰 글자 4.5:1 이상 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#DDF1EF" />
-    <corners android:radius="10dp" />
+    <gradient android:angle="270" android:startColor="#1C8378" android:endColor="#16756C" />
+    <stroke android:width="1dp" android:color="#33FFFFFF" />
+    <corners android:radius="8dp" />
 </shape>

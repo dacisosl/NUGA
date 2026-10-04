@@ -3,7 +3,7 @@ import {
   ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, regenerationInstruction, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
   type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
 } from "@nuga/core";
-import { ClassTabs, TopBar, useClassStudents } from "../App";
+import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
 import { aiReady, generateDraft, labelDraft } from "../lib/ai";
@@ -96,8 +96,10 @@ export function DraftPage() {
   return (
     <>
       <TopBar title="초안 작성" onExcel={exportExcel} right={<ViewToggles />} titleSlot={<span className="seg seg-title" role="tablist" aria-label="초안 작성 방식"><button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
-      <ClassTabs extra={(c) => { const n = studentsOf(doc, c).length; const d = doc.drafts.filter((x) => x.class === c && x.text).length; return <span className="cnt num">{d}/{n}</span>; }} />
-      {mode === "individual" ? <Individual /> : <Batch />}
+      <Sheet>
+        <ClassTabs extra={(c) => { const n = studentsOf(doc, c).length; const d = doc.drafts.filter((x) => x.class === c && x.text).length; return <span className="cnt num">{d}/{n}</span>; }} />
+        {mode === "individual" ? <Individual /> : <Batch />}
+      </Sheet>
     </>
   );
 }
@@ -299,7 +301,8 @@ function Individual() {
               <span className="grow" />
               {busy && <span className="spin" />}
               <button className="btn sm" disabled={!w.text} onClick={() => navigator.clipboard.writeText(w.text).then(() => toast({ text: "복사됨" }))}>복사</button>
-              <button className="btn primary sm" disabled={!w.text} onClick={save}>저장</button>
+              {/* 주 버튼은 한 화면에 하나: 초안이 없으면 '생성', 고친 뒤에는 '저장' */}
+              <button className={w.text && w.dirty ? "btn sm primary" : "btn sm"} disabled={!w.text} onClick={save}>저장</button>
             </div>
             {expanded && (
               <>
@@ -315,7 +318,7 @@ function Individual() {
             <div className="suggest">{suggestions.map((s) => <button key={s} className="chip outline clickable" onClick={() => generate(s)} disabled={busy}>{s}</button>)}</div>
             <div className="inputbar">
               <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: 체크한 기록으로 세특 만들어줘" onKeyDown={(e) => { if (e.key === "Enter" && input.trim()) generate(input.trim()); }} disabled={busy} />
-              <button className="btn primary" disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "수정" : "생성"}</button>
+              <button className={w.text ? "btn" : "btn primary"} disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "수정" : "생성"}</button>
             </div>
           </div>
         </div>
@@ -390,7 +393,8 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
         <span className="grow" />
         <button className="btn" disabled={!w.text} onClick={() => navigator.clipboard.writeText(w.text).then(() => toast({ text: "복사됨" }))}>복사</button>
         <button className="btn" disabled={!w.text} onClick={save}>저장</button>
-        <button className="btn primary" disabled={!w.text || idx >= students.length - 1} onClick={saveNext}>저장 후 다음</button>
+        {/* 주 버튼은 하나: 초안이 있으면 '저장 후 다음', 없으면 아래 'AI 생성' */}
+        <button className={w.text ? "btn primary" : "btn"} disabled={!w.text || idx >= students.length - 1} onClick={saveNext}>저장 후 다음</button>
       </>
     }>
       <div className="dm-body">
@@ -423,7 +427,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             <div className="suggest">{SUGGESTIONS.map((x) => <button key={x} className="chip outline clickable" onClick={() => generate(x)} disabled={busy}>{x}</button>)}</div>
             <div className="inputbar">
               <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={w.text ? "예: 두 번째 문장을 더 구체적으로" : "예: 체크한 기록으로 세특 만들어줘"} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && input.trim()) generate(input.trim()); }} disabled={busy} />
-              <button className="btn primary" disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "AI 수정" : "AI 생성"}</button>
+              <button className={w.text ? "btn" : "btn primary"} disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "AI 수정" : "AI 생성"}</button>
             </div>
           </div>
         </div>
