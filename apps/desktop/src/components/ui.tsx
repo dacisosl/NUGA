@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { create } from "zustand";
 import type { Category, LengthMode, ReviewResult, Student } from "@nuga/core";
 import { RESULT_LABEL, gradeStep, lengthWindow } from "@nuga/core";
 import { achievementOf, useStore } from "../store";
@@ -25,13 +26,23 @@ type TagStudent = Pick<Student, "class" | "no" | "name" | "achievement" | "level
  * 도달 정도 조정: 0~100 슬라이더, 자동값 눈금, [자동값으로 되돌리기].
  * 생기부·내보내기에는 나오지 않는 내부 값이며 초안의 표현 방향만 바꾼다.
  */
+/**
+ * 슬라이더를 끄는 동안의 미리보기 값. 같은 학생의 이름표가 저장 전에도 바로 색·숫자를 바꾼다.
+ * 저장(손을 뗄 때)은 한 번만 한다.
+ */
+const useAchPreview = create<{ key: string | null; value: number | null }>(() => ({ key: null, value: null }));
+const achKey = (s: Pick<TagStudent, "class" | "no">) => `${s.class}|${s.no}`;
+
 export function AchievementControl({ student, compact }: { student: TagStudent; compact?: boolean }) {
   const doc = useStore((s) => s.doc);
   const setAchievement = useStore((s) => s.setAchievement);
   const ach = achievementOf(doc, student);
   const [v, setV] = useState<number | null>(ach.value);
   useEffect(() => { setV(ach.value); }, [ach.value]);
-  const commit = () => { if (v !== null && v !== ach.value) setAchievement(student.class, student.no, v); };
+  const key = achKey(student);
+  const clearPreview = () => { if (useAchPreview.getState().key === key) useAchPreview.setState({ key: null, value: null }); };
+  useEffect(() => clearPreview, [key]);
+  const commit = () => { if (v !== null && v !== ach.value) setAchievement(student.class, student.no, v); clearPreview(); };
   const step = gradeStep(v);
   const n = doc.records.filter((r) => r.class === student.class && r.no === student.no && r.status !== "skipped").length;
   return (
@@ -43,7 +54,7 @@ export function AchievementControl({ student, compact }: { student: TagStudent; 
       <div className="ach-track">
         <input type="range" min={0} max={100} step={1} value={v ?? 50} aria-label="도달 정도"
           className={v === null ? "unset" : ""}
-          onChange={(e) => setV(Number(e.target.value))}
+          onChange={(e) => { const n = Number(e.target.value); setV(n); useAchPreview.setState({ key, value: n }); }}
           onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
         {ach.auto !== null && <i className="ach-auto" style={{ left: `${ach.auto}%` }} title={`자동값 ${ach.auto}`} />}
         <div className="ach-scale">{ACH_COLORS.map((c) => <span key={c} style={{ background: c }} />)}</div>
@@ -118,7 +129,9 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
   const closedAt = useRef(0);
   const showBadge = doc.settings.options.showLevelBadge !== false;
   const ach = achievementOf(doc, student);
-  const step = gradeStep(ach.value);
+  const preview = useAchPreview((s) => (s.key === achKey(student) ? s.value : null));
+  const shown = preview ?? ach.value;
+  const step = gradeStep(shown);
   const open = (e: React.SyntheticEvent) => {
     e.stopPropagation(); e.preventDefault();
     if (Date.now() - closedAt.current < 300) return; // 바깥 클릭으로 막 닫힌 경우 다시 열지 않음
@@ -132,9 +145,9 @@ export function StudentTag({ student, size = "md", onNameClick, title }: {
       {onNameClick
         ? <button type="button" className="stag-name" onClick={(e) => { e.stopPropagation(); onNameClick(); }}>{name}</button>
         : <span className="stag-name">{name}</span>}
-      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`도달 정도 ${ach.value ?? "없음"}, 눌러서 조정`} title={`도달 정도 ${ach.value ?? "—"}${ach.edited ? " (교사 조정)" : lowConf ? " (근거 부족)" : ""} · 눌러서 조정`}
+      {showBadge && <span role="button" tabIndex={0} className="stag-lv" aria-label={`도달 정도 ${shown ?? "없음"}, 눌러서 조정`} title={`도달 정도 ${shown ?? "—"}${ach.edited ? " (교사 조정)" : lowConf ? " (근거 부족)" : ""} · 눌러서 조정`}
         onClick={open} onMouseDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }}>{ach.value ?? "—"}{ach.edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }}>{shown ?? "—"}{ach.edited && <svg className="pen" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>}</span>}
       {anchor && <AchievementPopover student={student} anchor={anchor} onClose={() => { closedAt.current = Date.now(); setAnchor(null); }} />}
     </span>
   );
