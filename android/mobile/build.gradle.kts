@@ -16,8 +16,8 @@ android {
         applicationId = "kr.nuga.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.6.8"
+        versionCode = 16
+        versionName = "0.6.9"
         vectorDrawables.useSupportLibrary = true
     }
 
