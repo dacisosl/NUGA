@@ -3,7 +3,8 @@ import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRe
 import { ClassTabs, TopBar, useClassStudents } from "../App";
 import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, standardsFor, useStore } from "../store";
 import { aiReady, estimateAchievementAI } from "../lib/ai";
-import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag } from "../components/ui";
+import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag, Switch } from "../components/ui";
+import { StairsView, useStairsMode } from "../components/StairsView";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 import { TodayPanel } from "./TodayPage";
@@ -44,6 +45,7 @@ export function RecordsPage() {
   const openInbox = useStore((s) => s.openInbox);
   const backlog = useBacklogCount();
   const split = useSplitWidth();
+  const [stairs, setStairs] = useStairsMode();
 
   const rows = useMemo(() => students.map((s) => {
     const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
@@ -74,7 +76,7 @@ export function RecordsPage() {
 
   return (
     <>
-      <TopBar title="누가기록" onExcel={exportExcel} right={<><button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
+      <TopBar title="누가기록" onExcel={exportExcel} center={<span className="stairs-switch" title="기록 건수만큼 계단을 올라간 학생 캐릭터로 반 전체를 한눈에 봅니다"><Switch on={stairs} onChange={setStairs} label="한눈에" /></span>} right={<><button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
       <div className={`rec-split ${split.collapsed ? "collapsed" : ""}`} ref={split.boxRef} style={{ ["--left" as string]: split.collapsed ? "38px" : `${split.width}px` }}>
       <div className="rec-left">
         {/* 접어도 날짜·데모 상태가 남도록 숨기기만 한다 */}
@@ -85,6 +87,7 @@ export function RecordsPage() {
       <div className="rec-right">
       <ClassTabs extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content">
+        {stairs ? <StairsView doc={doc} students={students} onOpen={setOpen} /> : <>
         <div className="flex" style={{ marginBottom: 12 }}>
           <SearchBox value={q} onChange={setQ} />
           <span className="seg">
@@ -122,6 +125,7 @@ export function RecordsPage() {
             </tbody>
           </table>
         )}
+        </>}
       </div>
       </div>
       </div>
