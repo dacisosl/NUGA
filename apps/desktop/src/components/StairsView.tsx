@@ -25,11 +25,11 @@ export function StairsView({ doc, students, onOpen }: { doc: NugaDoc; students: 
   }), [students, doc.records, doc.settings.categories]);
 
   const max = Math.max(0, ...kids.map((k) => k.n));
-  // 한 칸 = 1건. 너무 많으면 묶는다 (최대 12칸)
-  const size = Math.max(1, Math.ceil((max + 1) / MAX_STEPS));
-  const steps = Math.max(4, Math.ceil((max + 1) / size));
-  const stepOf = (n: number) => Math.min(steps - 1, Math.floor(n / size));
-  const label = (i: number) => (size === 1 ? `${i}건` : `${i * size}–${i * size + size - 1}건`);
+  // 출발선 = 0건만. 그다음부터 한 칸 = 2건(1–2, 3–4, …). 기록이 아주 많으면 더 묶는다 (최대 12칸)
+  const size = Math.max(2, Math.ceil(max / (MAX_STEPS - 1)));
+  const steps = Math.max(4, 1 + Math.ceil(max / size));
+  const stepOf = (n: number) => (n === 0 ? 0 : Math.min(steps - 1, 1 + Math.floor((n - 1) / size)));
+  const label = (i: number) => (i === 0 ? "0건" : `${(i - 1) * size + 1}–${i * size}건`);
   const cols = Array.from({ length: steps }, (_, i) => kids.filter((k) => stepOf(k.n) === i).sort((a, b) => a.s.no - b.s.no));
   const lowOn = doc.settings.lowRecordEnabled; const lowTh = doc.settings.lowRecordThreshold;
   const avg = kids.length ? kids.reduce((a, k) => a + k.n, 0) / kids.length : 0;
@@ -51,7 +51,7 @@ export function StairsView({ doc, students, onOpen }: { doc: NugaDoc; students: 
       <div className="stairs" style={{ gridTemplateColumns: cols.map((c) => `minmax(92px, ${Math.max(1, Math.ceil(c.length / 3))}fr)`).join(" ") }}>
         <div className="stairs-sky" aria-hidden><i className="cloud c1" /><i className="cloud c2" /></div>
         {cols.map((col, i) => {
-          const low = lowOn && (i + 1) * size - 1 <= lowTh;
+          const low = lowOn && i * size <= lowTh; // 이 칸의 가장 많은 건수가 기준 이하
           const h = 10 + (i / Math.max(1, steps - 1)) * 62; // 계단 높이 %
           return (
             <div key={i} className={`stair-col ${i === steps - 1 ? "top" : ""}`}>
