@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.action.clickable
@@ -31,6 +32,7 @@ import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
+import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
@@ -41,7 +43,6 @@ import kr.nuga.app.R
 import kr.nuga.app.graph
 import kr.nuga.app.ui.MainActivity
 import kr.nuga.app.ui.theme.NugaColors
-import kr.nuga.shared.model.Config
 import kr.nuga.shared.time.NugaTime
 import kr.nuga.shared.timetable.TimetableResolver
 import java.time.LocalDateTime
@@ -57,7 +58,7 @@ object WidgetUpdater {
     }
 }
 
-/** 4×2 home screen widget: current (or next) lesson on top, 4 category buttons below. */
+/** 4×2 home screen widget: current (or next) lesson + today's count on top, one big [기록] button below. */
 class NugaWidget : GlanceAppWidget() {
 
     override val sizeMode: SizeMode = SizeMode.Single
@@ -67,7 +68,6 @@ class NugaWidget : GlanceAppWidget() {
         val subline: String,
         val inClass: Boolean,
         val todayCount: Int,
-        val categories: List<Pair<Int, String>>,
         /** null = 녹음 꺼짐, "idle" / "recording" / "paused" / "standby" */
         val rec: String? = null,
     )
@@ -81,10 +81,8 @@ class NugaWidget : GlanceAppWidget() {
         val g = context.graph
         val config = runCatching { g.configRepo.current() }.getOrNull()
         val todayCount = runCatching { g.db.recordDao().countDay(NugaTime.todayIso()) }.getOrDefault(0)
-        val categories = (config ?: Config.EMPTY).categories.take(4).map { it.key to it.label }
-            .ifEmpty { Config.DEFAULT_CATEGORIES.map { it.key to it.label } }
         if (config == null) {
-            return State("설정 없음", "PC 연결 또는 샘플 설정", false, todayCount, categories)
+            return State("설정 없음", "PC 연결 또는 샘플 설정", false, todayCount)
         }
         val rs = RecordingService.state.value
         val rec = if (!config.recordingActive) null else when {
@@ -98,19 +96,19 @@ class NugaWidget : GlanceAppWidget() {
         val current = lesson.current
         val next = lesson.next
         return when {
-            current != null -> State(current.headline, current.subline ?: "${current.period.start}–${current.period.end}", true, todayCount, categories, rec)
+            current != null -> State(current.headline, current.subline ?: "${current.period.start}–${current.period.end}", true, todayCount, rec)
             next != null -> {
                 val dayPrefix = if (next.date == now.toLocalDate()) "" else "${NugaTime.koreanDate(next.date)} "
-                State("예정 · ${next.headline}", "$dayPrefix${next.period.start} 시작" + (next.subline?.let { " · $it" } ?: ""), false, todayCount, categories, rec)
+                State("예정 · ${next.headline}", "$dayPrefix${next.period.start} 시작" + (next.subline?.let { " · $it" } ?: ""), false, todayCount, rec)
             }
-            else -> State("수업 없음", "시간표 없음", false, todayCount, categories, rec)
+            else -> State("수업 없음", "시간표 없음", false, todayCount, rec)
         }
     }
 }
 
 /**
- * 위젯은 늘 밤 유리(어떤 배경화면에서도 같은 대비): 밤 잉크 글자, 지금 수업은 하늘빛 제목,
- * 카테고리 4버튼은 카테고리 색 유리에 흰 글자.
+ * 위젯은 늘 밤 유리(어떤 배경화면에서도 같은 대비): 밤 잉크 글자, 지금 수업은 하늘빛 제목.
+ * 아래는 큰 [기록] 버튼 하나 — 밤 위에 켜진 밝은 유리(#DEEBFF)에 남색 글자. 누르면 번호 릴이 열린다.
  */
 @Composable
 private fun WidgetContent(state: NugaWidget.State) {
@@ -122,7 +120,7 @@ private fun WidgetContent(state: NugaWidget.State) {
             .fillMaxSize()
             .background(ImageProvider(R.drawable.widget_bg))
             .padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)
-            .clickable(actionStartActivity(openIntent(context, null))),
+            .clickable(actionStartActivity(openIntent(context))),
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = GlanceModifier.defaultWeight()) {
@@ -147,12 +145,7 @@ private fun WidgetContent(state: NugaWidget.State) {
             }
         }
         Spacer(modifier = GlanceModifier.height(10.dp))
-        Row(modifier = GlanceModifier.fillMaxWidth().defaultWeight()) {
-            state.categories.forEachIndexed { index, (key, label) ->
-                if (index > 0) Spacer(modifier = GlanceModifier.width(6.dp))
-                CategoryButton(key = key, label = label, modifier = GlanceModifier.defaultWeight().fillMaxSize())
-            }
-        }
+        CaptureButton(modifier = GlanceModifier.fillMaxWidth().defaultWeight())
     }
 }
 
@@ -175,37 +168,39 @@ private fun RecordButton(rec: String) {
     }
 }
 
+/** [기록]: 연필 + '기록'. 카테고리 없이 번호 릴로 바로 간다 */
 @Composable
-private fun CategoryButton(key: Int, label: String, modifier: GlanceModifier) {
+private fun CaptureButton(modifier: GlanceModifier) {
     val context = LocalContext.current
-    val bg = when (key) {
-        1 -> R.drawable.widget_cat1_bg
-        2 -> R.drawable.widget_cat2_bg
-        3 -> R.drawable.widget_cat3_bg
-        else -> R.drawable.widget_cat4_bg
-    }
     Box(
         modifier = modifier
-            .background(ImageProvider(bg))
-            .clickable(actionStartActivity(openIntent(context, key))),
+            .background(ImageProvider(R.drawable.widget_record_bg))
+            .clickable(actionStartActivity(openIntent(context))),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                color = ColorProvider(androidx.compose.ui.graphics.Color.White),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            ),
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                provider = ImageProvider(R.drawable.ic_widget_record),
+                contentDescription = null,
+                modifier = GlanceModifier.size(20.dp),
+            )
+            Spacer(modifier = GlanceModifier.width(8.dp))
+            Text(
+                text = "기록",
+                style = TextStyle(
+                    color = ColorProvider(NugaColors.BtnLtInk),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                ),
+                maxLines = 1,
+            )
+        }
     }
 }
 
-private fun openIntent(context: Context, category: Int?): Intent {
-    val uri = if (category == null) Uri.parse("nuga://record?src=widget") else Uri.parse("nuga://record?category=$category&src=widget")
-    return Intent(Intent.ACTION_VIEW, uri)
+/** nuga://record?src=widget — 카테고리 없이 기록 시트(번호 릴)를 연다 */
+private fun openIntent(context: Context): Intent =
+    Intent(Intent.ACTION_VIEW, Uri.parse("nuga://record?src=widget"))
         .setClass(context, MainActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-}

@@ -15,7 +15,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -86,20 +85,21 @@ import kr.nuga.shared.time.NugaTime
 import kr.nuga.shared.timetable.LessonState
 import java.time.LocalDate
 
-// ------------------------------------------------------------------ 1. 카테고리
+// ------------------------------------------------------------------ 1. 홈: [기록] 하나
 
-private val TileGap = 8.dp
-
+/**
+ * Home: the lesson on top, ONE big lit glass [기록] slab in the middle (no category), today's count + settings below.
+ * Tapping [기록] goes straight to the number reel for the current (or next) lesson's class.
+ */
 @Composable
-fun CategoryScreen(
+fun HomeScreen(
     config: Config?,
     lesson: LessonState,
     todayCount: Int,
     queueSize: Int,
-    onCategory: (Int) -> Unit,
+    onRecord: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val categories = (config ?: Config.EMPTY).categories.take(4).ifEmpty { Config.DEFAULT_CATEGORIES }
     val side = roundInset(0.06f, 10.dp)
     Scaffold(timeText = { NightTimeText() }) {
         Column(
@@ -140,28 +140,17 @@ fun CategoryScreen(
                     Text(nextText, style = WatchType.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            BoxWithConstraints(Modifier.widthIn(max = 196.dp)) {
-                val tileWidth = (maxWidth - TileGap) / 2
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(TileGap),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    categories.chunked(2).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(TileGap)) {
-                            row.forEach { cat ->
-                                CategoryTile(
-                                    label = cat.label,
-                                    glass = Glasses.category(cat.key),
-                                    onClick = { onCategory(cat.key) },
-                                    modifier = Modifier.width(tileWidth).height(52.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(12.dp))
+            RecordSlab(
+                onClick = onRecord,
+                // a further 6% inset each side (12% in all) keeps the slab corners inside a 192dp round face
+                modifier = Modifier
+                    .padding(horizontal = roundInset(0.06f, 0.dp))
+                    .widthIn(max = 184.dp)
+                    .fillMaxWidth()
+                    .height(72.dp),
+            )
+            Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     buildAnnotatedString {
@@ -181,18 +170,15 @@ fun CategoryScreen(
     }
 }
 
-/** A category is a luminous glass slab in its hue, with a soft glow of the same hue under it. */
+/** [기록]: the lit glass slab (light face, navy pencil + label, blue bloom under it). */
 @Composable
-private fun CategoryTile(label: String, glass: Glass, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    GlassButton(onClick = onClick, glass = glass, modifier = modifier, glow = 10.dp) {
-        Text(
-            label,
-            style = WatchType.Tile,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 6.dp),
-        )
+private fun RecordSlab(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    GlassButton(onClick = onClick, glass = Glasses.Lit, modifier = modifier, glow = 12.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("기록", style = WatchType.Hero, maxLines = 1)
+        }
     }
 }
 
@@ -220,8 +206,6 @@ private fun SettingsButton(onClick: () -> Unit) {
 fun ReelScreen(
     classLabel: String,
     size: Int,
-    category: Int,
-    categoryLabel: String,
     startProvider: suspend () -> Int,
     onSave: (Int) -> Unit,
 ) {
@@ -232,7 +216,6 @@ fun ReelScreen(
     val picker = rememberPickerState(initialNumberOfOptions = count, initiallySelectedOption = initial - 1, repeatItems = false)
     val scope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
-    val catColor = WatchColors.category(category)
     LaunchedEffect(Unit) { focus.requestFocus() }
 
     Scaffold(timeText = { NightTimeText() }) {
@@ -243,22 +226,12 @@ fun ReelScreen(
                 .padding(top = 28.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    classLabel,
-                    style = WatchType.Meta.copy(color = WatchColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em),
-                    maxLines = 1,
-                )
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .shadow(4.dp, WatchShapes.Swatch, ambientColor = catColor, spotColor = catColor)
-                        .background(catColor, WatchShapes.Swatch),
-                )
-                Spacer(Modifier.width(5.dp))
-                Text(categoryLabel, style = WatchType.Meta.copy(color = catColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold), maxLines = 1)
-            }
+            // Just the class: no category is chosen on the watch (0 = 미정, the PC decides later).
+            Text(
+                classLabel,
+                style = WatchType.Meta.copy(color = WatchColors.Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.01).em),
+                maxLines = 1,
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -274,7 +247,7 @@ fun ReelScreen(
                     .focusable(),
                 contentAlignment = Alignment.Center,
             ) {
-                NumberPlate(hue = catColor, modifier = Modifier.size(width = 116.dp, height = 76.dp))
+                NumberPlate(hue = WatchColors.Sky, modifier = Modifier.size(width = 116.dp, height = 76.dp))
                 Picker(
                     state = picker,
                     contentDescription = "번호",
@@ -292,7 +265,7 @@ fun ReelScreen(
             }
             GlassButton(
                 onClick = { onSave(picker.selectedOption + 1) },
-                glass = Glasses.category(category),
+                glass = Glasses.Lit,
                 glow = 10.dp,
                 modifier = Modifier.height(52.dp).widthIn(min = 120.dp),
             ) {
@@ -310,7 +283,7 @@ fun ReelScreen(
 
 /**
  * The glass step the selected number stands on: a faint translucent plate, a rim brightest at the top-right
- * (tinted by the category), and the stair "nosing beam" along its top edge — white, fading at both ends,
+ * (tinted sky), and the stair "nosing beam" along its top edge — white, fading at both ends,
  * with a warm specular toward the right where the light comes from.
  */
 @Composable
@@ -372,7 +345,6 @@ private fun Modifier.fadeEdges(): Modifier = this
 @Composable
 fun DoneScreen(
     record: Record?,
-    categoryLabel: String,
     onTranscript: (String) -> Unit,
     onCancel: () -> Unit,
     onFinished: () -> Unit,
@@ -433,13 +405,12 @@ fun DoneScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            val key = record?.category ?: 4
-            val catColor = WatchColors.category(key)
+            // Saved: a lit disc with a navy check, then class · number. No category (0 = 미정, the PC decides).
             Box(
-                modifier = Modifier.size(40.dp).glass(Glasses.category(key), CircleShape, glow = 10.dp),
+                modifier = Modifier.size(40.dp).glass(Glasses.Lit, CircleShape, glow = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "저장", tint = WatchColors.Ink, modifier = Modifier.size(24.dp))
+                Icon(Icons.Filled.Check, contentDescription = "저장", tint = Glasses.Lit.content, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(8.dp))
             Text(
@@ -447,7 +418,6 @@ fun DoneScreen(
                 style = WatchType.Title,
                 maxLines = 1,
             )
-            Text(categoryLabel, style = WatchType.Meta.copy(color = catColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold), maxLines = 1)
             if (transcript.isNotBlank()) {
                 Text(transcript, style = WatchType.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
             }

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.nuga.app.data.db.RecordEntity
 import kr.nuga.app.ui.MainViewModel
+import kr.nuga.app.ui.hasCategory
 import kr.nuga.app.ui.home.Card
 import kr.nuga.app.ui.home.Divider
 import kr.nuga.app.ui.home.RecordRow
@@ -61,7 +62,14 @@ fun RecordsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<RecordEntity?>(null) }
 
-    val filtered = remember(all, filter) { if (filter == 0) all else all.filter { it.category == filter } }
+    // 0 = 전체, -1 = 미정(폰·워치에서 분류 없이 보낸 기록, category 0), 1..4 = 카테고리
+    val filtered = remember(all, filter) {
+        when (filter) {
+            0 -> all
+            -1 -> all.filter { it.category !in 1..4 }
+            else -> all.filter { it.category == filter }
+        }
+    }
     val grouped = remember(filtered) { filtered.groupBy { it.day }.toSortedMap(compareByDescending { it }) }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -73,6 +81,11 @@ fun RecordsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
         ) {
             item {
                 NightChip(label = "전체", selected = filter == 0, onClick = { filter = 0 })
+            }
+            if (all.any { it.category !in 1..4 }) {
+                item {
+                    NightChip(label = "미정", selected = filter == -1, onClick = { filter = if (filter == -1) 0 else -1 })
+                }
             }
             items(cfg.categories.take(4)) { cat ->
                 NightChip(
@@ -153,7 +166,11 @@ private fun EditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = NugaColors.Surface,
-        title = { Text("${record.classLabel} · ${record.no}번 · ${cfg.categoryLabel(record.category)}") },
+        // 카테고리는 PC가 정했을 때(1..4)만 붙인다. 0(미정)은 반·번호만
+        title = {
+            val category = cfg.categoryLabel(record.category).takeIf { hasCategory(record.category) }
+            Text(listOfNotNull(record.classLabel, "${record.no}번", category).joinToString(" · "))
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(

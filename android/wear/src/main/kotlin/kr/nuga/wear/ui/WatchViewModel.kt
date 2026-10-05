@@ -11,10 +11,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kr.nuga.shared.model.CATEGORY_NONE
 import kr.nuga.shared.model.Config
 import kr.nuga.shared.model.Record
 import kr.nuga.shared.model.RecordSource
@@ -63,9 +67,6 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _category = MutableStateFlow(1)
-    val category: StateFlow<Int> get() = _category
-
     /** Record waiting for the 5-second cancel window (not yet sent). */
     private val _draft = MutableStateFlow<Record?>(null)
     val draft: StateFlow<Record?> get() = _draft
@@ -74,7 +75,14 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { g.sync.refreshConnection() }
     }
 
-    fun selectCategory(key: Int) { _category.value = key }
+    /** Lesson notification's [기록] action: skip home and open the number reel. */
+    private val _reelRequest = MutableStateFlow(false)
+    val reelRequest: StateFlow<Boolean> get() = _reelRequest
+    fun requestReel() { _reelRequest.value = true }
+    fun consumeReelRequest() { _reelRequest.value = false }
+
+    /** Waits briefly for the stored config on a cold start (null if the watch has none yet). */
+    suspend fun awaitConfig(): Config? = config.value ?: withTimeoutOrNull(1_500) { config.filterNotNull().first() }
 
     /** Class to record for: current lesson, else next lesson today, else first configured class. */
     fun activeClass(): String {
@@ -93,9 +101,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
         } else 1
     }
 
-    fun categoryLabel(key: Int): String = (config.value ?: Config.EMPTY).categoryLabel(key)
-
-    /** Save tap on the reel: build the record, vibrate once, open the done screen. */
+    /** Save tap on the reel: build the record (category 0 = 미정, the PC decides), vibrate once, open the done screen. */
     fun startDraft(classLabel: String, no: Int) {
         val nowDt = LocalDateTime.now()
         val iso = NugaTime.toIso(nowDt)
@@ -104,7 +110,7 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
             id = UUID.randomUUID().toString(),
             classLabel = classLabel,
             no = no,
-            category = _category.value,
+            category = CATEGORY_NONE,
             time = iso,
             lesson = lessonInfo,
             memo = "",

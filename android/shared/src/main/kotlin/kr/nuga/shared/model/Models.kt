@@ -41,6 +41,9 @@ object RecordSource {
     const val PC = "pc"
 }
 
+/** 미정: 폰·위젯·워치는 카테고리 없이 보낸다. PC가 기록을 보충할 때 1..4 중 하나로 정한다. */
+const val CATEGORY_NONE = 0
+
 @Serializable
 data class Record(
     val id: String,

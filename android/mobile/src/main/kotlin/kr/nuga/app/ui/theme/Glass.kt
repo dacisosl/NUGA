@@ -179,6 +179,8 @@ class ButtonTone(
         val Secondary = ButtonTone(Color.White, Color(0xFFF7FAFE), NugaColors.Hair3, NugaColors.Text, sheen = 0f)
         /** 녹음 시작·중단 */
         val Record = ButtonTone(NugaColors.RecTop, NugaColors.Rec, Color(0xFFA82020), Color.White, glow = NugaColors.Rec)
+        /** 밤 위 주 버튼 하나 (랜딩 주 버튼): 밝은 유리 #DEEBFF → #C9DCF8, 남색 글자 #122A47 (10:1), 아래로 푸른 번짐 */
+        val Lit = ButtonTone(NugaColors.BtnLt, Color(0xFFC9DCF8), Color.White.copy(alpha = .55f), NugaColors.BtnLtInk, glow = NugaColors.Bloom, sheen = .9f, onDark = true)
 
         /** 카테고리 색 버튼 (흰 글자) */
         fun category(key: Int, onDark: Boolean = false) = ButtonTone(

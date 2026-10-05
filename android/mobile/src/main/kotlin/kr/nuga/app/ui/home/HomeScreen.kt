@@ -3,6 +3,7 @@ package kr.nuga.app.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,19 +20,28 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -43,9 +53,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.nuga.app.data.db.RecordEntity
 import kr.nuga.app.ui.MainViewModel
-import kr.nuga.app.ui.theme.ButtonTone
+import kr.nuga.app.ui.hasCategory
 import kr.nuga.app.ui.theme.Eyebrow
-import kr.nuga.app.ui.theme.NugaButton
 import kr.nuga.app.ui.theme.NugaColors
 import kr.nuga.app.ui.theme.ScreenHeader
 import kr.nuga.app.ui.theme.paperCard
@@ -100,7 +109,7 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 current = lesson.current,
                 next = lesson.next,
                 now = now,
-                onCategory = { key, classLabel -> vm.openSheet(category = key, classLabel = classLabel, source = RecordSource.PHONE) },
+                onRecord = { classLabel -> vm.openSheet(classLabel = classLabel, source = RecordSource.PHONE) },
             )
         }
         if (lesson.today.isNotEmpty()) {
@@ -143,14 +152,14 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
     }
 }
 
-/** 화면의 초점 하나: 지금 수업이면 하늘빛 테두리로 켜진 카드 */
+/** 화면의 초점 하나: 지금 수업이면 하늘빛 테두리로 켜진 카드. 아래에 큰 [기록] 버튼 하나 → 번호 릴 */
 @Composable
 private fun LessonCard(
     cfg: Config,
     current: LessonSlot?,
     next: LessonSlot?,
     now: LocalDateTime,
-    onCategory: (Int, String) -> Unit,
+    onRecord: (String) -> Unit,
 ) {
     val slot = current ?: next
     Card(modifier = Modifier.fillMaxWidth(), lit = current != null) {
@@ -179,36 +188,68 @@ private fun LessonCard(
             }
             Spacer(Modifier.height(16.dp))
             val classLabel = slot?.classLabel ?: cfg.classes.firstOrNull()?.classLabel ?: "미지정"
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                cfg.categories.take(4).forEach { cat ->
-                    CategoryButton(
-                        label = cat.label,
-                        key = cat.key,
-                        modifier = Modifier.weight(1f),
-                        onClick = { onCategory(cat.key, classLabel) },
-                    )
-                }
-            }
+            CaptureButton(onClick = { onRecord(classLabel) })
         }
     }
 }
 
-/** 수업 중 한 번에 누르는 카테고리 버튼: 카테고리 색 유리 (윗면이 밝고 아래로 같은 색이 번진다) */
+/** 기록 버튼 테두리: 빛이 드는 오른쪽 위가 흰빛, 아래로 갈수록 파랑 가장자리 */
+private val CaptureRim = Brush.linearGradient(
+    0f to Color.White.copy(alpha = .62f),
+    .30f to Color(0xFF6E9BDD).copy(alpha = .60f),
+    1f to NugaColors.AccentEdge,
+    start = Offset(Float.POSITIVE_INFINITY, 0f), end = Offset(0f, Float.POSITIVE_INFINITY),
+)
+
+/**
+ * 수업 중 한 번에 누르는 [기록] 버튼 (화면에서 가장 밝은 것 하나): 행동 파랑 유리 #2F66B8 → #245AA7,
+ * 빛이 드는 오른쪽 위에 흰 빛웅덩이, 윗면 반사광, 아래로 같은 파랑이 번진다. 64dp, 연필 + '기록'.
+ */
 @Composable
-fun CategoryButton(label: String, key: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    NugaButton(
-        onClick = onClick,
-        modifier = modifier,
-        tone = ButtonTone.category(key),
-        height = 60.dp,
-        fontSize = 16.sp,
+private fun CaptureButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(64.dp)
+            .drawWithCache {
+                val c = Offset(size.width / 2f, size.height)
+                val rx = (size.width * .46f).coerceAtLeast(1f)
+                val glow = Brush.radialGradient(
+                    0f to NugaColors.Accent.copy(alpha = .46f), .55f to NugaColors.Bloom.copy(alpha = .12f), 1f to Color.Transparent,
+                    center = c, radius = rx,
+                )
+                onDrawBehind { scale(scaleX = 1f, scaleY = 16.dp.toPx() / rx, pivot = c) { drawCircle(glow, radius = rx, center = c) } }
+            }
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(NugaColors.AccentTop, NugaColors.Accent)))
+            .drawWithCache {
+                val pool = Brush.radialGradient(
+                    0f to Color.White.copy(alpha = .22f), 1f to Color.White.copy(alpha = 0f),
+                    center = Offset(size.width, 0f), radius = (size.width * .55f).coerceAtLeast(1f),
+                )
+                val sheen = Brush.horizontalGradient(
+                    0f to Color.Transparent, .55f to Color.White.copy(alpha = .16f), .9f to Color.White.copy(alpha = .40f), 1f to Color.Transparent,
+                )
+                onDrawBehind {
+                    drawRect(pool)
+                    drawRect(sheen, topLeft = Offset(0f, 1.dp.toPx()), size = Size(size.width, 1.dp.toPx()))
+                }
+            }
+            .border(1.dp, CaptureRim, shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(color = Color.White),
+                role = Role.Button,
+                onClickLabel = "번호 고르기",
+                onClick = onClick,
+            ),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
+        Icon(Icons.Rounded.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
+        Text("기록", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em)
     }
 }
 
@@ -281,7 +322,8 @@ fun RecordRow(r: RecordEntity, cfg: Config, showName: Boolean, onClick: (() -> U
             val memo = listOfNotNull(r.memo.takeIf { it.isNotBlank() }, r.voiceTranscript?.takeIf { it.isNotBlank() }).joinToString(" / ")
             if (memo.isNotEmpty()) Text(memo, style = MaterialTheme.typography.bodySmall, color = NugaColors.Text2, maxLines = 1)
         }
-        CategoryChip(cfg.categoryLabel(r.category), r.category)
+        // 카테고리는 PC가 정했을 때(1..4)만. 0(미정)은 칩 없이
+        if (hasCategory(r.category)) CategoryChip(cfg.categoryLabel(r.category), r.category)
         if (!r.synced) {
             Spacer(Modifier.width(6.dp))
             Box(Modifier.size(6.dp).background(NugaColors.Text3, CircleShape))

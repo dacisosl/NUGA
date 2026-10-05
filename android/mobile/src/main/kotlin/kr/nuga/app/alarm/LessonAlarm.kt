@@ -122,7 +122,7 @@ object LessonNotifier {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    /** "2-3 · 3교시 시작" with one action per category; each deep-links into the number sheet. */
+    /** "2-3 · 3교시 시작" with a single [기록] action that deep-links (no category) into the number reel for that class. */
     fun notifyLessonStart(context: Context, headline: String, subline: String?, classLabel: String?, config: Config, period: Int = -1, endMs: Long = 0L) {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, NugaApp.CHANNEL_LESSON)
@@ -133,9 +133,9 @@ object LessonNotifier {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setTimeoutAfter(55 * 60 * 1000L)
-            .setContentIntent(deepLink(context, null, classLabel, 0))
+            .setContentIntent(deepLink(context, classLabel, 0))
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-        // 알림 버튼은 3개까지 보인다: 녹음을 켰으면 [● 녹음 시작] + 카테고리 2개
+        // 녹음을 켰으면 [● 녹음 시작], 그리고 [기록] 하나 (카테고리 없이 번호 릴로)
         val recordTap = config.recordingActive && config.recording?.mode == RecordingMode.TAP && RecordingService.state.value.recording == null
         if (recordTap) {
             val start = PendingIntent.getActivity(
@@ -144,15 +144,13 @@ object LessonNotifier {
             )
             builder.addAction(0, "● 녹음 시작", start)
         }
-        config.categories.take(if (recordTap) 2 else 4).forEachIndexed { index, cat ->
-            builder.addAction(0, cat.label, deepLink(context, cat.key, classLabel, index + 1))
-        }
+        builder.addAction(0, "기록", deepLink(context, classLabel, 1))
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
     }
 
-    private fun deepLink(context: Context, category: Int?, classLabel: String?, requestCode: Int): PendingIntent {
+    /** nuga://record?class=…&src=notify — 카테고리는 넣지 않는다(0 = 미정, PC가 정한다) */
+    private fun deepLink(context: Context, classLabel: String?, requestCode: Int): PendingIntent {
         val uri = Uri.Builder().scheme("nuga").authority("record").apply {
-            if (category != null) appendQueryParameter("category", category.toString())
             if (classLabel != null) appendQueryParameter("class", classLabel)
             appendQueryParameter("src", "notify")
         }.build()

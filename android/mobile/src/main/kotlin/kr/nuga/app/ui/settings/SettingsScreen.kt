@@ -136,7 +136,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier = Modifier) {
                 Divider()
                 ToggleRow(
                     title = "수업 시작 알림",
-                    sub = "카테고리 4버튼",
+                    sub = "[기록] 버튼 → 번호",
                     checked = settings.autoOpenNotify,
                     onChange = { on ->
                         if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

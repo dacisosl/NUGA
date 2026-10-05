@@ -69,6 +69,7 @@ class WatchAlarmReceiver : BroadcastReceiver() {
     /**
      * API 29+ restricts background activity starts, so the reliable path is a full-screen-intent
      * notification (the system shows it immediately on the watch); startActivity is attempted too.
+     * The notification carries a single [기록] action that opens straight onto the number reel.
      */
     private fun launchOrNotify(context: Context, headline: String) {
         val open = Intent(context, MainActivity::class.java)
@@ -78,6 +79,10 @@ class WatchAlarmReceiver : BroadcastReceiver() {
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         if (!canPost) return
         val pi = PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val record = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_RECORD, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val recordPi = PendingIntent.getActivity(context, 2, record, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(context, WatchApp.CHANNEL_LESSON)
             .setSmallIcon(R.drawable.ic_stat_nuga)
             .setContentTitle("$headline 시작")
@@ -88,6 +93,7 @@ class WatchAlarmReceiver : BroadcastReceiver() {
             .setTimeoutAfter(10 * 60 * 1000L)
             .setContentIntent(pi)
             .setFullScreenIntent(pi, true)
+            .addAction(0, "기록", recordPi)
             .build()
         NotificationManagerCompat.from(context).notify(7101, n)
     }
