@@ -27,21 +27,31 @@ import kr.nuga.app.record.RecordingService
 import kr.nuga.app.record.RecordingStatus
 import kr.nuga.app.record.TranscribeWorker
 import kr.nuga.app.sync.SyncRepository
+import kr.nuga.shared.model.CATEGORY_NONE
 import kr.nuga.shared.model.Config
 import kr.nuga.shared.model.RecordSource
+import kr.nuga.shared.model.ReelStart
 import kr.nuga.shared.sync.PairingUri
 import kr.nuga.shared.time.NugaTime
 import kr.nuga.shared.timetable.LessonState
 import kr.nuga.shared.timetable.TimetableResolver
 import java.time.LocalDateTime
 
+/**
+ * 번호 시트. 새 기록은 카테고리 없이(0 = 미정) 저장하고, PC가 보충할 때 정한다.
+ * [category]는 예전 링크(nuga://record?category=N)로 열렸을 때만 1..4가 들어온다.
+ * [no]는 번호 릴 가운데 숫자. 반을 바꾸면 잠깐 null(릴 시작 번호를 읽는 중)이다.
+ */
 data class SheetState(
     val classLabel: String,
-    val category: Int,
+    val category: Int = CATEGORY_NONE,
     val no: Int? = null,
     val memo: String = "",
     val source: String = RecordSource.PHONE,
 )
+
+/** PC가 정한 카테고리(1..4)만 보여 준다. 0(미정)은 칩 없이 둔다. */
+fun hasCategory(category: Int): Boolean = category in 1..4
 
 sealed interface UiEvent {
     data class Saved(val id: String, val text: String) : UiEvent
@@ -117,20 +127,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ number sheet
 
+    /**
+     * 기록 시트를 연다: 반은 지금(또는 다음) 수업, 번호는 릴 시작 번호(PC 설정 '번호 릴 시작').
+     * [category]는 예전 링크 호환용. 1..4가 아니면 0(미정)으로 저장한다.
+     */
     fun openSheet(category: Int? = null, classLabel: String? = null, source: String = RecordSource.PHONE) {
         val cfg = config.value ?: Config.EMPTY
         val cls = classLabel
             ?: _sheet.value?.classLabel
             ?: TimetableResolver.defaultClass(cfg, LocalDateTime.now())
             ?: "미지정"
-        val cat = category ?: _sheet.value?.category ?: 1
-        _sheet.value = SheetState(classLabel = cls, category = cat.coerceIn(1, 4), source = source)
+        val cat = category?.takeIf(::hasCategory) ?: CATEGORY_NONE
+        _sheet.value = SheetState(classLabel = cls, category = cat, source = source)
+        loadReelStart(cls)
     }
 
     fun closeSheet() { _sheet.value = null }
-    fun setSheetCategory(category: Int) = _sheet.update { it.copy(category = category) }
-    fun setSheetClass(classLabel: String) = _sheet.update { it.copy(classLabel = classLabel, no = null) }
+    fun setSheetCategory(category: Int) = _sheet.update { it.copy(category = category.takeIf(::hasCategory) ?: CATEGORY_NONE) }
+    fun setSheetClass(classLabel: String) {
+        if (_sheet.value?.classLabel == classLabel) return
+        _sheet.update { it.copy(classLabel = classLabel, no = null) }
+        loadReelStart(classLabel)
+    }
     fun setSheetNo(no: Int?) = _sheet.update { it.copy(no = no) }
+
+    /** 릴 시작 번호: config.options.reelStart가 "last"면 그 반에서 마지막으로 기록한 번호, 아니면 1번 */
+    private fun loadReelStart(classLabel: String) {
+        viewModelScope.launch {
+            val cfg = config.value ?: Config.EMPTY
+            val size = cfg.classSize(classLabel).coerceAtLeast(1)
+            val start = if (cfg.options.reelStart == ReelStart.LAST) {
+                (runCatching { g.recordRepo.lastNo(classLabel) }.getOrNull() ?: 1).coerceIn(1, size)
+            } else 1
+            _sheet.update { if (it.classLabel == classLabel && it.no == null) it.copy(no = start) else it }
+        }
+    }
     fun setSheetMemo(memo: String) = _sheet.update { it.copy(memo = memo) }
     fun appendSheetMemo(text: String) = _sheet.update {
         it.copy(memo = if (it.memo.isBlank()) text else "${it.memo.trimEnd()} $text")
@@ -149,8 +180,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 source = s.source,
             )
             Haptics.tap(getApplication())
-            val label = (config.value ?: Config.EMPTY).categoryLabel(s.category)
-            _events.emit(UiEvent.Saved(entity.id, "${s.classLabel} · ${no}번 · $label"))
+            val label = if (hasCategory(s.category)) (config.value ?: Config.EMPTY).categoryLabel(s.category) else null
+            _events.emit(UiEvent.Saved(entity.id, listOfNotNull(s.classLabel, "${no}번", label).joinToString(" · ")))
         }
     }
 

@@ -647,7 +647,7 @@ export function SyncSection() {
             </div>
             <Switch on={doc.settings.options.showPhoneNames && sync.shareRoster} onChange={(v) => setSettings((s) => ({ ...s, options: { ...s.options, showPhoneNames: v }, sync: s.sync ? { ...s.sync, shareRoster: v } : null }))} label="폰에 이름 표시 (명렬표를 폰으로 전송, 워치에는 전송 안 함)" />
             <Switch on={doc.settings.options.autoLaunchWatch} onChange={(v) => setSettings((s) => ({ ...s, options: { ...s.options, autoLaunchWatch: v } }))} label="수업 시작 시 워치 앱 자동 실행" />
-            <div className="flex small"><span className="muted">워치 번호 릴 시작</span><span className="seg"><button className={doc.settings.options.reelStart === "one" ? "active" : ""} onClick={() => setSettings((s) => ({ ...s, options: { ...s.options, reelStart: "one" } }))}>항상 1번</button><button className={doc.settings.options.reelStart === "last" ? "active" : ""} onClick={() => setSettings((s) => ({ ...s, options: { ...s.options, reelStart: "last" } }))}>마지막 번호</button></span></div>
+            <div className="flex small"><span className="muted">폰·워치 번호 릴 시작</span><span className="seg"><button className={doc.settings.options.reelStart === "one" ? "active" : ""} onClick={() => setSettings((s) => ({ ...s, options: { ...s.options, reelStart: "one" } }))}>항상 1번</button><button className={doc.settings.options.reelStart === "last" ? "active" : ""} onClick={() => setSettings((s) => ({ ...s, options: { ...s.options, reelStart: "last" } }))}>마지막 번호</button></span></div>
           </div>
         )}
       </div>

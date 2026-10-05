@@ -39,13 +39,16 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent)
     }
 
-    /** nuga://record?category=N&class=2-3&src=widget|notify */
+    /**
+     * nuga://record?class=2-3&src=widget|notify — 기록 시트(번호 릴)를 연다.
+     * category=N(1..4)은 예전 위젯·알림 링크 호환용으로만 받는다. 없거나 범위 밖이면 0(미정).
+     */
     private fun handleDeepLink(intent: Intent?) {
         intent?.getStringExtra(EXTRA_TAB)?.let { vm.requestTab(it); intent.removeExtra(EXTRA_TAB) }
         val data = intent?.data ?: return
         if (data.scheme == "nuga" && data.host == "pair") { vm.requestPair(data.toString()); intent.data = null; return }
         if (data.scheme != "nuga" || data.host != "record") return
-        val category = data.getQueryParameter("category")?.toIntOrNull()
+        val category = data.getQueryParameter("category")?.toIntOrNull()?.takeIf(::hasCategory)
         val classLabel = data.getQueryParameter("class")?.takeIf { it.isNotBlank() }
         val source = when (data.getQueryParameter("src")) {
             "widget" -> RecordSource.WIDGET

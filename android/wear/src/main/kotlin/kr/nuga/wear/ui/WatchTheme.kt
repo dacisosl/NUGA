@@ -131,6 +131,9 @@ object WatchType {
     /** Category tile label; colour comes from the glass. */
     val Tile = TextStyle(fontSize = 17.sp, lineHeight = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em)
 
+    /** The big [기록] label on the home slab; colour comes from the glass. */
+    val Hero = TextStyle(fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.02).em)
+
     /** Button label; colour comes from the glass. */
     val Button = TextStyle(
         fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold,
@@ -178,6 +181,8 @@ class Glass(
     /** Text and icon colour on the face. */
     val content: Color,
     sheenAlpha: Float,
+    /** Wash laid over the face while pressed: white on dark glass, navy on the light (lit) glass. */
+    val pressedWash: Color = Color.White.copy(alpha = 0.10f),
 ) {
     val body: Brush = Brush.verticalGradient(listOf(top, bottom))
     val sheen: Brush = Brush.verticalGradient(
@@ -232,6 +237,20 @@ object Glasses {
 
     /** Rim for a lit (checked) sky surface. */
     val SkyRim: Brush = rimBrush(WatchColors.Sky, mid = 0.55f, low = 0.16f, end = 0.30f)
+
+    /**
+     * The one lit thing on night (landing primary #DEEBFF): light glass #E4EEFF → #C3D7F5, white rim brightest at the
+     * top-right, navy ink #122A47 (10:1 at the bottom), blue bloom #5495FD under it. Home [기록], reel 저장, saved disc.
+     */
+    val Lit = Glass(
+        top = Color(0xFFE4EEFF),
+        bottom = Color(0xFFC3D7F5),
+        rim = rimBrush(WatchColors.Sky, light = Color.White, mid = 0.95f, low = 0.60f, end = 0.75f),
+        glow = WatchColors.Bloom,
+        content = Color(0xFF122A47),
+        sheenAlpha = 0.45f,
+        pressedWash = Color(0xFF122A47).copy(alpha = 0.10f),
+    )
 }
 
 /** Paints a glass face. Put it before clickable so the ripple is clipped to the shape. */
@@ -247,7 +266,7 @@ fun Modifier.glass(glass: Glass, shape: Shape, glow: Dp = 0.dp, pressed: Boolean
         .drawBehind {
             drawRect(glass.sheen)                                                              // lit top face
             drawRect(Color.White.copy(alpha = 0.34f), size = Size(size.width, 1.dp.toPx()))   // inset top highlight
-            if (pressed) drawRect(Color.White.copy(alpha = 0.10f))
+            if (pressed) drawRect(glass.pressedWash)
         }
         .border(1.dp, glass.rim, shape)
 }
