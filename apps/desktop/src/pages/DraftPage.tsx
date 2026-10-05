@@ -13,6 +13,7 @@ import { MaskEditor } from "../components/MaskEditor";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 import { DraftView, SpanLegend, SpanRatioBar, ViewToggles } from "../components/DraftView";
+import { ReviewPage } from "./ReviewPage";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
 
@@ -95,12 +96,26 @@ export function DraftPage() {
   };
   return (
     <>
-      <TopBar title="초안 작성" onExcel={exportExcel} right={<ViewToggles />} titleSlot={<span className="seg seg-title" role="tablist" aria-label="초안 작성 방식"><button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button><button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button></span>} />
+      {/* 생기부 생성 = 시즌 화면: 개별·일괄로 초안을 만들고, 검토 탭에서 한 번에 점검한다 */}
+      {mode === "review" ? <ReviewPage tabs={<ModeTabs mode={mode} setMode={setMode} />} /> : <>
+      <TopBar title="생기부 생성" onExcel={exportExcel} right={<ViewToggles />} titleSlot={<ModeTabs mode={mode} setMode={setMode} />} />
       <Sheet>
         <ClassTabs extra={(c) => { const n = studentsOf(doc, c).length; const d = doc.drafts.filter((x) => x.class === c && x.text).length; return <span className="cnt num">{d}/{n}</span>; }} />
         {mode === "individual" ? <Individual /> : <Batch />}
       </Sheet>
+      </>}
     </>
+  );
+}
+
+/** 생기부 생성 안의 세 탭: 개별 · 일괄 · 검토 */
+export function ModeTabs({ mode, setMode }: { mode: "individual" | "batch" | "review"; setMode: (m: "individual" | "batch" | "review") => void }) {
+  return (
+    <span className="seg seg-title" role="tablist" aria-label="생기부 생성 방식">
+      <button role="tab" aria-selected={mode === "individual"} className={mode === "individual" ? "active" : ""} onClick={() => setMode("individual")}>개별</button>
+      <button role="tab" aria-selected={mode === "batch"} className={mode === "batch" ? "active" : ""} onClick={() => setMode("batch")}>일괄</button>
+      <button role="tab" aria-selected={mode === "review"} className={mode === "review" ? "active" : ""} onClick={() => setMode("review")}>검토</button>
+    </span>
   );
 }
 

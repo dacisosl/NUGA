@@ -10,8 +10,9 @@ export function Chip({ cat, label, className = "", onClick, selected }: { cat?: 
   return <span className={`chip ${c} ${className} ${onClick ? "clickable" : ""} ${selected ? "selected" : ""}`} onClick={onClick}>{label}</span>;
 }
 
-export function CatChip({ cat }: { cat: Category }) {
+export function CatChip({ cat }: { cat: Category | 0 }) {
   const doc = useStore((s) => s.doc);
+  if (!cat) return <Chip className="none" label="미정" />; // 폰·워치에서 분류 없이 온 기록
   const label = doc.settings.categories.find((c) => c.key === cat)?.label || cat;
   return <Chip cat={cat} label={label} />;
 }

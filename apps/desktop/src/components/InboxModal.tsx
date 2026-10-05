@@ -167,7 +167,10 @@ function SuggestItem({ s, tr, doc, open: open0 }: { s: Suggestion; tr: Transcrip
   const [open, setOpen] = useState(open0);
   const [cat, setCat] = useState<Category>(s.category);
   const [note, setNote] = useState(s.reason);
-  const [ctx, setCtx] = useState(false);
+  // 단순 보기(기본): 추천 문구 + 명단만. 자세히 = 발언 원문·앞뒤 문맥·판단 기준·카테고리 (설정 → 화면 → 처음에 보이는 정보)
+  const full = (doc.settings.options.detail || "simple") === "full";
+  const [detail, setDetail] = useState(full);
+  const [ctx, setCtx] = useState(full);
   useEffect(() => { if (open0) setOpen(true); }, [open0]); // 앞 카드를 처리하면 다음 카드가 펼쳐진다
   const c = suggestionContext(tr, s);
   if (!c.main.length) return null;
@@ -186,23 +189,27 @@ function SuggestItem({ s, tr, doc, open: open0 }: { s: Suggestion; tr: Transcrip
       <div className="ib-sg-main">
       <div className="ib-meta" onClick={() => setOpen(!open)}>
         <span className="num">{hms(at)}</span>
-        <span className="chip outline">{s.criteria}</span>
+        {detail && <span className="chip outline">{s.criteria}</span>}
         {s.status === "later" && <span className="chip none">미룸</span>}
         <span className="grow" />
-        <span className="muted small">{s.source === "llm" ? "AI" : "규칙"}</span>
+        {detail && <span className="muted small">{s.source === "llm" ? "AI" : "규칙"}</span>}
+        <button type="button" className="btn ghost sm ib-detail" onClick={(e) => { e.stopPropagation(); setDetail(!detail); if (detail) setCtx(false); }} aria-expanded={detail}>{detail ? "접기" : "자세히"}</button>
       </div>
-      <div className="ib-quote" onClick={() => setOpen(!open)}>
-        {ctx && c.before && <div className="ib-ctx">{c.before.speaker}: {c.before.text}</div>}
-        “{c.main.map((x) => x.text).join(" ")}”
-        {ctx && c.after && <div className="ib-ctx">{c.after.speaker}: {c.after.text}</div>}
-      </div>
-      {!open ? <div className="ib-reason">{s.reason}</div> : <>
+      {/* 추천 문구가 주인공: 펼치면 바로 고칠 수 있는 입력칸, 접힌 카드는 글로만 */}
+      {open
+        ? <input className="ib-note ib-lead" value={note} onChange={(e) => setNote(e.target.value)} placeholder="관찰 내용" aria-label="관찰 내용" />
+        : <div className="ib-lead-txt" onClick={() => setOpen(true)}>{note}</div>}
+      {detail && <>
+        <div className="ib-quote" onClick={() => setOpen(!open)}>
+          {ctx && c.before && <div className="ib-ctx">{c.before.speaker}: {c.before.text}</div>}
+          “{c.main.map((x) => x.text).join(" ")}”
+          {ctx && c.after && <div className="ib-ctx">{c.after.speaker}: {c.after.text}</div>}
+        </div>
         <div className="flex wrap" style={{ gap: 4 }}>
           {doc.settings.categories.map((x) => <Chip key={x.key} cat={x.key} label={x.label} selected={cat === x.key} onClick={() => setCat(x.key)} />)}
           <span className="grow" />
           <button className="btn ghost sm" onClick={() => setCtx(!ctx)}>{ctx ? "문맥 접기" : "앞뒤 문맥"}</button>
         </div>
-        <input className="ib-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="관찰 내용" />
       </>}
       <div className="ib-acts">
         {!open && <button className="btn sm" onClick={() => setOpen(true)}>학생 지정</button>}
@@ -229,7 +236,10 @@ function ManualItem({ rec, trs, autoFocus, canDefer, onDefer }: { rec: NugaRecor
   const doc = useStore((s) => s.doc);
   const updateRecord = useStore((s) => s.updateRecord);
   const [note, setNote] = useState(rec.note || "");
-  const [cat, setCat] = useState<Category>(rec.category);
+  // 폰·워치의 새 방식은 카테고리 없이(0) 보낸다 → 여기서 정한다. 기본은 첫 카테고리
+  const [cat, setCat] = useState<Category>(rec.category ? rec.category : (doc.settings.categories[0]?.key ?? 1));
+  const full = (doc.settings.options.detail || "simple") === "full";
+  const [detail, setDetail] = useState(full);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (autoFocus) setTimeout(() => ref.current?.focus(), 30); }, []);
   // 기록 시각 전후 발언 (v3 7.4). 화자와 학생은 연결하지 않는다.
@@ -248,18 +258,23 @@ function ManualItem({ rec, trs, autoFocus, canDefer, onDefer }: { rec: NugaRecor
         <AchPress student={doc.students.find((s) => s.class === rec.class && s.no === rec.no)} className="ib-who"><b className="num">{rec.no}</b> <b>{studentName(doc, rec.class, rec.no)}</b></AchPress>
         <span className="grow" />
         <span className="muted small num">{fmtHM(rec.time)} · {SRC_LABEL[rec.source] || rec.source}</span>
-      </div>
-      <div className="flex wrap" style={{ gap: 4 }}>
-        {doc.settings.categories.map((x) => <Chip key={x.key} cat={x.key} label={x.label} selected={cat === x.key} onClick={() => setCat(x.key)} />)}
+        <button type="button" className="btn ghost sm ib-detail" onClick={() => setDetail(!detail)} aria-expanded={detail}>{detail ? "접기" : "자세히"}</button>
       </div>
       {memo && <div className="ib-reason">{rec.voiceMemo ? "음성 " : "메모 "}<b>{memo}</b></div>}
       <textarea ref={ref} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="무엇을 했는지 한 줄 (Enter 저장)"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); save(); } }} />
-      {cands.length > 0 && (
-        <div className="ib-cands">
-          {cands.map((c) => <button key={c.transcriptId + c.segment.id} onClick={() => { setNote(c.segment.text); ref.current?.focus(); }} title="눌러서 넣기"><span className="muted">{hms(c.at)} {c.segment.speaker}</span> {c.segment.text}</button>)}
+      {detail && <>
+        <div className="flex wrap" style={{ gap: 4 }}>
+          <span className="muted small" style={{ marginRight: 4 }}>분류</span>
+          {doc.settings.categories.map((x) => <Chip key={x.key} cat={x.key} label={x.label} selected={cat === x.key} onClick={() => setCat(x.key)} />)}
         </div>
-      )}
+        {cands.length > 0 && (
+          <div className="ib-cands">
+            <span className="muted small">기록 시각 전후 발언 (눌러서 넣기)</span>
+            {cands.map((c) => <button key={c.transcriptId + c.segment.id} onClick={() => { setNote(c.segment.text); ref.current?.focus(); }} title="눌러서 넣기"><span className="muted">{hms(c.at)} {c.segment.speaker}</span> {c.segment.text}</button>)}
+          </div>
+        )}
+      </>}
       <div className="ib-acts">
         <button className="btn sm primary" onClick={save}>저장</button>
         {canDefer && <button className="btn sm" onClick={onDefer}>나중에</button>}

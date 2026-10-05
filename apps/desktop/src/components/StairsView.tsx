@@ -455,7 +455,7 @@ function StairTip({ k, r, onClose }: { k: Kid; r: DOMRect; onClose: () => void }
 
 /** 누가기록 상단 [표 | 한눈에] 상태 (이 기기에 기억) */
 export function useStairsMode(): [boolean, (v: boolean) => void] {
-  const [on, setOn] = React.useState(() => { try { return localStorage.getItem("nuga.stairs") === "1"; } catch { return false; } });
+  const [on, setOn] = React.useState(() => { try { return localStorage.getItem("nuga.stairs") !== "0"; } catch { return true; } });
   const set = (v: boolean) => { setOn(v); try { localStorage.setItem("nuga.stairs", v ? "1" : "0"); } catch { /* 저장 불가 */ } };
   return [on, set];
 }

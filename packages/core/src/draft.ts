@@ -40,7 +40,7 @@ export function anonymizeRecords(records: NugaRecord[], categories: CategoryDef[
   const label = (c: Category) => categories.find((x) => x.key === c)?.label || String(c);
   return [...records]
     .sort((a, b) => a.time.localeCompare(b.time))
-    .map((r) => ({ id: r.id, date: fmtMD(r.time), category: label(r.category), lesson: lessonLabel(r.lesson), topic: (r.lesson?.title || "").trim(), text: (r.note || r.memo || r.voiceMemo?.transcript || "").trim() }));
+    .map((r) => ({ id: r.id, date: fmtMD(r.time), category: r.category ? label(r.category) : "기록", lesson: lessonLabel(r.lesson), topic: (r.lesson?.title || "").trim(), text: (r.note || r.memo || r.voiceMemo?.transcript || "").trim() }));
 }
 
 export function anonymizePerformances(perfs: Performance[]): AnonPerf[] {

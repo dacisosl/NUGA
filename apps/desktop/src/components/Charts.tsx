@@ -63,7 +63,7 @@ export function SentenceEvidenceGraph({ doc, s, d, support, focus, onFocus }: { 
   const rowH = 26; const h = Math.max(sents.length, right.length) * rowH + 10; const w = 340;
   const ly = (i: number) => 10 + i * rowH + rowH / 2 - 6;
   const ry = (i: number) => 10 + i * rowH + rowH / 2 - 6;
-  const colorOf = (id: string) => { const r = recById.get(id); return r ? CAT_COLORS[r.category] : CAT_COLORS.perf; };
+  const colorOf = (id: string) => { const r = recById.get(id); return r ? (CAT_COLORS[r.category] || CAT_COLORS[4]) : CAT_COLORS.perf; };
   const labelOf = (id: string) => { const r = recById.get(id); return r ? `${r.time.slice(5, 10).replace("-", "/")} ${catLabel(doc, r.category)}` : "PDF기록"; };
   return (
     <div className="chart-card">
@@ -131,7 +131,7 @@ export function SemesterTimeline({ doc, s, d }: { doc: NugaDoc; s: Student; d: D
       <svg width="100%" viewBox="0 0 340 54" role="img" aria-label="학기 기록 타임라인">
         <line x1={8} x2={332} y1={26} y2={26} stroke="#CFDBEB" />
         {months.filter((m) => m.x >= 8 && m.x <= 332).map((m) => <g key={m.x}><line x1={m.x} x2={m.x} y1={22} y2={30} stroke="#CFDBEB" /><text x={m.x + 2} y={48} fontSize={10} fill="#4E6886">{m.m}월</text></g>)}
-        {recs.map((r, i) => <circle key={r.id} cx={x(r.time)} cy={26 - (i % 2 ? 7 : -7) * 0} r={usedIds.has(r.id) ? 5 : 3.5} fill={CAT_COLORS[r.category]} opacity={usedIds.has(r.id) ? 0.95 : 0.3}><title>{`${r.time.slice(0, 10)} ${catLabel(doc, r.category)}: ${r.note || r.memo}`}</title></circle>)}
+        {recs.map((r, i) => <circle key={r.id} cx={x(r.time)} cy={26 - (i % 2 ? 7 : -7) * 0} r={usedIds.has(r.id) ? 5 : 3.5} fill={CAT_COLORS[r.category] || CAT_COLORS[4]} opacity={usedIds.has(r.id) ? 0.95 : 0.3}><title>{`${r.time.slice(0, 10)} ${catLabel(doc, r.category)}: ${r.note || r.memo}`}</title></circle>)}
       </svg>
     </div>
   );

@@ -8,7 +8,6 @@ import { StairsView, useStairsMode } from "../components/StairsView";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 import { TodayPanel } from "./TodayPage";
-import { useBacklogCount } from "../components/InboxModal";
 
 type Filter = "all" | "low" | "pending" | "week0";
 
@@ -42,8 +41,6 @@ export function RecordsPage() {
   const [adding, setAdding] = useState(false);
   const toast = useStore((s) => s.toast);
   const lowOn = doc.settings.lowRecordEnabled; const supp = doc.settings.supplementEnabled;
-  const openInbox = useStore((s) => s.openInbox);
-  const backlog = useBacklogCount();
   const split = useSplitWidth();
   const [stairs, setStairs] = useStairsMode();
 
@@ -76,11 +73,11 @@ export function RecordsPage() {
 
   return (
     <>
-      <TopBar title="누가기록" onExcel={exportExcel} center={
+      <TopBar title="현황판" onExcel={exportExcel} center={
         <span className="seg stairs-switch" role="tablist" aria-label="보기" title="반 전체 기록 현황을 계단으로 봅니다">
           <button role="tab" aria-selected={!stairs} className={!stairs ? "active" : ""} onClick={() => setStairs(false)}>표</button>
           <button role="tab" aria-selected={stairs} className={stairs ? "active" : ""} onClick={() => setStairs(true)}><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden><path d="M3 26h9v-8h8v-8h9" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square" /></svg>한눈에</button>
-        </span>} right={<><button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">미반영 <b className="num">{backlog}</b></button>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}<button className="btn" onClick={() => setAdding(true)}><Icon name="plus" />기록</button></>} />
+        </span>} right={<>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}</>} />
       <Sheet>
       <div className={`rec-split ${split.collapsed ? "collapsed" : ""}`} ref={split.boxRef} style={{ ["--left" as string]: split.collapsed ? "38px" : `${split.width}px` }}>
       <div className="rec-left">
@@ -173,7 +170,7 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
               {recs.map((r) => (
                 <tr key={r.id}>
                   <td className="num muted small">{fmtMD(r.time)} {fmtHM(r.time)}</td>
-                  <td><select className="select" style={{ height: 28, fontSize: 12 }} value={r.category} onChange={(e) => updateRecord(r.id, { category: Number(e.target.value) as Category })}>{doc.settings.categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></td>
+                  <td><select className="select" style={{ height: 28, fontSize: 12 }} value={r.category} onChange={(e) => updateRecord(r.id, { category: Number(e.target.value) as Category })}>{!r.category && <option value={0}>미정</option>}{doc.settings.categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></td>
                   <td className="small muted ellipsis" style={{ maxWidth: 200 }}>{lessonLabel(r.lesson) || "—"}</td>
                   <td className="content">
                     <EditableCell value={r.note || r.memo || r.voiceMemo?.transcript || ""} placeholder="내용 입력" onSave={(v) => { updateRecord(r.id, { note: v, status: v ? "confirmed" : r.status }); toast({ text: "수정됨" }); }} />
@@ -199,7 +196,7 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
 }
 
 /** PC에서 직접 기록 추가 (기획서 확장: 워치 없이도 PC에서 바로 남길 수 있게) */
-function QuickAdd({ onClose }: { onClose: () => void }) {
+export function QuickAdd({ onClose }: { onClose: () => void }) {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const addRecord = useStore((s) => s.addRecord);

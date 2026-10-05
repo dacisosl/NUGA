@@ -129,7 +129,8 @@ function RecordRow({ rec }: { rec: NugaRecord }) {
     <div className={`df-row ${rec.status === "pending" ? "pending" : ""} ${fresh ? "fresh" : ""}`}>
       <AchPress student={stu} className="df-no num">{rec.no}</AchPress>
       <AchPress student={stu} className="df-name ellipsis">{studentName(doc, rec.class, rec.no)}</AchPress>
-      <Chip cat={rec.category} label={cats.find((c) => c.key === rec.category)?.label || rec.category} onClick={nextCat} />
+      {/* 분류 칩: 누르면 다음 분류로. 폰·워치에서 분류 없이(0) 온 기록은 '미정' 에서 시작 */}
+      <Chip cat={rec.category || undefined} className={rec.category ? "" : "none"} label={cats.find((c) => c.key === rec.category)?.label || "미정"} onClick={nextCat} />
       <input className="df-note" value={note} onChange={(e) => setNote(e.target.value)} onBlur={commit}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) (e.target as HTMLInputElement).blur(); }}
         placeholder={memo ? `메모: ${memo}` : rec.status === "pending" ? "보완 대기 · 관찰 내용을 적으세요" : "관찰 내용"} title={memo ? `메모: ${memo}` : undefined} />

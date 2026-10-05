@@ -1,4 +1,8 @@
 export type Category = 1 | 2 | 3 | 4;
+/** 폰·워치가 보내는 '아직 분류 안 함'. PC 가 보완할 때 1..4 로 정한다 (PROTOCOL §3.1) */
+export const CATEGORY_NONE = 0;
+/** 기록의 카테고리 칸: 1..4 또는 0(미정) */
+export type RecordCategory = Category | 0;
 /** 0.2.0 이하의 수준 표시. 불러올 때 도달 정도로 옮긴다. */
 export type Level = "A" | "B" | "C";
 /** 도달 정도(0~100)를 앱 안에서 나누는 5등급. 화면·내보내기에는 등급 이름을 쓰지 않는다. */
@@ -21,7 +25,7 @@ export interface NugaRecord {
   id: string;
   class: string;
   no: number;
-  category: Category;
+  category: RecordCategory;
   time: string;
   lesson: Lesson | null;
   memo: string;
@@ -253,7 +257,12 @@ export interface Settings {
   lengthOverride: boolean;
   /** 영역별 초안 지침. 비우면 기본 지침(교과 세특) */
   draftPrompt: string;
-  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean };
+  /**
+   * 화면 옵션. detail = 알림 팝업·현황판이 처음에 얼마나 자세히 보일지.
+   * simple(기본) = 추천 문구와 명단만, 근거(발언 원문·앞뒤 문맥·카테고리·판단 기준)는 '자세히'로 펼침.
+   * full = 처음부터 모두 펼침.
+   */
+  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean; detail?: "simple" | "full" };
   /** 수업 녹음 (공통 설정) */
   recording?: RecordingSettings;
   sync: SyncSettings | null;
@@ -330,7 +339,7 @@ export function defaultSettings(): Settings {
     similarityThreshold: 0.7,
     lengthOverride: false,
     draftPrompt: "",
-    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true },
+    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true, detail: "simple" },
     sync: null,
     ai: { enabled: false, provider: "anthropic", apiKey: "", model: "claude-opus-5-5" },
     onboarded: false,

@@ -7,7 +7,8 @@ import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
 
-export type Page = "today" | "records" | "draft" | "review" | "settings" | "mobile";
+/** 화면: 현황판(main) · 생기부 생성(draft, 검토 포함) · 설정 · 모바일 확인. today·records·review 는 옛 이름(→ main / draft) */
+export type Page = "main" | "today" | "records" | "draft" | "review" | "settings" | "mobile";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
 
 /** 알림 모달(쉬는 시간 기록). records = 수동 1차 기록 id, transcripts = 자동 추천이 붙은 수업 스크립트 id, backlog = 미반영 전체 보기 */
@@ -72,7 +73,7 @@ interface State {
   loaded: boolean;
   page: Page;
   cls: string;
-  mode2p: "individual" | "batch";
+  mode2p: "individual" | "batch" | "review";
   selected: { class: string; no: number } | null;
   settingsTab: string;
   /** 다른 페이지에서 누가기록 필터를 정해 들어올 때 (예: 오늘 → 이번 주 0건) */
@@ -99,7 +100,7 @@ interface State {
   update(mut: (d: NugaDoc) => void, opts?: { silent?: boolean }): void;
   setPage(p: Page): void;
   setClass(c: string): void;
-  setMode2p(m: "individual" | "batch"): void;
+  setMode2p(m: "individual" | "batch" | "review"): void;
   select(s: { class: string; no: number } | null): void;
   setSettingsTab(t: string): void;
   setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
@@ -165,7 +166,7 @@ export const useStore = create<State>((set, get) => ({
   areas: [],
   areaId: DEFAULT_AREA,
   loaded: false,
-  page: "records",
+  page: "main",
   cls: "",
   mode2p: "individual",
   selected: null,
@@ -208,7 +209,7 @@ export const useStore = create<State>((set, get) => ({
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
     const classes = [...doc.settings.classes].sort((a, b) => classSortKey(a.class) - classSortKey(b.class));
-    set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "today" : "settings" });
+    set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "main" : "settings" });
     if (movedKey) get().setSettings((x) => ({ ...x, ai: { ...x.ai, apiKey: "" } }));
   },
 
@@ -450,7 +451,7 @@ export const useStore = create<State>((set, get) => ({
     const sample = applyGlobal(makeSampleDoc(), lastGlobal ?? pickGlobal(cur, null));
     // 보완을 쓰지 않으면 수동 기록을 완료로 바꾸고 메모를 관찰 내용으로 옮긴다
     if (!sample.settings.supplementEnabled) for (const r of sample.records) if (r.status === "pending") { r.status = "confirmed"; r.note = r.note || r.memo || r.voiceMemo?.transcript || ""; }
-    set({ doc: sample, cls: sample.settings.classes[0].class, page: "records" });
+    set({ doc: sample, cls: sample.settings.classes[0].class, page: "main" });
     scheduleSave(sample, get().outbox);
   },
   replaceDoc(d) {
@@ -492,13 +493,14 @@ export function studentName(doc: NugaDoc, cls: string, no: number): string {
   return doc.students.find((s) => s.class === cls && s.no === no)?.name || `${no}번`;
 }
 
-export function catLabel(doc: NugaDoc, c: Category): string {
+export function catLabel(doc: NugaDoc, c: Category | 0): string {
+  if (!c) return "미정";
   return doc.settings.categories.find((x) => x.key === c)?.label || String(c);
 }
 
 export function catCounts(records: NugaRecord[]): Record<Category, number> {
   const out: Record<Category, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-  for (const r of records) out[r.category]++;
+  for (const r of records) if (r.category) out[r.category]++;
   return out;
 }
 
