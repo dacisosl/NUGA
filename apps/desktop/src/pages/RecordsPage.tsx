@@ -1,24 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { fmtMD, fmtHM, lessonLabel, nowIso, truncate, type Category, type NugaRecord, type Student } from "@nuga/core";
-import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
-import { catLabel, fillLesson, isLowRecord, perfsOf, recordsOf, standardsFor, useStore } from "../store";
+import { useLayoutEffect, useRef, useState } from "react";
+import { fmtMD, fmtHM, lessonLabel, nowIso, type Category, type NugaDoc, type NugaRecord, type Student } from "@nuga/core";
+import { ClassTabs, Sheet, useClassStudents } from "../App";
+import { catLabel, fillLesson, perfsOf, recordsOf, standardsFor, useStore } from "../store";
 import { aiReady, estimateAchievementAI } from "../lib/ai";
-import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, Modal, SearchBox, StudentTag } from "../components/ui";
-import { StairsView, useStairsMode } from "../components/StairsView";
+import { Chip, Confirm, EditableCell, Empty, Icon, Modal, StudentTag } from "../components/ui";
+import { StairsView } from "../components/StairsView";
+import { StudentGrid } from "../components/StudentGrid";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
-import { TodayPanel } from "./TodayPage";
 
-type Filter = "all" | "low" | "pending" | "week0";
-
+/**
+ * 현황판 (메인): 반 탭 → 한 스크롤 안에 위는 기록 계단(반 전체를 한눈에), 아래는 학생 카드 격자.
+ * 카드를 누르면 학생 기록, 카드의 [+]는 그 학생으로 맞춘 기록 추가.
+ */
 export function RecordsPage() {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const students = useClassStudents();
-  const [q, setQ] = useState("");
-  const recordsFilter = useStore((s) => s.recordsFilter);
-  const setRecordsFilter = useStore((s) => s.setRecordsFilter);
-  const [filter, setFilter] = useState<Filter>((recordsFilter as Filter) || "all");
+  const toast = useStore((s) => s.toast);
   const aiOn = aiReady(doc.settings.ai);
   const setAutoAchievement = useStore((s) => s.setAutoAchievement);
   const [estimating, setEstimating] = useState<number | null>(null);
@@ -35,114 +34,51 @@ export function RecordsPage() {
     setEstimating(null);
     toast({ text: fail ? `도달 정도 추정 완료 · 실패 ${fail}명` : `도달 정도 추정 완료 · ${done}명 (교사 조정값은 그대로)` });
   };
-  useEffect(() => { if (recordsFilter) { setFilter(recordsFilter as Filter); setRecordsFilter(null); } }, [recordsFilter]);
-  const weekStartMs = useMemo(() => { const x = new Date(); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); }, []);
   const [open, setOpen] = useState<Student | null>(null);
-  const [adding, setAdding] = useState(false);
-  const toast = useStore((s) => s.toast);
-  const lowOn = doc.settings.lowRecordEnabled; const supp = doc.settings.supplementEnabled;
-  const split = useSplitWidth();
-  const [stairs, setStairs] = useStairsMode();
-
-  const rows = useMemo(() => students.map((s) => {
-    const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
-    return { s, recs, low: isLowRecord(doc, s.class, s.no), pending: recs.filter((r) => r.status === "pending").length };
-  }).filter((r) => {
-    if (q && !(r.s.name.includes(q) || String(r.s.no) === q)) return false;
-    if (filter === "low") return r.low;
-    if (filter === "pending") return r.pending > 0;
-    if (filter === "week0") return !r.recs.some((x) => x.status !== "skipped" && new Date(x.time).getTime() >= weekStartMs);
-    return true;
-  }), [students, doc, q, filter]);
-
-  const counts = useMemo(() => ({ low: students.filter((s) => isLowRecord(doc, s.class, s.no)).length, pending: doc.records.filter((r) => r.class === cls && r.status === "pending").length }), [students, doc, cls]);
-
-  const exportExcel = async () => {
-    const sheets = Array.from(new Set(doc.students.map((s) => s.class))).sort().map((c) => ({
-      name: c,
-      widths: [8, 10, 6, 8, 80, 12],
-      rows: doc.students.filter((s) => s.class === c).sort((a, b) => a.no - b.no).map((s) => {
-        const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
-        return { 번호: s.no, 이름: s.name, 기록수: recs.length,
-          누가기록: recs.map((r) => `[${catLabel(doc, r.category)}] ${fmtMD(r.time)} ${lessonLabel(r.lesson)} ${r.note || r.memo || ""}`.trim()).join("\n"),
-          마지막: recs[0] ? fmtMD(recs[0].time) : "" };
-      }),
-    }));
-    if (await exportSheets(`누가기록-${doc.settings.school.subject || "과목"}-${nowIso().slice(0, 10)}.xlsx`, sheets)) toast({ text: "엑셀 내보내기 완료" });
-  };
+  const [adding, setAdding] = useState<Student | null>(null);
+  const supp = doc.settings.supplementEnabled;
+  // 반을 바꾸면 맨 위(그 반의 계단)부터 다시 본다: 카드 사이에 머물던 스크롤을 그리기 전에 되돌린다
+  const boardRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { boardRef.current?.scrollTo({ top: 0 }); }, [cls]);
 
   return (
     <>
-      <TopBar title="현황판" onExcel={exportExcel} center={
-        <span className="seg stairs-switch" role="tablist" aria-label="보기" title="반 전체 기록 현황을 계단으로 봅니다">
-          <button role="tab" aria-selected={!stairs} className={!stairs ? "active" : ""} onClick={() => setStairs(false)}>표</button>
-          <button role="tab" aria-selected={stairs} className={stairs ? "active" : ""} onClick={() => setStairs(true)}><svg width="14" height="14" viewBox="0 0 32 32" aria-hidden><path d="M3 26h9v-8h8v-8h9" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="square" /></svg>한눈에</button>
-        </span>} right={<>{aiOn && <button className="btn" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}</button>}</>} />
       <Sheet>
-      <div className={`rec-split ${split.collapsed ? "collapsed" : ""}`} ref={split.boxRef} style={{ ["--left" as string]: split.collapsed ? "38px" : `${split.width}px` }}>
-      <div className="rec-left">
-        {/* 접어도 날짜·데모 상태가 남도록 숨기기만 한다 */}
-        <TodayPanel onCollapse={() => split.setCollapsed(true)} />
-        {split.collapsed && <button className="rec-rail" onClick={() => split.setCollapsed(false)} title="오늘 기록 펼치기"><Icon name="right" size={14} /><span>오늘 기록</span></button>}
-      </div>
-      <div className="rec-resizer" onPointerDown={split.collapsed ? undefined : split.onDown} onDoubleClick={split.reset} title="끌어서 너비 조절 · 두 번 눌러 처음 너비로" role="separator" aria-orientation="vertical" />
-      <div className="rec-right">
-      <ClassTabs extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
-      <div className={`content ${stairs ? "is-stairs" : ""}`}>
-        {stairs ? <>
-          <div className="stairs-tools">
-            <SearchBox value={q} onChange={setQ} placeholder="이름·번호 찾기" />
-            <span className="grow" />
-            <span className="muted small">이름표를 누르면 학생 기록 · 오른쪽 클릭으로 도달 정도</span>
+        <ClassTabs
+          extra={(c) => { if (!supp) return null; const n = doc.records.filter((r) => r.class === c && r.status === "pending").length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }}
+          right={aiOn && students.length > 0 ? (
+            <button className="btn ghost sm" disabled={estimating !== null} onClick={estimate} title="이 반 학생들의 기록을 성취기준에 비추어 AI로 도달 정도를 추정합니다 (반·번호·이름은 보내지 않음)">
+              <Icon name="spark" size={13} />{estimating !== null ? `도달 정도 추정 ${estimating}/${students.length}` : "AI 도달 정도 추정"}
+            </button>
+          ) : null} />
+        <div className="content board" ref={boardRef}>
+          {/* 위: 반 전체 기록 계단 (높이 고정, 찾기는 아래 격자에서) */}
+          <div className="board-stairs">
+            <StairsView key={cls} doc={doc} students={students} onOpen={setOpen} q="" />
           </div>
-          <StairsView key={cls} doc={doc} students={students} onOpen={setOpen} q={q} />
-        </> : <>
-        <div className="flex" style={{ marginBottom: 14 }}>
-          <SearchBox value={q} onChange={setQ} />
-          <span className="seg">
-            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>전체 {students.length}</button>
-            {lowOn && <button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><span className="dot warn" style={{ marginRight: 6 }} />기록 부족 {counts.low}</button>}
-            {supp && <button className={filter === "pending" ? "active" : ""} onClick={() => setFilter("pending")}>보완 대기 {counts.pending}</button>}
-            {filter === "week0" && <button className="active" onClick={() => setFilter("all")} title="눌러서 해제">이번 주 0건 ×</button>}
-          </span>
-          <span className="grow" />
-          {lowOn && <span className="muted small">기록 부족 = {doc.settings.lowRecordThreshold}건 이하</span>}
+          {/* 아래: 학생 카드 격자 (반마다 거르기·정렬·찾기를 새로) */}
+          <StudentGrid key={cls} doc={doc} students={students} onOpen={setOpen} onAdd={setAdding} />
         </div>
-        {students.length === 0 ? <Empty title="명단 없음" desc="설정 → 반·명단에서 학생을 등록하세요" /> : (
-          <table className="table">
-            <thead><tr><th style={{ width: 60 }}>번호</th><th style={{ width: 150 }}>이름</th><th>누가기록</th><th style={{ width: 110 }}>마지막</th></tr></thead>
-            <tbody>
-              {rows.map(({ s, recs, low, pending }) => (
-                <tr key={s.no} className="row" onClick={() => setOpen(s)}>
-                  <td className="num key">{s.no}</td>
-                  <td className="key name"><span className="flex" style={{ gap: 8 }}><StudentTag student={s} />{low && <span className="dot warn" title="기록 부족" />}{supp && pending > 0 && <span className="badge" title="보완 대기">{pending}</span>}</span></td>
-                  <td className="tight">
-                    <div className="reclist">
-                      {recs.length === 0 && <span className="muted small">—</span>}
-                      {recs.slice(0, 4).map((r) => (
-                        <span key={r.id} className="recitem">
-                          <CatChip cat={r.category} /><span className="d num">{fmtMD(r.time)}</span>
-                          <span className="t">{r.note || r.memo || r.voiceMemo?.transcript || <span className="muted">{supp && r.status === "pending" ? "보완 전" : "내용 없음"}</span>}</span>
-                        </span>
-                      ))}
-                      {recs.length > 4 && <span className="muted small nowrap">+{recs.length - 4}</span>}
-                    </div>
-                  </td>
-                  <td className="num muted">{recs[0] ? fmtMD(recs[0].time) : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        </>}
-      </div>
-      </div>
-      </div>
       </Sheet>
       {open && <StudentDetail student={open} onClose={() => setOpen(null)} onChange={setOpen} />}
-      {adding && <QuickAdd onClose={() => setAdding(false)} />}
+      {adding && <QuickAdd cls={adding.class} initialNo={adding.no} onClose={() => setAdding(null)} />}
     </>
   );
+}
+
+/** 누가기록 엑셀: 반마다 시트 하나 (번호 · 이름 · 기록수 · 누가기록 · 마지막). 상단 [저장 ▾] 메뉴에서 부른다 */
+export async function exportRecordsExcel(doc: NugaDoc): Promise<boolean> {
+  const sheets = Array.from(new Set(doc.students.map((s) => s.class))).sort().map((c) => ({
+    name: c,
+    widths: [8, 10, 6, 8, 80, 12],
+    rows: doc.students.filter((s) => s.class === c).sort((a, b) => a.no - b.no).map((s) => {
+      const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r));
+      return { 번호: s.no, 이름: s.name, 기록수: recs.length,
+        누가기록: recs.map((r) => `[${catLabel(doc, r.category)}] ${fmtMD(r.time)} ${lessonLabel(r.lesson)} ${r.note || r.memo || ""}`.trim()).join("\n"),
+        마지막: recs[0] ? fmtMD(recs[0].time) : "" };
+    }),
+  }));
+  return exportSheets(`누가기록-${doc.settings.school.subject || "과목"}-${nowIso().slice(0, 10)}.xlsx`, sheets);
 }
 
 export function StudentDetail({ student: initial, onClose, onChange }: { student: Student; onClose: () => void; onChange?: (s: Student) => void }) {
@@ -195,14 +131,18 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
   );
 }
 
-/** PC에서 직접 기록 추가 (기획서 확장: 워치 없이도 PC에서 바로 남길 수 있게) */
-export function QuickAdd({ onClose }: { onClose: () => void }) {
+/**
+ * PC에서 직접 기록 추가 (기획서 확장: 워치 없이도 PC에서 바로 남길 수 있게).
+ * cls·initialNo 를 주면 그 반·학생으로 맞춰 연다 (학생 카드의 [+]). 없으면 지금 반의 첫 학생
+ */
+export function QuickAdd({ onClose, cls: clsProp, initialNo }: { onClose: () => void; cls?: string; initialNo?: number }) {
   const doc = useStore((s) => s.doc);
-  const cls = useStore((s) => s.cls);
+  const curCls = useStore((s) => s.cls);
+  const cls = clsProp || curCls;
   const addRecord = useStore((s) => s.addRecord);
   const toast = useStore((s) => s.toast);
   const students = doc.students.filter((s) => s.class === cls).sort((a, b) => a.no - b.no);
-  const [no, setNo] = useState<number>(students[0]?.no || 1);
+  const [no, setNo] = useState<number>(() => (initialNo != null && students.some((s) => s.no === initialNo) ? initialNo : students[0]?.no || 1));
   const [cat, setCat] = useState<Category>(1);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(nowIso().slice(0, 16));
@@ -224,41 +164,4 @@ export function QuickAdd({ onClose }: { onClose: () => void }) {
       </div>
     </Modal>
   );
-}
-
-const SPLIT_KEY = "nuga.split.ratio";
-const FOLD_KEY = "nuga.split.folded";
-/** 기본 비율: 오늘 기록 27% · 누가기록 73% (교사가 고른 비율) */
-const SPLIT_DEFAULT = 0.27;
-const SPLIT_MIN = 320;
-/** 왼쪽 오늘 기록 칸 너비: 전체에 대한 비율로 기억해 창 크기가 바뀌어도 같은 비율. 경계선을 끌어 바꾼다 */
-function useSplitWidth() {
-  const boxRef = React.useRef<HTMLDivElement>(null);
-  const [ratio, setRatio] = useState(() => { try { const r = Number(localStorage.getItem(SPLIT_KEY)); return r > 0 && r < 1 ? r : SPLIT_DEFAULT; } catch { return SPLIT_DEFAULT; } });
-  const [boxW, setBoxW] = useState(0);
-  React.useLayoutEffect(() => {
-    const el = boxRef.current; if (!el) return;
-    setBoxW(el.clientWidth);
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setBoxW(e.contentRect.width));
-    ro.observe(el); return () => ro.disconnect();
-  }, []);
-  const clampW = (w: number, total: number) => Math.round(Math.max(SPLIT_MIN, Math.min(total * 0.62, w)));
-  const width = boxW ? clampW(boxW * ratio, boxW) : Math.round(1200 * ratio);
-  const save = (r: number) => { try { localStorage.setItem(SPLIT_KEY, r.toFixed(4)); } catch { /* 저장 불가 */ } };
-  const onDown = (e: React.PointerEvent) => {
-    const box = boxRef.current; if (!box) return;
-    e.preventDefault();
-    const left = box.getBoundingClientRect().left;
-    const total = box.clientWidth;
-    let r = ratio;
-    const move = (ev: PointerEvent) => { r = clampW(ev.clientX - left, total) / total; setRatio(r); };
-    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.classList.remove("resizing"); save(r); };
-    document.body.classList.add("resizing");
-    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
-  };
-  const reset = () => { setRatio(SPLIT_DEFAULT); save(SPLIT_DEFAULT); };
-  const [collapsed, setC] = useState(() => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } });
-  const setCollapsed = (v: boolean) => { setC(v); try { localStorage.setItem(FOLD_KEY, v ? "1" : "0"); } catch { /* 저장 불가 */ } };
-  return { boxRef, width, onDown, reset, collapsed, setCollapsed };
 }

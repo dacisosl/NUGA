@@ -1,0 +1,228 @@
+/* =====================================================================
+   학생 카드 격자 (StudentGrid.tsx) — 사진첩처럼: 빛나는 종이 썸네일 + 두 줄 캡션
+   썸네일 = 기록 요약(최근 기록을 칸이 허락하는 만큼 · 8주 리듬 · 분류 비율). 기록 부족 = 옅은 붉은 종이.
+   색은 styles.css :root 토큰. 붉은 기운은 이 격자의 '기록 부족' 표시에만 쓴다.
+   ===================================================================== */
+
+.sg {
+  --sg-red-ink: #A3392F;   /* 흰·연붉은 바탕 위 글자 */
+  --sg-red-soft: #FBE1DE;
+  --sg-red-line: rgba(196,64,52,.22);
+  --sg-red-dot: #D9776C;   /* 글자 아닌 표시 */
+  --sg-lift: -2px;
+  position: relative;
+}
+
+/* ---------- 도구 줄: 머리말 · 거르기 · 정렬 · 찾기 ---------- */
+.sg-bar {
+  /* --sg-stick = 스크롤 칸 위 여백 (TSX 가 잰다).
+     z-index 1: 카드(z auto)만 넘으면 된다. 더 높이면 .app 한 겹 안에서 상단 바(.topnav, z 2)의 [저장 ▾] 메뉴를 덮는다 */
+  position: sticky; top: calc(-1 * var(--sg-stick, 0px)); z-index: 1;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  padding: 12px 0; margin-bottom: 20px;
+  background: var(--paper);
+  /* 아래 머리선 + 양옆 여백까지 종이로 덮어 지나가는 카드 그림자가 옆으로 비치지 않게 (스크롤 칸이 잘라 준다) */
+  box-shadow: 0 1px 0 var(--hair-2), -28px 0 0 var(--paper), 28px 0 0 var(--paper);
+}
+.sg-bar .eyebrow { white-space: nowrap; font-feature-settings: var(--num); }
+.sg-of { color: var(--text2); font-weight: 500; }
+.sg-seg button:disabled { opacity: .5; cursor: default; }
+.sg-seg button:disabled:hover { color: var(--text2); }
+.sg-n { font-size: 12px; font-weight: 500; color: var(--text2); font-feature-settings: var(--num); }
+.sg-seg button.active .sg-n { color: var(--text); }
+.sg-lowdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--sg-red-dot); flex: none; }
+.sg-sort { min-width: 120px; }
+.sg-bar .search input { width: 180px; }
+.sg-hint { margin-left: auto; font-size: 12px; color: var(--text2); white-space: nowrap; }
+
+/* ---------- 격자 ---------- */
+.sg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr));
+  column-gap: 20px; row-gap: 28px;
+  padding-bottom: 8px;
+}
+
+/* 한 칸 = 썸네일 + 캡션. 바깥 테두리 없음.
+   DOM 은 캡션(열기 단추) → 썸네일 순서(탭 순서: 이름 → [+ 기록]), 화면은 썸네일 위 · 캡션 아래 */
+.sg-item {
+  position: relative; min-width: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "thumb" "cap";
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: sg-in var(--d-3, .45s) var(--ease-out, ease-out) both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+}
+@keyframes sg-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- 썸네일: 빛나는 종이 ---------- */
+.sg-thumb {
+  grid-area: thumb;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 12px;
+  aspect-ratio: 4 / 5; padding: 14px;
+  border-radius: var(--r-card, 10px);
+  background: linear-gradient(180deg, #FFFFFF, #F3F7FC);
+  box-shadow: 0 0 0 1px var(--hair-2), 0 1px 0 rgba(21,45,74,.04), 0 12px 28px -20px rgba(46,96,168,.38);
+  transition: transform var(--d-2, .2s) var(--ease-out, ease-out), box-shadow var(--d-2, .2s) var(--ease-out, ease-out);
+}
+.sg-item:hover .sg-thumb {
+  transform: translateY(var(--sg-lift));
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 4px rgba(21,45,74,.05), 0 20px 36px -18px rgba(46,96,168,.5);
+}
+.sg-item:has(.sg-open:focus-visible) .sg-thumb {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--field-halo), 0 12px 28px -20px rgba(46,96,168,.38);
+}
+.sg-item:active .sg-thumb { transform: translateY(0); }
+
+/* 기록 부족: 살짝 연한 붉은 종이 */
+.sg-item.low .sg-thumb {
+  background: linear-gradient(180deg, #FFF6F5, #FCE9E7);
+  box-shadow: 0 0 0 1px var(--sg-red-line), 0 1px 0 rgba(120,40,30,.04), 0 12px 28px -20px rgba(168,70,60,.32);
+}
+.sg-item.low:hover .sg-thumb {
+  box-shadow: 0 0 0 1px var(--accent), 0 2px 4px rgba(21,45,74,.05), 0 20px 36px -18px rgba(168,70,60,.42);
+}
+.sg-item.low:has(.sg-open:focus-visible) .sg-thumb {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--field-halo), 0 12px 28px -20px rgba(168,70,60,.32);
+}
+
+/* 위 줄: 왼쪽 작은 배지(건수 · 기록 부족), 오른쪽 이번 주 / [+ 기록] */
+.sg-top { position: relative; display: flex; align-items: center; gap: 6px; min-height: 22px; flex: none; }
+.sg-sp { flex: 1; min-width: 0; }
+.sg-count, .sg-lowb {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px;
+  font-size: 11px; line-height: 1; white-space: nowrap; font-feature-settings: var(--num);
+}
+.sg-count { font-weight: 700; color: var(--text); background: var(--chip-bg); box-shadow: inset 0 0 0 1px var(--hair); }
+.sg-item.low .sg-count { background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px var(--sg-red-line); }
+.sg-lowb { font-weight: 650; color: var(--sg-red-ink); background: var(--sg-red-soft); }
+/* 보완 전 기록 (보완 대기를 켠 경우): 조용한 회색 배지 + 반 탭 배지와 같은 색의 작은 점. 붉은 기운은 '기록 부족'에만 남긴다 */
+.sg-pend { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; line-height: 1; white-space: nowrap; font-feature-settings: var(--num); color: var(--text2); background: var(--chip-bg); box-shadow: inset 0 0 0 1px var(--hair); }
+.sg-pend::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); flex: none; }
+.sg-item.low .sg-pend { background: rgba(255,255,255,.7); }
+
+.sg-week {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; color: var(--text2); white-space: nowrap; font-feature-settings: var(--num);
+  transition: opacity var(--d-1, .12s);
+}
+.sg-week i { width: 6px; height: 6px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 2px rgba(156,198,255,.28); flex: none; }
+
+/* [+ 기록]: 올리거나 키보드로 들어오면 오른쪽 위에 떠오른다 */
+.sg-add {
+  position: absolute; top: -1px; right: -2px;
+  display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
+  border: 0; border-radius: var(--r-btn, 5px);
+  background: rgba(255,255,255,.94); color: var(--accent);
+  font-size: 12px; font-weight: 650; white-space: nowrap;
+  box-shadow: 0 0 0 1px var(--hair-3), 0 4px 12px -4px rgba(46,96,168,.35), inset 0 1px 0 #fff;
+  opacity: 0; transform: translateY(-2px); pointer-events: none;
+  transition: opacity var(--d-2, .2s) var(--ease-out, ease-out), transform var(--d-2, .2s) var(--ease-out, ease-out), background-color var(--d-1, .12s), color var(--d-1, .12s);
+}
+.sg-add:hover { background: var(--accent); color: #fff; box-shadow: 0 0 0 1px var(--accent), 0 6px 14px -6px rgba(36,90,167,.6); }
+.sg-add:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--field-halo); }
+.sg-item:is(:hover, :focus-within) .sg-add { opacity: 1; transform: none; pointer-events: auto; }
+.sg-item:is(:hover, :focus-within) .sg-week { opacity: 0; }
+
+/* 요약: 최근 기록 — 분류 점 · 날짜 · 내용 (한 기록 두 줄까지, 기록이 1–2건이면 네 줄까지).
+   칸 높이를 다 쓰고(flex 1), 들어가지 않는 기록은 옆 단으로 접혀(column wrap) 통째로 숨는다 → 글자가 반쯤 잘리지 않는다.
+   숨은 수는 TSX 가 재어 아래 '외 N건'에 더한다 */
+.sg-lines {
+  list-style: none; margin: 0; padding: 0; position: relative;
+  flex: 1 1 0; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start; row-gap: 9px; column-gap: 48px;
+}
+.sg-line {
+  flex: none; width: 100%;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--sg-clamp, 2); line-clamp: var(--sg-clamp, 2); overflow: hidden;
+  font-size: 13px; line-height: 1.5; color: var(--text); letter-spacing: -.01em; word-break: keep-all; overflow-wrap: anywhere;
+}
+.sg-dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 2px; background: var(--text3); }
+.sg-dot.c1 { background: var(--c1); } .sg-dot.c2 { background: var(--c2); } .sg-dot.c3 { background: var(--c3); } .sg-dot.c4 { background: var(--c4); }
+.sg-dot.c0 { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text3); }   /* 미정 */
+.sg-date { margin-right: 6px; font-size: 12px; font-weight: 500; color: var(--text2); font-feature-settings: var(--num); }
+.sg-lines.roomy { --sg-clamp: 4; }
+/* '외 N건': 아래 머리선 오른쪽 끝에 얹는다 (자리를 차지하지 않아 요약 칸 높이가 흔들리지 않는다) */
+.sg-more { position: absolute; right: 0; top: -9px; padding-left: 6px; font-size: 11.5px; line-height: 16px; color: var(--text2); background: #F4F8FC; font-feature-settings: var(--num); }
+.sg-item.low .sg-more { background: #FCEAE8; }
+
+/* 기록 0건 */
+.sg-none { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--text2); font-size: 13px; }
+.sg-none .btn { color: var(--accent); }
+.sg-item.low .sg-none .btn:hover { background: rgba(255,255,255,.7); }
+
+/* 아래: 최근 8주 리듬(차곡차곡) + 분류 비율 — 조용하게 */
+.sg-foot { position: relative; flex: none; margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hair); }
+.sg-rhythm { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: 18px; align-items: end; gap: 4px; }
+.sg-rhythm i { display: block; width: 100%; min-height: 2px; border-radius: 1.5px 1.5px 0 0; background: rgba(78,104,134,.42); }
+.sg-rhythm i.z { height: 2px; border-radius: 1px; background: var(--hair-2); }
+.sg-rhythm i.now { background: var(--accent-2); }
+.sg-rhythm i.now.z { background: rgba(36,90,167,.22); }
+.sg-mix { display: flex; gap: 1px; height: 4px; border-radius: 2px; overflow: hidden; background: var(--hair); }
+.sg-mix i { display: block; flex: 1 1 0; min-width: 2px; background: var(--text3); opacity: .85; }
+.sg-mix i.c1 { background: var(--c1); } .sg-mix i.c2 { background: var(--c2); } .sg-mix i.c3 { background: var(--c3); } .sg-mix i.c4 { background: var(--c4); }
+.sg-mix i.c0 { background: var(--text3); opacity: .45; }
+
+/* ---------- 캡션 = 열기 단추: 이름(도달 정도 색 견본) · 번호 / 기록 수 · 마지막 날짜 ---------- */
+.sg-open {
+  grid-area: cap; display: block; width: 100%; min-width: 0; margin: 0; padding: 12px 2px 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.sg-open:focus-visible { outline: none; }   /* 고리는 썸네일에 (위 :has 규칙) */
+@supports not selector(:has(*)) { .sg-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; } }
+.sg-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sg-name b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--text); line-height: 1.35; }
+.sg-no { flex: none; font-size: 13px; font-weight: 500; color: var(--text2); font-feature-settings: var(--num); }
+.sg-meta { display: block; margin-top: 2px; font-size: 13px; color: var(--text2); font-feature-settings: var(--num); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sg-sw { flex: none; width: 10px; height: 10px; border-radius: 2.5px; background: var(--g0); box-shadow: inset 0 0 0 1px var(--g-ring-paper); }
+.sg-sw.g1 { background: var(--g1); box-shadow: none; }
+.sg-sw.g2 { background: var(--g2); box-shadow: none; }
+.sg-sw.g3 { background: var(--g3); box-shadow: none; }
+.sg-sw.g4 { background: var(--g4); box-shadow: none; }
+.sg-sw.gx { background: repeating-linear-gradient(135deg, #FFFFFF 0 2px, #C9D2DE 2px 3.5px); box-shadow: inset 0 0 0 1px var(--hair-3); }
+.sg-sw.lowconf { box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), 0 0 0 1px var(--hair-3); }
+
+/* ---------- 좁은 화면 · 터치 ---------- */
+@media (max-width: 1100px) { .sg-hint { display: none; } }
+@media (max-width: 560px) {
+  .sg-bar { position: static; gap: 8px 10px; }   /* 폰에서는 여러 줄로 접히므로 붙이지 않는다 */
+  .sg-bar .search, .sg-bar .search input { width: 100%; }
+  .sg-bar .search { flex: 1 1 100%; }
+  .sg-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 20px; }
+  .sg-thumb { padding: 10px; gap: 8px; }
+  .sg-line { font-size: 12px; }
+  .sg-lines.roomy { --sg-clamp: 3; }
+  .sg-name b { font-size: 15px; }
+  .sg-meta { font-size: 12px; }
+}
+/* 올려 볼 수 없는 기기: [+ 기록]을 늘 보이고, 이번 주 표시는 짧게 */
+@media (hover: none) {
+  .sg-add { position: static; opacity: 1; transform: none; pointer-events: auto; height: 22px; padding: 0 7px; }
+  .sg-item:is(:hover, :focus-within) .sg-week { opacity: 1; }
+  .sg-week .t { display: none; }
+  .sg-item:hover .sg-thumb { transform: none; }
+}
+
+/* 움직임 줄이기: 들어올림·등장 없음 */
+@media (prefers-reduced-motion: reduce) {
+  .sg-item { animation: none; }
+  .sg-thumb, .sg-add, .sg-week { transition: none; }
+  .sg-item:hover .sg-thumb, .sg-item:active .sg-thumb { transform: none; }
+  .sg-add, .sg-item:is(:hover, :focus-within) .sg-add { transform: none; }
+}
+@media (prefers-contrast: more) {
+  .sg-thumb { box-shadow: 0 0 0 1.5px var(--hair-3); }
+  .sg-item.low .sg-thumb { box-shadow: 0 0 0 1.5px rgba(196,64,52,.55); }
+}
+@media (forced-colors: active) {
+  .sg-thumb { border: 1px solid CanvasText; }
+  .sg-item:has(.sg-open:focus-visible) .sg-thumb { outline: 2px solid Highlight; }
+  .sg-more { background: Canvas; }
+}
+@media print {
+  .sg-bar { position: static; box-shadow: none; }
+  .sg-add { display: none; }
+  .sg-item { break-inside: avoid; animation: none; }
+}

@@ -563,7 +563,7 @@ function LengthSection() {
     <div className="card pad">
       <h3>판단 기준</h3>
       <div className="grid2">
-        <div className="field"><label>기록 부족 표시</label><Switch on={s.lowRecordEnabled} onChange={(v) => setSettings({ lowRecordEnabled: v })} label={s.lowRecordEnabled ? "켬 — 이름 옆 주황 점과 필터 표시" : "끔"} />{s.lowRecordEnabled && <span className="flex small muted">기준 <input type="number" className="num" style={{ width: 60, height: 30 }} value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Number(e.target.value) })} />건 이하</span>}</div>
+        <div className="field"><label>기록 부족 기준</label><Switch on={s.lowRecordEnabled} onChange={(v) => setSettings({ lowRecordEnabled: v })} label={s.lowRecordEnabled ? "직접 정함" : "자동 — 반 평균의 절반보다 적은 학생"} />{s.lowRecordEnabled && <span className="flex small muted">기준 <input type="number" className="num" style={{ width: 60, height: 30 }} min={0} value={s.lowRecordThreshold} onChange={(e) => setSettings({ lowRecordThreshold: Math.max(0, Number(e.target.value) || 0) })} />건 이하</span>}<span className="muted small">현황판 학생 카드는 연한 빨강, 기록 계단은 주황 띠로 표시하고, 생기부 명단에도 같은 기준을 씁니다.</span></div>
         <div className="field"><label>문장 유사도 임계값 (0~1)</label><input type="number" step="0.05" min="0.3" max="1" className="num" value={s.similarityThreshold} onChange={(e) => setSettings({ similarityThreshold: Number(e.target.value) })} /></div>
       </div>
     </div>
@@ -826,10 +826,13 @@ function DataSection() {
   const areaStats = useStore((s) => s.areaStats);
   const areaName = useStore((s) => s.doc.settings.school.subject) || "현재 영역";
   const toast = useStore((s) => s.toast);
-  const [confirm, setConfirm] = useState<"sample" | "reset" | "demo" | null>(null);
+  const [confirm, setConfirm] = useState<"sample" | "reset" | "demo" | "endDemo" | null>(null);
   const [loc, setLoc] = useState("");
   const [stats, setStats] = useState<AreaStats[]>([]);
+  // 데모의 합성 모의 수업 스크립트가 남아 있으면 지우는 단추를 보인다
+  const [demoOn, setDemoOn] = useState(false);
   useEffect(() => { import("../lib/persist").then((m) => m.getPersist()).then((p) => setLoc(p.location())); areaStats().then(setStats); }, [areaStats]);
+  useEffect(() => { let live = true; import("../lib/demo").then((m) => { if (live) setDemoOn(!!m.demoInfo()); }); return () => { live = false; }; }, [confirm]);
   return (
     <>
       <div className="card pad">
@@ -839,10 +842,11 @@ function DataSection() {
           <thead><tr><th>영역</th><th style={{ width: 80 }}>학생</th><th style={{ width: 80 }}>기록</th><th style={{ width: 90 }}>PDF기록</th><th style={{ width: 80 }}>초안</th></tr></thead>
           <tbody>{stats.map((x) => <tr key={x.id}><td className="name">{x.name}</td><td className="num">{x.students}</td><td className="num">{x.records}</td><td className="num">{x.performances}</td><td className="num">{x.drafts}</td></tr>)}</tbody>
         </table>
-        <div className="flex"><button className="btn" onClick={() => setConfirm("sample")}>{areaName}을(를) 샘플 데이터로</button><button className="btn" onClick={() => setConfirm("demo")} title="샘플 + 합성 모의 수업 스크립트 + 추천 카드 + 기록 시뮬레이터">데모 모드</button><span className="grow" /><button className="btn ghost" style={{ color: "var(--warn)" }} onClick={() => setConfirm("reset")}>모든 영역 데이터 삭제</button></div>
+        <div className="flex"><button className="btn" onClick={() => setConfirm("sample")}>{areaName}을(를) 샘플 데이터로</button><button className="btn" onClick={() => setConfirm("demo")} title="샘플 + 합성 모의 수업 스크립트 + 추천 카드 (폰 기록 흐름은 모바일 확인에서)">데모 모드</button>{demoOn && <button className="btn ghost" onClick={() => setConfirm("endDemo")} title="데모가 넣은 합성 모의 수업 스크립트를 지웁니다">데모 끝내기</button>}<span className="grow" /><button className="btn ghost" style={{ color: "var(--warn)" }} onClick={() => setConfirm("reset")}>모든 영역 데이터 삭제</button></div>
       </div>
       {confirm === "sample" && <Confirm title="샘플 데이터" body={`지금 열린 ${areaName} 영역의 명단·기록·초안을 샘플(화학Ⅰ · 2개 반)로 대체합니다. 다른 영역과 공통 설정은 그대로입니다.`} okLabel="불러오기" onOk={() => { loadSample(); toast({ text: "샘플 불러옴" }); }} onClose={() => setConfirm(null)} />}
-      {confirm === "demo" && <Confirm title="데모 모드" body={`지금 열린 ${areaName} 영역을 샘플로 바꾸고, 합성 모의 수업 스크립트와 추천 카드를 넣은 뒤 오늘 페이지에 기록 시뮬레이터를 엽니다. 모두 합성 데이터입니다.`} okLabel="시작" onOk={() => { import("../lib/demo").then((m) => m.startDemo()).then(() => toast({ text: "데모 모드 시작" })); }} onClose={() => setConfirm(null)} />}
+      {confirm === "demo" && <Confirm title="데모 모드" body={`지금 열린 ${areaName} 영역을 샘플로 바꾸고, 합성 모의 수업 스크립트와 추천 카드를 넣습니다. 쌓인 기록은 현황판에서 보고, 폰에서 기록하는 흐름은 상단의 모바일 확인에서 해 볼 수 있습니다. 모두 합성 데이터입니다.`} okLabel="시작" onOk={() => { import("../lib/demo").then((m) => m.startDemo()).then(() => { setDemoOn(true); toast({ text: "데모 모드 시작" }); }); }} onClose={() => setConfirm(null)} />}
+      {confirm === "endDemo" && <Confirm title="데모 끝내기" body="데모가 넣은 합성 모의 수업 스크립트를 지웁니다. 샘플 명단·기록은 그대로 남습니다. 샘플까지 지우려면 같은 줄의 [모든 영역 데이터 삭제]를 쓰세요." okLabel="끝내기" onOk={() => { import("../lib/demo").then((m) => m.endDemo()).then(() => { setDemoOn(false); toast({ text: "데모 스크립트를 지웠습니다" }); }); }} onClose={() => setConfirm(null)} />}
       {confirm === "reset" && <Confirm title="모든 영역 데이터 삭제" body={`영역 ${stats.length}개의 명단·기록·초안과 공통 설정(동기화 키 포함)이 모두 삭제됩니다. 먼저 백업하세요.`} okLabel="모두 삭제" danger onOk={async () => { await resetEverything(); toast({ text: "초기화됨" }); }} onClose={() => setConfirm(null)} />}
     </>
   );

@@ -1,9 +1,9 @@
 // 전역 스타일을 맨 먼저: 화면별 스타일(계단·모바일 미리보기)이 뒤에 붙어 같은 특정도에서 이긴다
 import "./styles.css";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
-import { QuickAdd, RecordsPage } from "./pages/RecordsPage";
+import { QuickAdd, RecordsPage, exportRecordsExcel } from "./pages/RecordsPage";
 import { DraftPage } from "./pages/DraftPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { MobilePage } from "./pages/MobilePage";
@@ -54,48 +54,98 @@ export default function App() {
   );
 }
 
+/** 상단 바에서 영역 옆에 크게 놓이는 지금 페이지 이름 (두 번째 줄에는 제목을 두지 않는다) */
+const PAGE_TITLE: Partial<Record<Page, string>> = { main: "현황판", draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
+
 /**
- * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 · ──── · 미반영 · +기록 · 저장 · 생기부 생성 · 설정.
+ * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · +기록 · 저장▾ · 생기부 생성 · 설정.
  * 교사가 매일 보는 것은 현황판 하나. 생기부 생성은 시즌에만 들어가는 문이다.
  */
 function TopNav({ view }: { view: Page }) {
   const setPage = useStore((s) => s.setPage);
-  const doc = useStore((s) => s.doc);
   const sync = useStore((s) => s.syncStatus);
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
-  const flush = useStore((s) => s.flush);
-  const toast = useStore((s) => s.toast);
   const [adding, setAdding] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
-    setSaving(true);
-    try { await flush(); toast({ text: "저장했습니다" }); }
-    finally { setTimeout(() => setSaving(false), 400); }
-  };
-  const exportJson = async () => {
-    const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
-    if (ok) toast({ text: "백업 파일로 내보냈습니다" });
-  };
+  const title = PAGE_TITLE[view];
   return (
     <header className="topnav">
       <button className="brand" onClick={() => setPage("main")} title="현황판으로">
         <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>
         <span className="brand-txt">누가<span className="brand-en">NUGA</span></span>
       </button>
-      <button className={`mini-link ${view === "mobile" ? "on" : ""}`} onClick={() => setPage(view === "mobile" ? "main" : "mobile")} title="폰 앱 화면을 PC에서 확인 (테스트용)"><Icon name="phone" size={11} />모바일 확인</button>
+      <button className={`mini-link ${view === "mobile" ? "on" : ""}`} aria-current={view === "mobile" ? "page" : undefined} onClick={() => setPage(view === "mobile" ? "main" : "mobile")} title="폰 앱 화면을 PC에서 확인 (테스트용)"><Icon name="phone" size={11} />모바일 확인</button>
       <AreaSwitcher />
+      {title && <h1 className="page-title">{title}</h1>}
+      {view === "mobile" && <span className="chip outline page-chip">테스트용</span>}
       <span className="sep" />
       <span className="sync-dot" title={sync.state === "error" ? `동기화 오류 · ${sync.message}` : `${sync.message}${sync.lastAt ? ` · 마지막 ${sync.lastAt.slice(11, 16)}` : ""}`}>
         <i className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
       </span>
       <button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="아직 처리하지 않은 추천·수동 기록">미반영 <b className="num">{backlog}</b></button>
       <button className="btn" onClick={() => setAdding(true)} title="PC에서 바로 기록"><Icon name="plus" />기록</button>
-      <button className="btn" onClick={save} disabled={saving} title="지금까지의 변경을 저장 · 길게 보려면 백업(JSON)" onContextMenu={(e) => { e.preventDefault(); exportJson(); }}><Icon name="json" />{saving ? "저장 중" : "저장"}</button>
-      <button className={`btn ${view === "draft" ? "active" : ""}`} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부 생성</button>
-      <button className={`btn icon ${view === "settings" ? "active" : ""}`} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
+      <SaveMenu />
+      <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부 생성</button>
+      <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
       {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </header>
+  );
+}
+
+/**
+ * [저장 | ▾]: 누르면 바로 저장, 꺾쇠는 내보내기 메뉴 (누가기록 엑셀 · 전체 백업 JSON).
+ * 바깥 클릭·Esc·Tab(초점이 메뉴 밖으로)으로 닫힌다. 항목을 고르거나 Esc 로 닫으면 초점은 꺾쇠로 돌아간다
+ */
+function SaveMenu() {
+  const doc = useStore((s) => s.doc);
+  const flush = useStore((s) => s.flush);
+  const toast = useStore((s) => s.toast);
+  const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const caretRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const save = async () => {
+    setSaving(true);
+    try { await flush(); toast({ text: "저장했습니다" }); }
+    finally { setTimeout(() => setSaving(false), 400); }
+  };
+  const exportExcel = async () => { if (await exportRecordsExcel(doc)) toast({ text: "누가기록을 엑셀로 내보냈습니다" }); };
+  const exportJson = async () => {
+    const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
+    if (ok) toast({ text: "전체 백업(JSON)으로 내보냈습니다" });
+  };
+  const run = (fn: () => Promise<void>) => { setOpen(false); caretRef.current?.focus(); void fn(); };
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    const down = (e: PointerEvent) => { if (!boxRef.current?.contains(e.target as Node)) setOpen(false); };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); caretRef.current?.focus(); return; }
+      if (e.key === "Tab") { setOpen(false); return; } // 초점은 브라우저가 다음 단추로 옮긴다
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
+      if (!items.length) return;
+      e.preventDefault();
+      const i = items.indexOf(document.activeElement as HTMLButtonElement);
+      items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length].focus();
+    };
+    document.addEventListener("pointerdown", down); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", down); document.removeEventListener("keydown", key); };
+  }, [open]);
+  return (
+    <div className={`split-btn ${open ? "open" : ""}`} ref={boxRef}>
+      <button className="btn split-main" onClick={save} disabled={saving} title="지금까지의 변경을 저장"><Icon name="check" />{saving ? "저장 중" : "저장"}</button>
+      <button ref={caretRef} className="btn split-caret" onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open} aria-label="내보내기 · 백업" title="내보내기 · 백업">
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="menu save-menu" role="menu" aria-label="내보내기 · 백업" ref={menuRef}>
+          <button className="item" role="menuitem" onClick={() => run(exportExcel)}><Icon name="excel" />누가기록 엑셀로 내보내기<span className="sub">반별 시트</span></button>
+          <button className="item" role="menuitem" onClick={() => run(exportJson)}><Icon name="json" />전체 백업 (JSON)<span className="sub">설정·기록 모두</span></button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -108,19 +158,16 @@ export function Sheet({ children }: { children: React.ReactNode }) {
   return <div className="sheet"><div className="paper">{children}</div></div>;
 }
 
-/** 모든 페이지에서 같은 자리: 제목 · 과목 · (페이지 슬롯) · 엑셀 · JSON */
-/** titleSlot 을 주면 페이지 제목 대신 그 자리에 표시한다 (예: 2p 개별·일괄 전환) */
-export function TopBar({ title, titleSlot, center, onExcel, right }: { title: string; titleSlot?: React.ReactNode; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
-  const doc = useStore((s) => s.doc);
-  const toast = useStore((s) => s.toast);
-  const exportJson = async () => {
-    const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
-    if (ok) toast({ text: "JSON 내보내기 완료" });
-  };
-  void exportJson;
+/**
+ * 페이지 머리 띠 (두 번째 줄): 페이지 슬롯 · 가운데 · ──── · 오른쪽 · 엑셀.
+ * 페이지 이름은 상단 바(영역 옆)에 있으므로 여기에는 제목을 두지 않는다 (title 은 부르는 쪽의 표시용으로만 남는다).
+ * 보일 것이 없으면 띠 자체를 그리지 않는다
+ */
+export function TopBar({ titleSlot, center, onExcel, right }: { title: string; titleSlot?: React.ReactNode; center?: React.ReactNode; onExcel?: () => void | Promise<unknown>; right?: React.ReactNode }) {
+  if (!titleSlot && !center && !right && !onExcel) return null;
   return (
     <div className="topbar">
-      {titleSlot ?? <h1>{title}</h1>}
+      {titleSlot}
       {center}
       <span className="sep" />
       {right}
@@ -129,7 +176,8 @@ export function TopBar({ title, titleSlot, center, onExcel, right }: { title: st
   );
 }
 
-export function ClassTabs({ extra }: { extra?: (cls: string) => React.ReactNode }) {
+/** 반 탭. right 는 탭 줄 오른쪽 끝의 작은 동작 (예: 현황판의 AI 도달 정도 추정) */
+export function ClassTabs({ extra, right }: { extra?: (cls: string) => React.ReactNode; right?: React.ReactNode }) {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const setClass = useStore((s) => s.setClass);
@@ -138,9 +186,10 @@ export function ClassTabs({ extra }: { extra?: (cls: string) => React.ReactNode 
   return (
     <div className="tabsrow">
       {classes.map((c) => (
-        <button key={c} className={`tab ${c === cls ? "active" : ""}`} onClick={() => setClass(c)}>{c}{extra?.(c)}</button>
+        <button key={c} className={`tab ${c === cls ? "active" : ""}`} aria-current={c === cls ? "true" : undefined} onClick={() => setClass(c)}>{c}{extra?.(c)}</button>
       ))}
       {classes.length === 0 && <span className="muted small" style={{ padding: "10px 0" }}>설정에서 반·명단을 등록하세요</span>}
+      {right && <span className="tabs-act">{right}</span>}
     </div>
   );
 }
