@@ -55,7 +55,8 @@ export default function App() {
 }
 
 /** 상단 바에서 영역 옆에 크게 놓이는 지금 페이지 이름 (두 번째 줄에는 제목을 두지 않는다) */
-const PAGE_TITLE: Partial<Record<Page, string>> = { main: "현황판", draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
+/** 상단 바 영역 칸 옆 제목. 현황판(메인)은 제목 없이 영역 칸만 둔다 */
+const PAGE_TITLE: Partial<Record<Page, string>> = { draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
 
 /**
  * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · +기록 · 저장▾ · 생기부 생성 · 설정.
