@@ -5,9 +5,8 @@
    이 파일은 styles.css 보다 먼저 들어가므로, 공용 규칙(.stag, .eyebrow …)과 겹치는 곳은 무대 범위로 한 단계 더 좁혀 쓴다.
    빈 칸은 .vacant (공용 .empty 의 여백·워터마크가 붙지 않게). 판은 .stair-step 의 형제라서 바닥 반사에 이름이 비치지 않는다. */
 
-/* ── 놓이는 자리 (누가기록 · 한눈에) ── */
-.content.is-stairs, .content:has(> .stairs-wrap) { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; }
-.stairs-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+/* ── 놓이는 자리 (현황판 맨 위) ── 높이를 고정해 무대가 눌리지 않고, 그 아래 학생 카드 격자로 페이지가 스크롤된다 */
+.board-stairs { height: clamp(440px, 58vh, 620px); display: flex; flex-direction: column; }
 .stairs-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
 
 /* ── 무대: 종이 안의 유일한 어두운 면 ── */
@@ -295,5 +294,5 @@
   .stairs-stage::before { display: none; }
 }
 @media print {
-  .stairs-wrap, .stair-tip { display: none !important; }
+  .board-stairs, .stairs-wrap, .stair-tip { display: none !important; }
 }

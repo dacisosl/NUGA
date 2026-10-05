@@ -3,7 +3,7 @@ import {
   CATEGORY_NONE, WEEKDAY_LABELS, dateKey, fmtHM, lessonFor, lessonLabel, nowIso, resolveNow, slotsForWeekday, weekdayOf,
   type Category, type LessonSlot, type NugaDoc, type NugaRecord, type RecordCategory, type RecordSource,
 } from "@nuga/core";
-import { Sheet, TopBar } from "../App";
+import { Sheet } from "../App";
 import { arrivalModeOf, classList, studentsOf, useStore } from "../store";
 import { useTranscripts } from "../lib/transcripts";
 import { simulateLessonTranscript } from "../lib/demo";
@@ -167,7 +167,6 @@ export function MobilePage() {
 
   return (
     <>
-      <TopBar title="모바일 확인" center={<span className="chip outline">테스트용</span>} />
       <Sheet>
         <div className="content mp-page">
           <div className="mp-tools">

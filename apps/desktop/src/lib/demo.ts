@@ -1,4 +1,4 @@
-import { nowIso, parseTranscription, resolveNow, slotsForWeekday, uuid, weekdayOf, type NugaRecord, type Transcript } from "@nuga/core";
+import { nowIso, parseTranscription, resolveNow, slotsForWeekday, uuid, weekdayOf, type Transcript } from "@nuga/core";
 import { DEMO_LESSON as demoLesson } from "@nuga/core";
 import { arrivalModeOf, useStore } from "../store";
 import { useTranscripts } from "./transcripts";
@@ -79,16 +79,9 @@ export async function simulateLessonTranscript(cls: string, period: number, star
   return { id, count: r.count };
 }
 
+/** 데모 끝내기 (설정 → 데이터): 합성 모의 수업 스크립트를 지운다. 샘플 명단·기록은 그대로 */
 export async function endDemo() {
   const prev = demoInfo();
   if (prev) await useTranscripts.getState().remove(prev.transcriptId).catch(() => {});
   setDemoInfo(null);
-}
-
-/** 시뮬레이터: 데모 수업의 t초 시점에 폰에서 1차 기록이 온 것처럼 만든다 (보완 대기) */
-export function simulateRecord(info: DemoInfo, no: number, category: 1 | 2 | 3 | 4, atSec: number): NugaRecord {
-  const st = useStore.getState();
-  const t = new Date(new Date(info.startedAt).getTime() + atSec * 1000);
-  const rec = st.addRecord({ class: info.class, no, category, time: nowIso(t), lesson: null, memo: "", voiceMemo: null, note: "", status: "pending", source: "phone" });
-  return rec;
 }

@@ -44,9 +44,18 @@ const achKey = (s: Pick<TagStudent, "class" | "no">) => `${s.class}|${s.no}`;
 export function useAchStep(student: TagStudent) {
   const doc = useStore((s) => s.doc);
   const ach = achievementOf(doc, student);
-  const preview = useAchPreview((s) => (s.key === achKey(student) ? s.value : null));
+  const preview = useAchPreviewValue(student);
   const shown = preview ?? ach.value;
   return { step: gradeStep(shown), shown, edited: ach.edited, lowConf: !ach.edited && ach.confidence === "low" };
+}
+
+/**
+ * 슬라이더를 끄는 동안 이 학생의 미리보기 값 (없으면 null). 문서 전체를 구독하지 않으므로
+ * 도달 정도를 부모에서 한꺼번에 계산하는 목록(학생 카드)이 이것만 따로 구독한다.
+ */
+export function useAchPreviewValue(student: Pick<TagStudent, "class" | "no">): number | null {
+  const key = achKey(student);
+  return useAchPreview((s) => (s.key === key ? s.value : null));
 }
 
 export function AchievementControl({ student, compact }: { student: TagStudent; compact?: boolean }) {
@@ -110,16 +119,24 @@ function AchievementPopover({ student, anchor, onClose }: { student: TagStudent;
 /**
  * 오른쪽 클릭(마우스)으로 여는 메뉴. 터치 기기에서는 길게 누르면 브라우저가 같은 contextmenu 를 보낸다.
  */
-export function useRightClick(onOpen: (el: HTMLElement) => void) {
+export function useRightClick(onOpen: (el: HTMLElement, e: React.MouseEvent<HTMLElement>) => void) {
   return {
-    onContextMenu: (e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); e.stopPropagation(); onOpen(e.currentTarget); },
+    onContextMenu: (e: React.MouseEvent<HTMLElement>) => { e.preventDefault(); e.stopPropagation(); onOpen(e.currentTarget, e); },
   };
 }
 
-/** 학생을 오른쪽 클릭하면 도달 정도 슬라이더가 뜬다. bind 를 대상 요소에 펼치고 popover 를 함께 그린다. */
+/**
+ * 학생을 오른쪽 클릭하면 도달 정도 슬라이더가 뜬다. bind 를 대상 요소에 펼치고 popover 를 함께 그린다.
+ * 창은 누른 자리(마우스 커서)에 붙는다. 키보드(메뉴 키·Shift+F10)처럼 좌표가 요소 밖이면 요소에 붙인다 (큰 카드에서도 커서 곁에 뜨게)
+ */
 export function useAchievementPress(student: TagStudent | undefined) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const bind = useRightClick((el) => { if (student) setAnchor(el.getBoundingClientRect()); });
+  const bind = useRightClick((el, e) => {
+    if (!student) return;
+    const r = el.getBoundingClientRect();
+    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom && (e.clientX !== 0 || e.clientY !== 0);
+    setAnchor(inside ? new DOMRect(e.clientX, e.clientY, 0, 0) : r);
+  });
   const popover = anchor && student ? <AchievementPopover student={student} anchor={anchor} onClose={() => setAnchor(null)} /> : null;
   return { bind, popover };
 }

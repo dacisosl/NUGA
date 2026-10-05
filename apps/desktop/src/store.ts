@@ -76,9 +76,6 @@ interface State {
   mode2p: "individual" | "batch" | "review";
   selected: { class: string; no: number } | null;
   settingsTab: string;
-  /** 다른 페이지에서 누가기록 필터를 정해 들어올 때 (예: 오늘 → 이번 주 0건) */
-  recordsFilter: string | null;
-  setRecordsFilter(f: string | null): void;
   /** 초안 보기: 한 문장씩 · 구별하기(형광펜). 이 기기에만 저장 */
   view: { split: boolean; highlight: boolean };
   toasts: Toast[];
@@ -175,8 +172,6 @@ export const useStore = create<State>((set, get) => ({
   toasts: [],
   inbox: null,
   syncStatus: { state: "off", message: "연결 안 됨" },
-  recordsFilter: null,
-  setRecordsFilter: (f) => set({ recordsFilter: f }),
   outbox: { messages: [], tombstones: [] },
   deviceId: "",
 
@@ -508,9 +503,63 @@ export function fillLesson(doc: NugaDoc, r: NugaRecord): NugaRecord {
   return r.lesson ? r : { ...r, lesson: lessonFor(doc.settings.progress, r.class, r.time) };
 }
 
+/* ---------- 기록 부족 (현황판 계단 · 학생 카드 · 생기부 명단이 같은 기준을 쓴다) ---------- */
+
+/** 기록 부족 기준. 설정에서 직접 정했으면 그 건수 이하, 아니면 자동으로 반 평균의 절반보다 적은 학생 */
+export interface LowRule {
+  /** 설정의 직접 기준(N건 이하)인가 */
+  manual: boolean;
+  /** 기준을 세울 수 있는가 (자동인데 반 기록이 하나도 없으면 아무도 표시하지 않는다) */
+  active: boolean;
+  /** 이 기록 수(건너뜀 제외)면 기록 부족인가 */
+  isLow(n: number): boolean;
+  /** 범례에 붙는 짧은 설명: '1건 이하' / '반 평균의 절반 미만' */
+  short: string;
+  /** 거르기·KPI 툴팁 */
+  tip: string;
+}
+
+const fmt1 = (n: number) => String(Math.round(n * 10) / 10);
+
+/** counts = 반 학생마다 건너뜀을 뺀 기록 수 */
+export function lowRuleOf(settings: Pick<Settings, "lowRecordEnabled" | "lowRecordThreshold">, counts: number[]): LowRule {
+  if (settings.lowRecordEnabled) {
+    const th = settings.lowRecordThreshold;
+    return { manual: true, active: true, isLow: (n) => n <= th, short: `${th}건 이하`, tip: `기록 부족 = ${th}건 이하 (설정 → 판단 기준)` };
+  }
+  const avg = counts.length ? counts.reduce((a, n) => a + n, 0) / counts.length : 0;
+  if (avg <= 0) return { manual: false, active: false, isLow: () => false, short: "반 평균의 절반 미만", tip: "기록 부족 = 반 평균의 절반 미만 (아직 반 기록이 없어 표시하지 않음)" };
+  const half = avg / 2;
+  return { manual: false, active: true, isLow: (n) => n < half, short: "반 평균의 절반 미만", tip: `기록 부족 = 반 평균(${fmt1(avg)}건)의 절반보다 적음 · 기준은 설정 → 판단 기준에서 직접 정할 수 있음` };
+}
+
+/** 건너뜀을 뺀 학생별 기록 수 (반·번호 → 건수) */
+function liveCounts(doc: NugaDoc): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of doc.records) if (r.status !== "skipped") { const k = `${r.class}|${r.no}`; m.set(k, (m.get(k) || 0) + 1); }
+  return m;
+}
+
+/** 반의 기록 부족 기준. 같은 문서(기록·명단·설정)면 한 번만 센다 */
+let lowCache: { records: NugaRecord[]; students: Student[]; settings: Settings; counts: Map<string, number>; rules: Map<string, LowRule> } | null = null;
+function lowCacheOf(doc: NugaDoc) {
+  if (!lowCache || lowCache.records !== doc.records || lowCache.students !== doc.students || lowCache.settings !== doc.settings) {
+    lowCache = { records: doc.records, students: doc.students, settings: doc.settings, counts: liveCounts(doc), rules: new Map() };
+  }
+  return lowCache;
+}
+export function classLowRule(doc: NugaDoc, cls: string): LowRule {
+  const c = lowCacheOf(doc);
+  let rule = c.rules.get(cls);
+  if (!rule) {
+    rule = lowRuleOf(doc.settings, doc.students.filter((s) => s.class === cls).map((s) => c.counts.get(`${s.class}|${s.no}`) || 0));
+    c.rules.set(cls, rule);
+  }
+  return rule;
+}
+
 export function isLowRecord(doc: NugaDoc, cls: string, no: number): boolean {
-  if (!doc.settings.lowRecordEnabled) return false;
-  return recordsOf(doc, cls, no).filter((r) => r.status !== "skipped").length <= doc.settings.lowRecordThreshold;
+  return classLowRule(doc, cls).isLow(lowCacheOf(doc).counts.get(`${cls}|${no}`) || 0);
 }
 
 /* ---------- 도달 정도 ---------- */
@@ -528,13 +577,16 @@ export interface AchievementView {
   edited: boolean;
 }
 
-/** 학생의 도달 정도. 자동값은 기록으로 바로 계산한다 (AI 추정값이 저장돼 있으면 그 값). */
-export function achievementOf(doc: NugaDoc, s: Pick<Student, "class" | "no" | "achievement" | "level">): AchievementView {
+/**
+ * 학생의 도달 정도. 자동값은 기록으로 바로 계산한다 (AI 추정값이 저장돼 있으면 그 값).
+ * own = 이미 학생별로 나눠 둔 기록·PDF기록 (여러 학생을 한 번에 계산할 때 문서 전체를 학생마다 훑지 않게)
+ */
+export function achievementOf(doc: NugaDoc, s: Pick<Student, "class" | "no" | "achievement" | "level">, own?: { records: NugaRecord[]; performances: Performance[] }): AchievementView {
   const a = s.achievement;
   const manual = a?.manual ?? (s.level ? LEGACY_LEVEL_SCORE[s.level] : null);
   let auto = a?.auto ?? null; let confidence: Achievement["confidence"] = a?.confidence ?? "none";
   if (auto === null) {
-    const est = estimateAchievement(doc.records.filter((r) => r.class === s.class && r.no === s.no), doc.performances.filter((p) => p.class === s.class && p.no === s.no));
+    const est = estimateAchievement(own?.records ?? doc.records.filter((r) => r.class === s.class && r.no === s.no), own?.performances ?? doc.performances.filter((p) => p.class === s.class && p.no === s.no));
     auto = est.value; confidence = est.confidence;
   }
   return { value: manual ?? auto, auto, manual, confidence: manual !== null && confidence === "none" ? "ok" : confidence, edited: manual !== null };

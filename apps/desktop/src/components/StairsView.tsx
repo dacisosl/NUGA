@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { gradeStep, type NugaDoc, type Student } from "@nuga/core";
-import { achievementOf, useStore } from "../store";
+import { achievementOf, lowRuleOf, useStore } from "../store";
 import { StudentTag } from "./ui";
 import "./stairs.css";
 
@@ -204,8 +204,10 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
   const lo = (i: number) => (i === 1 ? size : (i - 1) * size + 1);
   const stepName = (i: number) => (i === 0 ? "출발선" : `${lo(i)}건 ${i === 1 ? "이하" : "이상"}`);
   const cols = Array.from({ length: steps }, (_, i) => kids.filter((k) => stepOf(k.n) === i).sort((a, b) => a.s.no - b.s.no));
-  const lowOn = doc.settings.lowRecordEnabled, lowTh = doc.settings.lowRecordThreshold;
-  const isLow = (i: number) => lowOn && i * size <= lowTh; // 이 칸의 가장 많은 건수가 기준 이하
+  // 기록 부족: 학생 카드·생기부 명단과 같은 기준 (설정의 직접 기준, 아니면 반 평균의 절반 미만)
+  const lowRule = useMemo(() => lowRuleOf(doc.settings, kids.map((k) => k.n)), [doc.settings, kids]);
+  const lowOn = lowRule.active;
+  const isLow = (i: number) => lowOn && lowRule.isLow(i * size); // 이 칸의 가장 많은 건수도 기록 부족
   const lowEdge = Math.max(-1, ...cols.map((_, i) => (i > 0 && isLow(i) ? i : -1)));
   const peak = Math.max(-1, ...cols.map((c, i) => (i > 0 && c.length ? i : -1))); // 빛 번짐은 실제로 오른 가장 높은 칸 하나에만
 
@@ -213,7 +215,7 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
   const avg = total ? kids.reduce((a, k) => a + k.n, 0) / total : 0;
   const zero = cols[0].length;
   const weekOn = kids.filter((k) => k.week > 0).length;
-  const lowN = lowOn ? kids.filter((k) => k.n <= lowTh).length : 0;
+  const lowN = lowOn ? kids.filter((k) => lowRule.isLow(k.n)).length : 0;
   const anyGx = kids.some((k) => k.step < 0);
 
   // KPI 토글: 조건에 맞는 학생만 밝게(나머지는 흐리게, 실루엣은 그대로). 검색어와 함께 걸린다(AND)
@@ -223,7 +225,7 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
   const toggle = (f: Exclude<Focus, null>) => setFocus((x) => (x === f ? null : f));
   const qq = q.trim();
   const matchQ = (k: Kid) => !qq || (k.s.name || "").includes(qq) || String(k.s.no) === qq;
-  const matchF = (k: Kid) => (focus === "zero" ? k.n === 0 : focus === "week0" ? k.week === 0 : focus === "low" ? k.n <= lowTh : true);
+  const matchF = (k: Kid) => (focus === "zero" ? k.n === 0 : focus === "week0" ? k.week === 0 : focus === "low" ? lowRule.isLow(k.n) : true);
   const filtering = !!qq || !!focus;
 
   // 잰 크기로 배치: 계단 칸(.stairs-field) 하나만 ResizeObserver 로 본다(2px 미만 변화는 무시). 첫 측정 전에는 칸을 그리지 않는다.
@@ -325,14 +327,15 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
               <span className="k">이번 주 기록</span><b>{weekOn}<small>/{total}명</small></b>
               <i className="meter" style={{ "--v": total ? weekOn / total : 0 } as React.CSSProperties}><i /></i>
             </button>
-            {lowOn && <button type="button" className={`kpi tg ${lowN ? "warn" : ""}`} aria-pressed={focus === "low"} disabled={!lowN} onClick={() => toggle("low")} title={`기록 부족(${lowTh}건 이하) 학생만 밝게`}>
+            {lowOn && <button type="button" className={`kpi tg ${lowN ? "warn" : ""}`} aria-pressed={focus === "low"} disabled={!lowN} onClick={() => toggle("low")} title={`${lowRule.tip}
+누르면 기록 부족 학생만 밝게`}>
               <span className="k">기록 부족</span><b>{lowN}<small>명</small></b>
             </button>}
             <div className="kpi"><span className="k">가장 높이</span><b>{max}<small>건</small></b></div>
           </div>}
           {hasRoster && <div className="stairs-legend" aria-hidden="true">
             <span className="lg-row">도달 정도 <span className="sw"><i className="g0" /><i className="g1" /><i className="g2" /><i className="g3" /><i className="g4" /></span> 낮음 → 높음</span>
-            <span className="lg-row"><i className="wk" />이번 주 기록{lowOn && <><i className="lowk" />기록 부족 ({lowTh}건 이하)</>}{anyGx && <><i className="gxk" />미정</>}</span>
+            <span className="lg-row"><i className="wk" />이번 주 기록{lowOn && <><i className="lowk" />기록 부족 ({lowRule.short})</>}{anyGx && <><i className="gxk" />미정</>}</span>
           </div>}
         </header>
 
@@ -451,11 +454,4 @@ function StairTip({ k, r, onClose }: { k: Kid; r: DOMRect; onClose: () => void }
     </div>,
     document.body,
   );
-}
-
-/** 누가기록 상단 [표 | 한눈에] 상태 (이 기기에 기억) */
-export function useStairsMode(): [boolean, (v: boolean) => void] {
-  const [on, setOn] = React.useState(() => { try { return localStorage.getItem("nuga.stairs") !== "0"; } catch { return true; } });
-  const set = (v: boolean) => { setOn(v); try { localStorage.setItem("nuga.stairs", v ? "1" : "0"); } catch { /* 저장 불가 */ } };
-  return [on, set];
 }
