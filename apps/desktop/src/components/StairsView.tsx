@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { gradeStep, type NugaDoc, type Student } from "@nuga/core";
-import { achievementOf, lowRuleOf, useStore } from "../store";
+import { achievementOf, lowRuleOf, useStore, type LowRule } from "../store";
 import { StudentTag } from "./ui";
 import "./stairs.css";
 
@@ -13,6 +13,104 @@ import "./stairs.css";
  */
 
 const MAX_STEPS = 12;
+
+/**
+ * 칸 나누기 — 기록 계단과 간략 계단(StairsBrief)이 같은 셈을 쓰도록 여기 하나만 둔다.
+ * 출발선 = 0건만. 그다음부터 한 칸 = 2건(1–2, 3–4, …). 기록이 아주 많으면 더 묶는다 (최대 12칸, 최소 4칸).
+ * 칸 이름은 아래끝 기준: 출발선 · 2건 이하 · 3건 이상 · 5건 이상 … (묶음이 커지면 6건 이하 · 7건 이상 …)
+ */
+export interface StairBuckets {
+  /** 한 칸에 묶는 건수 */
+  size: number;
+  /** 칸 수 (출발선 포함) */
+  steps: number;
+  /** 기록 n건 → 칸 번호 (0 = 출발선) */
+  stepOf: (n: number) => number;
+  /** 칸 이름의 숫자 (1칸은 size '이하', 그다음은 아래끝 '이상') */
+  lo: (i: number) => number;
+  /** 이 칸에 들어가는 가장 많은 건수 (기록 부족 칸을 가릴 때) */
+  hi: (i: number) => number;
+  /** 칸 이름: 출발선 · 2건 이하 · 3건 이상 … */
+  name: (i: number) => string;
+}
+export function stairBuckets(max: number): StairBuckets {
+  const size = Math.max(2, Math.ceil(max / (MAX_STEPS - 1)));
+  const steps = Math.max(4, 1 + Math.ceil(max / size));
+  const stepOf = (n: number) => (n === 0 ? 0 : Math.min(steps - 1, 1 + Math.floor((n - 1) / size)));
+  const lo = (i: number) => (i === 1 ? size : (i - 1) * size + 1);
+  const hi = (i: number) => i * size;
+  const name = (i: number) => (i === 0 ? "출발선" : `${lo(i)}건 ${i === 1 ? "이하" : "이상"}`);
+  return { size, steps, stepOf, lo, hi, name };
+}
+
+/**
+ * 계단의 숫자 — 기록 계단(자세히) · 간략 계단 · 접힌 숫자 줄이 모두 이 셈 하나를 쓴다 (셋이 서로 다른 수를 말하지 않게).
+ * kids 는 반 학생마다 n = 건너뜀을 뺀 기록 수, week = 이번 주(월요일 0시부터) 기록 수.
+ */
+export interface StairModel<K> {
+  /** 칸 나누기 (가장 많은 기록 수로 정한다) */
+  b: StairBuckets;
+  /** 칸마다 학생 (번호순) */
+  cols: K[][];
+  /** 기록 부족 기준: 학생 카드·생기부 명단과 같은 lowRuleOf (설정의 직접 기준, 아니면 반 평균의 절반 미만) */
+  rule: LowRule; lowOn: boolean;
+  /** 이 칸의 가장 많은 건수도 기록 부족인가 */
+  isLow: (i: number) => boolean;
+  /** 기록 부족 구간의 마지막 칸(점선 기준선) · 실제로 오른 가장 높은 칸(빛 번짐은 이 칸 하나에만). 없으면 -1 */
+  lowEdge: number; peak: number;
+  /** 인원 · 평균 · 가장 많은 기록 수 · 출발선(0건) · 이번 주 기록이 있는 학생 · 기록 부족 학생 */
+  total: number; avg: number; max: number; zero: number; weekOn: number; lowN: number;
+}
+export function stairModel<K extends { n: number; week: number }>(kids: K[], settings: NugaDoc["settings"], no: (k: K) => number): StairModel<K> {
+  const max = Math.max(0, ...kids.map((k) => k.n));
+  const b = stairBuckets(max);
+  const cols = Array.from({ length: b.steps }, (_, i) => kids.filter((k) => b.stepOf(k.n) === i).sort((x, y) => no(x) - no(y)));
+  const rule = lowRuleOf(settings, kids.map((k) => k.n));
+  const lowOn = rule.active;
+  const isLow = (i: number) => lowOn && rule.isLow(b.hi(i));
+  const total = kids.length;
+  return {
+    b, cols, rule, lowOn, isLow, total, max,
+    avg: total ? kids.reduce((a, k) => a + k.n, 0) / total : 0,
+    zero: cols[0].length,
+    weekOn: kids.filter((k) => k.week > 0).length,
+    lowN: lowOn ? kids.filter((k) => rule.isLow(k.n)).length : 0,
+    lowEdge: Math.max(-1, ...cols.map((_, i) => (i > 0 && isLow(i) ? i : -1))),
+    peak: Math.max(-1, ...cols.map((c, i) => (i > 0 && c.length ? i : -1))),
+  };
+}
+
+/**
+ * 빈 칸이 SLIVER_RUN 개 이상 이어지면 양 끝 칸만 이름을 달고, 가운데 칸은 이름 없는 가는 디딤판으로 접는다 (기록 계단·간략 계단 같은 규칙).
+ * counts = 칸마다 학생 수 (0 = 출발선은 접지 않는다)
+ */
+export function sliverRuns(counts: number[]): boolean[] {
+  const S = counts.length;
+  const sl = counts.map(() => false);
+  for (let i = 1; i < S; ) {
+    if (counts[i]) { i++; continue; }
+    let j = i; while (j + 1 < S && !counts[j + 1]) j++;
+    if (j - i + 1 >= SLIVER_RUN) for (let k = i + 1; k < j; k++) sl[k] = true;
+    i = j + 1;
+  }
+  return sl;
+}
+
+/** 웹 글꼴(font-display: swap)이 늦게 들어오면 하나씩 오르는 수 — 글자 너비로 정한 배치(이름표·디딤판 글자)를 다시 재게 한다 */
+export function useFontTick(): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const fs = typeof document !== "undefined" ? document.fonts : undefined;
+    if (!fs) return;
+    let live = true;
+    const bump = () => { if (live) setTick((x) => x + 1); };
+    fs.ready.then(bump, () => {});
+    fs.addEventListener?.("loadingdone", bump);
+    return () => { live = false; fs.removeEventListener?.("loadingdone", bump); };
+  }, []);
+  return tick;
+}
+
 /** 계단 치수(px). stairs.css 의 --plate-h·--plate-gap, .stair-stack 의 padding(5px 좌우·6px 아래) 과 같아야 한다 */
 const BASE = 34, PH = 26, GAP = 4, ROW = PH + GAP;
 type Density = "full" | "compact" | "tight" | "ladder";
@@ -79,13 +177,7 @@ function treads(counts: number[], rows: number[], rise: number, m: Mode, sl: boo
 function layout(counts: number[], W: number, H: number, f: Fit): Layout {
   const S = counts.length;
   const topOcc = counts.reduce((a, n, i) => (n ? i : a), -1);
-  const sl = counts.map(() => false);
-  for (let i = 1; i < S; ) {
-    if (counts[i]) { i++; continue; }
-    let j = i; while (j + 1 < S && !counts[j + 1]) j++;
-    if (j - i + 1 >= SLIVER_RUN) for (let k = i + 1; k < j; k++) sl[k] = true;
-    i = j + 1;
-  }
+  const sl = sliverRuns(counts);
   const noteH = W >= 320 ? 46 : 68; // 빈 반 안내문(두 줄 · 좁으면 세 줄) 높이
   /** 한 방식·한 이름표 너비로 맞춰 본다. 안 들어가면 null */
   const tryFit = (m: Mode, density: Density, tagw: number): Layout | null => {
@@ -157,9 +249,9 @@ function layout(counts: number[], W: number, H: number, f: Fit): Layout {
   return { density: "ladder", tagw: f.ladder, note: null, L: counts.map((n) => ({ w: n, rows: n ? 1 : 0, min: 0, t: 0, sliver: false })) };
 }
 
-/** 글자 너비(px). 굵기는 실제보다 한 단계 굵게 재어 넉넉히 잡는다. 캔버스가 없으면 한 글자 = 1em */
+/** 글자 너비(px). 굵기는 실제보다 한 단계 굵게 재어 넉넉히 잡는다. 캔버스가 없으면 한 글자 = 1em (간략 계단도 이것으로 잰다) */
 let measureCtx: CanvasRenderingContext2D | null | undefined;
-function textW(s: string, px: number, weight: number, family: string): number {
+export function textW(s: string, px: number, weight: number, family: string): number {
   if (measureCtx === undefined) { try { measureCtx = document.createElement("canvas").getContext("2d"); } catch { measureCtx = null; } }
   if (!measureCtx) return s.length * px;
   measureCtx.font = `${weight} ${px}px ${family}`;
@@ -195,27 +287,10 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
     };
   }), [students, doc, weekStart]);
 
-  const max = Math.max(0, ...kids.map((k) => k.n));
-  // 출발선 = 0건만. 그다음부터 한 칸 = 2건(1–2, 3–4, …). 기록이 아주 많으면 더 묶는다 (최대 12칸, 최소 4칸)
-  const size = Math.max(2, Math.ceil(max / (MAX_STEPS - 1)));
-  const steps = Math.max(4, 1 + Math.ceil(max / size));
-  const stepOf = (n: number) => (n === 0 ? 0 : Math.min(steps - 1, 1 + Math.floor((n - 1) / size)));
-  // 칸 이름은 아래끝 기준: 출발선 · 2건 이하 · 3건 이상 · 5건 이상 … (묶음이 커지면 6건 이하 · 7건 이상 …)
-  const lo = (i: number) => (i === 1 ? size : (i - 1) * size + 1);
-  const stepName = (i: number) => (i === 0 ? "출발선" : `${lo(i)}건 ${i === 1 ? "이하" : "이상"}`);
-  const cols = Array.from({ length: steps }, (_, i) => kids.filter((k) => stepOf(k.n) === i).sort((a, b) => a.s.no - b.s.no));
-  // 기록 부족: 학생 카드·생기부 명단과 같은 기준 (설정의 직접 기준, 아니면 반 평균의 절반 미만)
-  const lowRule = useMemo(() => lowRuleOf(doc.settings, kids.map((k) => k.n)), [doc.settings, kids]);
-  const lowOn = lowRule.active;
-  const isLow = (i: number) => lowOn && lowRule.isLow(i * size); // 이 칸의 가장 많은 건수도 기록 부족
-  const lowEdge = Math.max(-1, ...cols.map((_, i) => (i > 0 && isLow(i) ? i : -1)));
-  const peak = Math.max(-1, ...cols.map((c, i) => (i > 0 && c.length ? i : -1))); // 빛 번짐은 실제로 오른 가장 높은 칸 하나에만
-
-  const total = kids.length;
-  const avg = total ? kids.reduce((a, k) => a + k.n, 0) / total : 0;
-  const zero = cols[0].length;
-  const weekOn = kids.filter((k) => k.week > 0).length;
-  const lowN = lowOn ? kids.filter((k) => lowRule.isLow(k.n)).length : 0;
+  // 칸 나누기·KPI·기록 부족(학생 카드·생기부 명단과 같은 기준)·정상은 stairModel 하나로 (간략 계단·접힌 숫자 줄과 같은 셈)
+  const model = useMemo(() => stairModel(kids, doc.settings, (k) => k.s.no), [kids, doc.settings]);
+  const { max, total, avg, zero, weekOn, lowN, cols, rule: lowRule, lowOn, isLow, lowEdge, peak } = model;
+  const { size, steps, stepOf, lo, name: stepName } = model.b;
   const anyGx = kids.some((k) => k.step < 0);
 
   // KPI 토글: 조건에 맞는 학생만 밝게(나머지는 흐리게, 실루엣은 그대로). 검색어와 함께 걸린다(AND)
@@ -244,16 +319,7 @@ function Stage({ cls, doc, students, onOpen, q }: { cls: string; doc: NugaDoc; s
 
   // 이름은 말줄임 없이: 가장 긴 이름과 칸 범위 글자를 무대 글꼴로 한 번 재어 이름표·칸 최소 너비를 정한다.
   // 웹 글꼴이 늦게 들어오면 다시 잰다
-  const [fontTick, setFontTick] = useState(0);
-  useEffect(() => {
-    const fs = typeof document !== "undefined" ? document.fonts : undefined;
-    if (!fs) return;
-    let live = true;
-    const bump = () => { if (live) setFontTick((x) => x + 1); };
-    fs.ready.then(bump, () => {});
-    fs.addEventListener?.("loadingdone", bump);
-    return () => { live = false; fs.removeEventListener?.("loadingdone", bump); };
-  }, []);
+  const fontTick = useFontTick();
   const nameKey = students.map((s) => s.name || `${s.no}번`).join("\n");
   const empty = max === 0;
   const fit: Fit = useMemo(() => {
