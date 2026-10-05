@@ -3,9 +3,8 @@ import "./styles.css";
 import React, { useEffect, useMemo, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
-import { RecordsPage } from "./pages/RecordsPage";
+import { QuickAdd, RecordsPage } from "./pages/RecordsPage";
 import { DraftPage } from "./pages/DraftPage";
-import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { MobilePage } from "./pages/MobilePage";
 import { Onboarding } from "./pages/Onboarding";
@@ -28,7 +27,7 @@ export default function App() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-      const map: Record<string, Page> = { "0": "records", "1": "records", "2": "draft", "3": "review", "4": "settings" };
+      const map: Record<string, Page> = { "0": "main", "1": "main", "2": "draft", "3": "draft", "4": "settings" };
       if (map[e.key]) { e.preventDefault(); setPage(map[e.key]); }
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
@@ -38,15 +37,16 @@ export default function App() {
   if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
   if (!onboarded) return <><Onboarding /><Toasts /></>;
 
+  // 화면은 넷: 현황판(기본) · 생기부 생성(초안 + 검토) · 설정 · 모바일 확인(테스트용). 옛 이름은 현황판/생성으로 보낸다
+  const view: Page = page === "today" || page === "records" ? "main" : page === "review" ? "draft" : page;
   return (
     <div className="app">
-      <Sidebar />
-      <main className="main" data-page={page}>
-        {(page === "today" || page === "records") && <RecordsPage />}
-        {page === "draft" && <DraftPage />}
-        {page === "review" && <ReviewPage />}
-        {page === "settings" && <SettingsPage />}
-        {page === "mobile" && <MobilePage />}
+      <main className="main one" data-page={view}>
+        <TopNav view={view} />
+        {view === "main" && <RecordsPage />}
+        {view === "draft" && <DraftPage />}
+        {view === "settings" && <SettingsPage />}
+        {view === "mobile" && <MobilePage />}
       </main>
       <Toasts />
       {inbox && <InboxModal />}
@@ -54,42 +54,48 @@ export default function App() {
   );
 }
 
-function Sidebar() {
-  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("nuga.sidebar") === "1"; } catch { return false; } });
-  const toggle = () => { const v = !collapsed; setCollapsed(v); try { localStorage.setItem("nuga.sidebar", v ? "1" : "0"); } catch { /* ignore */ } };
-  const page = useStore((s) => s.page);
+/**
+ * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 · ──── · 미반영 · +기록 · 저장 · 생기부 생성 · 설정.
+ * 교사가 매일 보는 것은 현황판 하나. 생기부 생성은 시즌에만 들어가는 문이다.
+ */
+function TopNav({ view }: { view: Page }) {
   const setPage = useStore((s) => s.setPage);
+  const doc = useStore((s) => s.doc);
   const sync = useStore((s) => s.syncStatus);
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
-  const items: { key: Page; label: string; icon: React.ComponentProps<typeof Icon>["name"] }[] = [
-    { key: "records", label: "누가기록", icon: "list" },
-    { key: "draft", label: "초안 작성", icon: "pen" },
-    { key: "review", label: "검토", icon: "check" },
-  ];
+  const flush = useStore((s) => s.flush);
+  const toast = useStore((s) => s.toast);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try { await flush(); toast({ text: "저장했습니다" }); }
+    finally { setTimeout(() => setSaving(false), 400); }
+  };
+  const exportJson = async () => {
+    const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
+    if (ok) toast({ text: "백업 파일로 내보냈습니다" });
+  };
   return (
-    <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
-      <div className="brand"><svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>{!collapsed && <>누가<span className="brand-en">NUGA</span></>}<button className="fold" onClick={toggle} title={collapsed ? "펼치기" : "접기"} aria-label="사이드바 접기"><Icon name={collapsed ? "right" : "left"} size={14} /></button></div>
-      {items.map((it) => (
-        <button key={it.key} className={`nav ${page === it.key || (it.key === "records" && page === "today") ? "active" : ""}`} onClick={() => setPage(it.key)} title={it.label}>
-          <Icon name={it.icon} /><span className="lbl">{it.label}</span>
-        </button>
-      ))}
-      {backlog > 0 && (
-        <button className="btn warn-outline sm side-backlog" onClick={() => openInbox({ backlog: true })} title="미뤄 둔 추천·보완 대기 기록">
-          <span className="lbl">미반영 </span><b className="num">{backlog}</b>
-        </button>
-      )}
-      <div className="spacer" />
-      <button className={`nav ${page === "mobile" ? "active" : ""}`} onClick={() => setPage("mobile")} title="모바일 확인 (테스트용)"><Icon name="phone" /><span className="lbl">모바일 확인</span></button>
-      <div className="syncbox">
-        <div className="st" title={sync.lastAt ? `마지막 ${sync.lastAt.slice(11, 16)}` : ""}>
-          <span className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
-          <span className="ellipsis lbl">{sync.state === "error" ? `오류 · ${sync.message}` : sync.message}</span>
-        </div>
-        <button className={`nav ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Icon name="gear" /><span className="lbl">설정</span></button>
-      </div>
-    </aside>
+    <header className="topnav">
+      <button className="brand" onClick={() => setPage("main")} title="현황판으로">
+        <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>
+        <span className="brand-txt">누가<span className="brand-en">NUGA</span></span>
+      </button>
+      <button className={`mini-link ${view === "mobile" ? "on" : ""}`} onClick={() => setPage(view === "mobile" ? "main" : "mobile")} title="폰 앱 화면을 PC에서 확인 (테스트용)"><Icon name="phone" size={11} />모바일 확인</button>
+      <AreaSwitcher />
+      <span className="sep" />
+      <span className="sync-dot" title={sync.state === "error" ? `동기화 오류 · ${sync.message}` : `${sync.message}${sync.lastAt ? ` · 마지막 ${sync.lastAt.slice(11, 16)}` : ""}`}>
+        <i className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
+      </span>
+      <button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="아직 처리하지 않은 추천·수동 기록">미반영 <b className="num">{backlog}</b></button>
+      <button className="btn" onClick={() => setAdding(true)} title="PC에서 바로 기록"><Icon name="plus" />기록</button>
+      <button className="btn" onClick={save} disabled={saving} title="지금까지의 변경을 저장 · 길게 보려면 백업(JSON)" onContextMenu={(e) => { e.preventDefault(); exportJson(); }}><Icon name="json" />{saving ? "저장 중" : "저장"}</button>
+      <button className={`btn ${view === "draft" ? "active" : ""}`} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부 생성</button>
+      <button className={`btn icon ${view === "settings" ? "active" : ""}`} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
+      {adding && <QuickAdd onClose={() => setAdding(false)} />}
+    </header>
   );
 }
 
@@ -111,15 +117,14 @@ export function TopBar({ title, titleSlot, center, onExcel, right }: { title: st
     const ok = await saveFile(`누가-백업-${nowIso().slice(0, 10)}.json`, toExportJson(doc, nowIso()), [{ name: "JSON", extensions: ["json"] }]);
     if (ok) toast({ text: "JSON 내보내기 완료" });
   };
+  void exportJson;
   return (
     <div className="topbar">
       {titleSlot ?? <h1>{title}</h1>}
-      <AreaSwitcher />
       {center}
       <span className="sep" />
       {right}
       {onExcel && <button className="btn" onClick={() => onExcel()}><Icon name="excel" />엑셀</button>}
-      <button className="btn" onClick={exportJson}><Icon name="json" />JSON</button>
     </div>
   );
 }

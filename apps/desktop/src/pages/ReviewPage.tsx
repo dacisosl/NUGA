@@ -10,7 +10,7 @@ import { AdherenceChip } from "./DraftPage";
 
 type Row = { s: Student; d: Draft | undefined; result: ReviewResult };
 
-export function ReviewPage() {
+export function ReviewPage({ tabs }: { tabs?: React.ReactNode }) {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const students = useClassStudents();
@@ -56,7 +56,7 @@ export function ReviewPage() {
 
   return (
     <>
-      <TopBar title="검토" onExcel={exportExcel} right={<><ViewToggles /><button className="btn primary" onClick={runReview}><Icon name="check" />{sel.size ? `선택 ${sel.size}명 검토` : "전체 검토"}</button></>} />
+      <TopBar title="생기부 검토" titleSlot={tabs} onExcel={exportExcel} right={<><ViewToggles /><button className="btn primary" onClick={runReview}><Icon name="check" />{sel.size ? `선택 ${sel.size}명 검토` : "전체 검토"}</button></>} />
       <Sheet>
       <ClassTabs extra={(c) => { const n = studentsOf(doc, c).filter((s) => { const d = draftOf(doc, c, s.no); return d?.text && d.review.result === "fix"; }).length; return n ? <span className="badge" style={{ marginLeft: 6 }}>{n}</span> : null; }} />
       <div className="content noscroll">

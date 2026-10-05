@@ -161,57 +161,16 @@ textarea { resize: vertical; }
 /* 밤은 고정된 한 층(.app::before)에 한 번만 그린다 → '밤의 틀 · 종이' 절 */
 .app { position: relative; isolation: isolate; display: flex; height: 100%; color: var(--ink); }
 /* 사이드바는 밤의 일부: 상자도 오른쪽 선도 없다 (종이 테두리가 경계) */
-.sidebar { position: relative; width: var(--sidebar); flex: none; display: flex; flex-direction: column; gap: 2px; padding: 18px 12px 14px; background: transparent; border-right: 0; color: var(--ink); transition: width .15s ease; }
-.sidebar::before { content: ""; position: absolute; left: -14px; bottom: 104px; width: 200px; height: 200px; pointer-events: none; opacity: .10; background: var(--stair-mark) no-repeat left bottom / contain; }
-.sidebar.collapsed::before { display: none; }
-.brand { display: flex; align-items: center; gap: 9px; padding: 6px 10px 22px; color: var(--ink); font-size: 20px; font-weight: 700; letter-spacing: -.04em; }
 .brand-mark { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--sky); stroke-width: 2.4; stroke-linecap: square; overflow: visible; }
 /* 계단 끝의 빛점 (랜딩의 연결선 끝점) — 작고 움직이지 않음 */
 .brand-mark circle { stroke: none; filter: drop-shadow(0 0 3px #7DA6DF); }
 .brand-en { font-size: 10px; font-weight: 600; letter-spacing: .22em; color: var(--ink3); margin-top: 3px; }
-.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
-.nav { position: relative; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px; border: none; background: transparent; text-align: left; font-weight: 500; color: var(--text2); width: 100%; }
-.sidebar .nav { height: 40px; padding: 0 12px; gap: 11px; color: var(--ink2); font-size: 14px; font-weight: 550; letter-spacing: -.015em; transition: background-color var(--d-1), color var(--d-1); }
-.sidebar .nav svg { color: var(--ink3); flex: none; }
-.sidebar .nav:hover { background: rgba(172,205,255,.06); color: var(--ink); }
 /* 지금 페이지 = 빛줄기가 닿은 유리 알약. 사이드바에서 유일하게 빛나는 것 */
-.sidebar .nav.active { color: var(--ink); font-weight: 650; background: linear-gradient(180deg, rgba(172,205,255,.14), rgba(172,205,255,.06)); box-shadow: inset 0 1px 0 rgba(234,242,255,.10), inset 0 0 0 1px rgba(172,205,255,.16); }
-.sidebar .nav.active svg { color: var(--sky); }
-.sidebar .nav.active::before { content: ""; position: absolute; left: -12px; top: 10px; bottom: 10px; width: 2px; border-radius: 0 2px 2px 0; background: var(--sky); box-shadow: 0 0 10px rgb(var(--glow-rgb) / .85); }
-.nav .k { font-size: 11px; color: var(--text3); margin-left: auto; }
-.nav .badge { margin-left: auto; }
-.sidebar .spacer { flex: 1; }
-.brand .fold { margin-left: auto; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--dline-2); background: transparent; color: var(--ink3); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-.brand .fold:hover { background: rgba(172,205,255,.08); color: var(--ink); }
-.sidebar.collapsed { width: 60px !important; min-width: 60px; flex-basis: 60px; padding: 18px 8px 14px; overflow: hidden; }
-.sidebar.collapsed .brand { flex-direction: column; padding: 4px 0 16px; justify-content: center; }
-.sidebar.collapsed .brand-mark { margin: 0 auto 8px; }
-.sidebar.collapsed .brand .dot { display: none; }
-.sidebar.collapsed .brand .fold { margin-left: 0; }
-.sidebar.collapsed .nav { justify-content: center; padding: 0; }
-.sidebar.collapsed .nav.active::before { left: -8px; }
-.sidebar.collapsed .lbl, .sidebar.collapsed .btn { display: none; }
-.sidebar.collapsed .syncbox .st { justify-content: center; padding: 6px 0; }
 /* 미반영: 어두운 바탕의 유일한 따뜻한 색 */
-.sidebar .btn.side-backlog { margin: 10px 2px 0; height: 34px; justify-content: space-between; padding: 0 12px; border-radius: var(--r-btn); background: rgb(var(--warm-rgb) / .10); border: 1px solid rgb(var(--warm-rgb) / .45); color: var(--amber-ink); font-weight: 600; }
-.sidebar .btn.side-backlog b { color: var(--ink); font-size: 14px; font-feature-settings: var(--num); }
-.sidebar .btn.side-backlog:hover { background: rgb(var(--warm-rgb) / .18); }
-.syncbox { position: relative; border-top: 0; padding-top: 12px; margin-top: 8px; }
-.syncbox::before { content: ""; position: absolute; top: 0; left: 8px; right: 8px; height: 1px; background: linear-gradient(90deg, transparent, var(--dline-2) 15%, var(--dline-2) 85%, transparent); }
-.syncbox .st { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; font-weight: 500; color: var(--ink3); }
-.syncbox .st .led { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink4); }
-.syncbox .st .led.on { background: var(--ok-led); box-shadow: 0 0 0 3px rgba(111,211,168,.16); }
-.syncbox .st .led.busy { background: var(--sky); animation: pulse 1.6s ease-in-out infinite; }
-.syncbox .st .led.err { background: var(--amber); }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0 var(--gutter) var(--gutter) 0; background: transparent; }
 /* 머리 띠 = 밤 위의 띠: 상자·흐림·선 없이, 큰 하늘빛 제목과 '01 ——' 쪽 번호 */
 .topbar { flex: none; display: flex; align-items: center; gap: 10px; min-height: var(--topbar-h); padding: 10px 16px 10px 20px; color: var(--ink); background: transparent; border: 0; }
 .topbar::before { flex: none; font-size: 11px; font-weight: 600; letter-spacing: .12em; color: var(--ink3); font-feature-settings: var(--num); padding-right: 34px; background: linear-gradient(var(--dline-3), var(--dline-3)) no-repeat right 4px center / 22px 1px; }
-.main:is([data-page=today], [data-page=records]) .topbar::before { content: "01"; }
-.main[data-page=draft] .topbar::before { content: "02"; }
-.main[data-page=review] .topbar::before { content: "03"; }
-.main[data-page=settings] .topbar::before { content: "04"; }
-.main[data-page=mobile] .topbar::before { content: "05"; }
 /* 제목은 움직이지 않는다 (페이지를 옮길 때마다 다시 재생되므로) */
 .topbar h1 { margin: 0; font-size: var(--fs-title); font-weight: var(--fw-title); letter-spacing: var(--tr-title); line-height: var(--lh-tight); color: var(--ink-display); white-space: nowrap; }
 .topbar .sep { flex: 1; }
@@ -1123,3 +1082,45 @@ body.resizing { cursor: col-resize; user-select: none; }
   .stag:not(.nob) { padding-right: 11px; }
   .stag.sm:not(.nob) { padding-right: 9px; }
 }
+
+
+/* =====================================================================
+   한 페이지 현황판 — 사이드바 없음, 상단 바 하나 (누가 · 영역 · 미반영 · +기록 · 저장 · 생기부 생성 · 설정)
+   ===================================================================== */
+.main.one { padding: 0 var(--gutter) var(--gutter); }
+.topnav { position: relative; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 12px 6px 6px; color: var(--ink); }
+.topnav .brand { position: relative; display: inline-flex; align-items: center; gap: 9px; padding: 0 4px; margin: 0; border: 0; background: none; color: var(--ink); font-size: 20px; font-weight: 700; letter-spacing: -.04em; cursor: pointer; }
+.topnav .brand-txt { display: inline-flex; align-items: baseline; gap: 6px; }
+.topnav .brand:hover .brand-mark { filter: drop-shadow(0 0 6px rgb(var(--glow-rgb) / .8)); }
+/* 로고 아래 작은 '모바일 확인' (테스트용) */
+.topnav .mini-link { position: absolute; left: calc(var(--gutter) + 36px); top: 50px; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border: 1px solid var(--dline-2); border-radius: 4px; background: rgba(8,20,34,.35); color: var(--ink3); font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
+.topnav .mini-link svg { color: inherit; }
+.topnav .mini-link:hover { color: var(--ink); border-color: var(--dline-3); }
+.topnav .mini-link.on { color: var(--sky); border-color: rgba(172,205,255,.5); }
+.topnav .sep { flex: 1; }
+.topnav .sync-dot { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 2px; }
+.topnav .sync-dot .led { width: 7px; height: 7px; border-radius: 50%; background: var(--ink4); }
+.topnav .sync-dot .led.on { background: var(--ok-led); box-shadow: 0 0 0 3px rgba(111,211,168,.16); }
+.topnav .sync-dot .led.busy { background: var(--sky); animation: pulse 1.6s ease-in-out infinite; }
+.topnav .sync-dot .led.err { background: var(--amber); }
+/* 상단 바의 버튼은 밤 위의 유리 단추 (dark-ground family) */
+.topnav .btn { height: 34px; }
+.topnav .btn.active { background: rgba(172,205,255,.16); border-color: rgba(172,205,255,.45); color: #fff; box-shadow: inset 0 1px 0 rgba(234,242,255,.12); }
+.topnav .btn.active svg { color: var(--sky); }
+.topnav .area-list { margin-left: 18px; }
+/* 두 번째 줄(페이지 머리 띠)은 더 낮게 */
+.main.one .topbar { min-height: 50px; padding-top: 2px; padding-bottom: 8px; }
+.main.one .topbar::before { content: none !important; }
+.main.one .topbar h1 { font-size: 20px; }
+@media (max-width: 1100px) {
+  .topnav { flex-wrap: wrap; row-gap: 8px; }
+  .topnav .mini-link { position: static; }
+  .topnav .sep { flex-basis: 100%; height: 0; }
+}
+
+/* 알림 모달 단순 보기: 추천 문구가 주인공, 근거는 [자세히] */
+.ib-lead { font-size: 14.5px; font-weight: 600; }
+.ib-lead-txt { font-size: 14.5px; font-weight: 600; line-height: 1.5; color: var(--text); cursor: pointer; padding: 2px 0; }
+.ib-lead-txt:hover { color: var(--accent); }
+.ib-detail { height: 22px; padding: 0 6px; font-size: 11.5px; color: var(--text2); }
+.ib-cands > .muted { padding: 2px 0 2px; }

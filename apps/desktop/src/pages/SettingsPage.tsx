@@ -917,6 +917,21 @@ function DisplaySection() {
   return (
     <>
       <div className="card pad">
+        <h3>처음에 보이는 정보</h3>
+        <div className="arrival-opts">
+          {([
+            ["simple", "단순하게 (권장)", "알림 팝업에 추천 문구와 학생 명단만 보입니다. 발언 원문·앞뒤 문맥·판단 기준·카테고리는 카드의 [자세히]를 눌러 봅니다. 수동 기록도 메모와 입력칸만 보이고, 수업 발언 후보는 [자세히]에 있습니다."],
+            ["full", "처음부터 자세히", "근거가 모두 펼쳐진 채로 열립니다. 발언 원문, 앞뒤 문맥, 판단 기준, 카테고리 선택이 바로 보입니다."],
+          ] as const).map(([k, title, desc]) => (
+            <label key={k} className={`arrival-opt ${(s.options.detail || "simple") === k ? "on" : ""}`}>
+              <input type="radio" name="detail" checked={(s.options.detail || "simple") === k} onChange={() => setSettings((x) => ({ ...x, options: { ...x.options, detail: k } }))} />
+              <span><b>{title}</b><span className="muted small block">{desc}</span></span>
+            </label>
+          ))}
+        </div>
+        <div className="muted small" style={{ marginTop: 8 }}>어느 쪽이든 카드마다 [자세히]/[접기]로 그때그때 펼치고 접을 수 있습니다. 이 설정은 모든 영역에 공통입니다.</div>
+      </div>
+      <div className="card pad">
         <h3>학생 이름표</h3>
         <div className="col" style={{ gap: 12 }}>
           <Switch on={badge} onChange={(v) => setSettings((x) => ({ ...x, options: { ...x.options, showLevelBadge: v } }))} label={badge ? "도달 정도 숫자 표시 — 이름표 오른쪽 위 숫자를 누르면 조정" : "도달 정도 숫자 숨김 — 이름표 바탕색으로만 표시"} />
