@@ -1,7 +1,7 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  WEEKDAY_LABELS, dateKey, fmtHM, lessonFor, lessonLabel, nowIso, resolveNow, slotsForWeekday, weekdayOf,
-  type Category, type LessonSlot, type NugaDoc, type NugaRecord, type RecordSource,
+  CATEGORY_NONE, WEEKDAY_LABELS, dateKey, fmtHM, lessonFor, lessonLabel, nowIso, resolveNow, slotsForWeekday, weekdayOf,
+  type Category, type LessonSlot, type NugaDoc, type NugaRecord, type RecordCategory, type RecordSource,
 } from "@nuga/core";
 import { Sheet, TopBar } from "../App";
 import { arrivalModeOf, classList, studentsOf, useStore } from "../store";
@@ -13,11 +13,13 @@ import "./mobile.css";
  * 모바일 확인 (테스트용): 안드로이드 폰 앱(android/mobile)의 화면과 동작을 PC에서 그대로 재현한다.
  * 폰에서 저장한 기록은 실제로 이 PC 기록에 들어가고(전송 → 도착), 녹음을 멈추면 합성 수업 스크립트가
  * 도착해 추천 카드가 만들어진다. 화면 구성은 NugaRoot·HomeScreen·NumberSheet·RecordsScreen·RecordingsScreen·SettingsScreen·NugaWidget 과 맞춘다.
+ * 기록은 [기록] 버튼 → 번호 릴 → 저장 (카테고리 단계 없음, 0=미정으로 보내고 PC가 정한다).
  * 모양은 ui/theme(Theme.kt · Glass.kt)의 '밤의 틀 · 빛나는 종이'를 mobile.css 가 그대로 옮긴다.
  */
 
 type Tab = "home" | "records" | "rec" | "settings";
-interface SheetState { cls: string; category: Category; no: number | null; memo: string; source: RecordSource }
+/** 기록 시트 상태 (MainViewModel.SheetState): 카테고리는 고르지 않는다 — 늘 0(미정), PC가 보충할 때 정한다 */
+interface SheetState { cls: string; category: RecordCategory; no: number | null; memo: string; source: RecordSource }
 interface Ev { at: string; text: string; kind?: "pc" | "phone" }
 type Next = { slot: LessonSlot; date: Date } | null;
 
@@ -29,6 +31,10 @@ const atMin = (day: Date, hm: string, plus = 0) => { const [h, m] = hm.split(":"
 const toLocalInput = (d: Date) => `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
 /** 명렬표 이름 (폰의 cfg.nameOf 처럼 없으면 null) */
 const nameOf = (doc: NugaDoc, cls: string, no: number) => doc.students.find((s) => s.class === cls && s.no === no)?.name || null;
+/** 반 인원 (Config.classSize): 명렬표 수와 설정의 반 크기 중 큰 쪽 */
+const classSize = (doc: NugaDoc, cls: string) => Math.max(studentsOf(doc, cls).length, doc.settings.classes.find((c) => c.class === cls)?.size || 0);
+/** 카테고리가 정해졌는지 (MainViewModel.hasCategory): 1..4 만. 0(미정)은 칩을 붙이지 않는다 */
+const hasCategory = (c: RecordCategory): c is Category => c >= 1 && c <= 4;
 
 /** 다음 수업 (오늘 남은 것 → 이후 7일) */
 function nextSlot(doc: NugaDoc, now: Date): Next {
@@ -53,8 +59,11 @@ function sublineOf(doc: NugaDoc, now: Date, current: LessonSlot | null, next: Ne
   return null;
 }
 
-/* 폰 앱이 쓰는 머티리얼 아이콘 (Icons.Filled.*, 24 격자) */
+/* 폰 앱이 쓰는 머티리얼 아이콘 (Icons.Filled.* · Rounded.Edit · Outlined.EditNote, 24 격자) */
 const MI = {
+  edit: "M3 17.46v3.04c0 .28.22.5.5.5h3.04c.13 0 .26-.05.35-.15L17.81 9.94l-3.75-3.75L3.15 17.1c-.1.1-.15.22-.15.36zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+  pencil: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+  editNote: "M3 10h11v2H3v-2zm0-2h11V6H3v2zm0 8h7v-2H3v2zm15.01-3.13.71-.71c.39-.39 1.02-.39 1.41 0l.71.71c.39.39.39 1.02 0 1.41l-.71.71-2.12-2.12zm-.71.71-5.3 5.3V21h2.12l5.3-5.3-2.12-2.12z",
   home: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
   list: "M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z",
   mic: "M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z",
@@ -102,7 +111,6 @@ export function MobilePage() {
   const current = info.current;
   const next = current ? null : nextSlot(doc, now);
   const classes = classList(doc);
-  const cats = doc.settings.categories.slice(0, 4);
 
   // 시각 바꾸기: 앞뒤 일주일의 수업 시간
   const presets = useMemo(() => {
@@ -115,9 +123,17 @@ export function MobilePage() {
     return out;
   }, [doc.settings.timetable, doc.settings.periods]);
 
-  const openSheet = (p: { category?: Category; cls?: string; source?: RecordSource }) => {
+  /** 릴 시작 번호 (MainViewModel.loadReelStart): PC 설정 '번호 릴 시작'이 last 면 그 반에서 마지막으로 기록한 번호, 아니면 1번 */
+  const reelStart = (cls: string) => {
+    const size = Math.max(classSize(doc, cls), 1);
+    if (doc.settings.options?.reelStart !== "last") return 1;
+    const last = doc.records.filter((r) => r.class === cls).sort((a, b) => b.time.localeCompare(a.time))[0]?.no;
+    return Math.min(Math.max(last || 1, 1), size);
+  };
+  /** 기록 시트 열기 (MainViewModel.openSheet): 반은 지금(또는 다음) 수업, 번호는 릴 시작 번호. 카테고리는 늘 0(미정) */
+  const openSheet = (p: { cls?: string; source?: RecordSource }) => {
     const cls = p.cls || current?.class || next?.slot.class || classes[0] || "";
-    setSheet({ cls, category: p.category ?? cats[0]?.key ?? 1, no: null, memo: "", source: p.source || "phone" });
+    setSheet({ cls, category: CATEGORY_NONE, no: reelStart(cls), memo: "", source: p.source || "phone" });
   };
 
   /** 폰 저장 → (전송 1.2초) → PC 도착. 보완을 쓰면 보완 대기로 들어가 알림 모달이 뜬다 */
@@ -129,8 +145,8 @@ export function MobilePage() {
       class: sheet.cls, no: sheet.no, category: sheet.category, time: nowIso(now), lesson: lessonFor(doc.settings.progress, sheet.cls, nowIso(now)),
       memo, voiceMemo: null, note: supp ? "" : memo, status: supp ? "pending" : "confirmed", source: sheet.source,
     });
-    // 알림 띠 글자는 폰과 같게: '저장 · 2-3 · 14번 · 질문'
-    const label = `${sheet.cls} · ${sheet.no}번 · ${cats.find((c) => c.key === sheet.category)?.label || ""}`;
+    // 알림 띠 글자는 폰과 같게: '저장 · 2-3 · 14번' (카테고리는 미정이라 붙지 않는다)
+    const label = `${sheet.cls} · ${sheet.no}번`;
     setSheet(null);
     showSnack(`저장 · ${label}`, rec.id);
     log(`폰 저장 · ${label}${memo ? ` · “${memo}”` : ""} → 전송 대기`, "phone");
@@ -181,11 +197,11 @@ export function MobilePage() {
               <div className="mp-status"><b>{hhmm(now)}</b><span className="grow" /><MIcon name="signal" size={15} /><MIcon name="battery" size={16} /></div>
               {view === "widget" ? (
                 <WidgetHome doc={doc} now={now} current={current} next={next} todayCount={todayRecs.length}
-                  onCategory={(k) => openSheet({ category: k, source: "widget" })} onOpenApp={() => setView("app")} onRecord={() => { setView("app"); setTab("rec"); }} />
+                  onCapture={() => openSheet({ source: "widget" })} onOpenApp={() => setView("app")} onRecord={() => { setView("app"); setTab("rec"); }} />
               ) : (
                 <>
                   <div className={`mp-screen ${tab}`}>
-                    {tab === "home" && <HomeTab doc={doc} now={now} current={current} next={next} today={info.today} todayRecs={todayRecs} showNames={showNames} sending={sending} onCategory={(k, cls) => openSheet({ category: k, cls })} onSlot={(cls) => openSheet({ cls })} />}
+                    {tab === "home" && <HomeTab doc={doc} now={now} current={current} next={next} today={info.today} todayRecs={todayRecs} showNames={showNames} sending={sending} onRecord={(cls) => openSheet({ cls })} onSlot={(cls) => openSheet({ cls })} />}
                     {tab === "records" && <RecordsTab doc={doc} recs={phoneRecs} showNames={showNames} sending={sending} onEdit={setEditing} />}
                     {tab === "rec" && <RecordingTab doc={doc} now={now} current={current} log={log} onArrive={(id) => { if (popup) { openInbox({ transcripts: [id] }); log("알림 모달(쉬는 시간 기록) 열림", "pc"); } }} />}
                     {tab === "settings" && <SettingsTab doc={doc} showNames={showNames} setShowNames={setShowNames} alarm={alarm} setAlarm={setAlarm} onSync={() => { showSnack("동기화 완료"); log("지금 동기화 · 보낼 기록 없음", "phone"); }} />}
@@ -202,7 +218,7 @@ export function MobilePage() {
               {snack && (
                 <div className="mp-snack" role="status"><span className="grow">{snack.text}</span>{snack.id && <button onClick={() => undo(snack.id!)}>취소</button>}</div>
               )}
-              {sheet && <NumberSheet doc={doc} sheet={sheet} setSheet={setSheet} showNames={showNames} onSave={saveSheet} />}
+              {sheet && <NumberSheet doc={doc} sheet={sheet} setSheet={setSheet} showNames={showNames} reelStart={reelStart} onSave={saveSheet} />}
               {editing && (
                 <EditDialog doc={doc} rec={editing} onClose={() => setEditing(null)}
                   onSave={(memo) => { updateRecord(editing.id, { memo }); setEditing(null); log("폰에서 메모 수정 → PC 반영", "phone"); }}
@@ -214,7 +230,7 @@ export function MobilePage() {
               <h3>이렇게 확인하세요</h3>
               <ol className="mp-steps">
                 <li><b>폰 시각</b>에서 수업 시간을 고르면 홈 화면이 “지금” 수업으로 바뀝니다.</li>
-                <li>홈의 카테고리 버튼 → 번호를 누르고 <b>저장</b>. 5초 안에 <b>취소</b>할 수 있습니다.</li>
+                <li>홈의 <b>기록</b> 버튼 → 번호 릴을 굴려(휠·끌기·누르기) 고르고 <b>저장</b>. 5초 안에 <b>취소</b>할 수 있습니다. 카테고리는 고르지 않습니다(미정 → PC에서 정함).</li>
                 <li>1초 뒤 PC에 도착해 <b>쉬는 시간 기록</b> 알림 팝업이 뜹니다. 팝업에서 저장해야 오늘 기록에 들어갑니다.</li>
                 <li><b>녹음</b> 탭에서 녹음 시작 → 정지하면 합성 수업 스크립트가 도착하고 자동 추천이 만들어집니다.</li>
                 <li>기록 탭에서 메모를 고치거나 지우면 PC에도 반영됩니다.</li>
@@ -270,9 +286,9 @@ function Field({ label, value, onChange, rows = 1, night, autoFocus, err, childr
 
 /* ---------------- 홈 (HomeScreen.kt) ---------------- */
 
-function HomeTab({ doc, now, current, next, today, todayRecs, showNames, sending, onCategory, onSlot }: {
+function HomeTab({ doc, now, current, next, today, todayRecs, showNames, sending, onRecord, onSlot }: {
   doc: NugaDoc; now: Date; current: LessonSlot | null; next: Next; today: LessonSlot[]; todayRecs: NugaRecord[];
-  showNames: boolean; sending: Set<string>; onCategory: (k: Category, cls: string) => void; onSlot: (cls: string) => void;
+  showNames: boolean; sending: Set<string>; onRecord: (cls: string) => void; onSlot: (cls: string) => void;
 }) {
   const slot = current || next?.slot || null;
   const sub = (s: LessonSlot, d: Date) => lessonLabel(lessonFor(doc.settings.progress, s.class, dateKey(d)));
@@ -283,7 +299,7 @@ function HomeTab({ doc, now, current, next, today, todayRecs, showNames, sending
   return (
     <div className="mp-pad">
       <Header index="01" title={koDate(now)}><span className="mp-today">오늘 <b>{todayRecs.length}</b>건</span></Header>
-      {/* 화면의 초점 하나: 지금 수업이면 하늘빛 테두리로 켜진 카드 */}
+      {/* 화면의 초점 하나: 지금 수업이면 하늘빛 테두리로 켜진 카드. 아래에 큰 [기록] 버튼 하나 → 번호 릴 */}
       <div className={`mp-card mp-lesson ${current ? "lit" : ""}`}>
         <div className="mp-lhead">
           <div className="grow">
@@ -292,8 +308,9 @@ function HomeTab({ doc, now, current, next, today, todayRecs, showNames, sending
           </div>
           {slot && <Marker now={!!current} />}
         </div>
-        <div className="mp-cats">
-          {doc.settings.categories.slice(0, 4).map((c) => <button key={c.key} className={`mp-btn cat c${c.key}`} onClick={() => onCategory(c.key, cls)}>{c.label}</button>)}
+        {/* 수업 중 한 번에 누르는 [기록] (CaptureButton): 화면에서 가장 밝은 것 하나. 카테고리 없이 번호 릴로 바로 간다 */}
+        <div className="mp-cap">
+          <button className="mp-capture" onClick={() => onRecord(cls)} title="번호 고르기"><MIcon name="edit" size={22} />기록</button>
         </div>
       </div>
       {today.length > 0 && <>
@@ -332,24 +349,39 @@ function RecRow({ r, doc, showNames, sending, onClick }: { r: NugaRecord; doc: N
         <span className="mp-rec-h"><b>{r.class} · {r.no}번</b>{name && <span className="mp-name">{name}</span>}{r.status === "pending" && <i className="mp-dot warn" title="보완 대기" />}</span>
         {memo && <span className="mp-meta block ellipsis">{memo}</span>}
       </span>
-      <span className={`mp-chip c${r.category}`}>{cat?.label || r.category}</span>
+      {/* 카테고리는 PC가 정했을 때(1..4)만. 0(미정)은 칩 없이 */}
+      {hasCategory(r.category) && <span className={`mp-chip c${r.category}`}>{cat?.label || r.category}</span>}
       {sending && <i className="mp-dot sync" title="전송 대기" />}
     </div>
   );
 }
 
-/* ---------------- 번호 입력 시트 (NumberSheet.kt) ---------------- */
+/* ---------------- 기록 시트 (NumberSheet.kt): 반 · 번호 릴 · [메모] [저장] ---------------- */
 
 type SpeechRec = { lang: string; interimResults: boolean; onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onerror: (e: { error: string }) => void; onend: () => void; start: () => void; stop: () => void };
 
-function NumberSheet({ doc, sheet, setSheet, showNames, onSave }: { doc: NugaDoc; sheet: SheetState; setSheet: (s: SheetState | null) => void; showNames: boolean; onSave: () => void }) {
+/** 릴 한 칸 높이와 한 번에 보이는 칸 수 (가운데 하나 + 위아래 둘씩) — NumberSheet.kt ReelRow · ReelRows */
+const REEL_ROW = 56;
+const REEL_ROWS = 5;
+const clampRow = (i: number, count: number) => Math.min(Math.max(i, 0), count - 1);
+
+/**
+ * 기록 시트: 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
+ * 밤의 시트: 위 테두리에 빛줄기, 오른쪽 위 번짐. 번호는 세로 릴 — 굴리면 한 칸씩 딸깍 멈추고, 가운데 유리 판 위의 숫자가 고른 번호다.
+ * 메모·음성 메모는 저장 옆 작은 [메모] 버튼을 눌렀을 때만 펼친다.
+ */
+function NumberSheet({ doc, sheet, setSheet, showNames, reelStart, onSave }: {
+  doc: NugaDoc; sheet: SheetState; setSheet: React.Dispatch<React.SetStateAction<SheetState | null>>; showNames: boolean; reelStart: (cls: string) => number; onSave: () => void;
+}) {
   const classes = classList(doc);
-  const students = studentsOf(doc, sheet.cls);
-  const size = Math.max(students.length, doc.settings.classes.find((c) => c.class === sheet.cls)?.size || 0);
+  const size = Math.max(classSize(doc, sheet.cls), 1);
+  const withNames = showNames && doc.students.some((s) => s.class === sheet.cls);
+  const [memoOpen, setMemoOpen] = useState(sheet.memo !== "");
+  const [focusMemo, setFocusMemo] = useState(false);
   const [listening, setListening] = useState(false);
   const [err, setErr] = useState("");
   const recRef = useRef<SpeechRec | null>(null);
-  const set = (p: Partial<SheetState>) => setSheet({ ...sheet, ...p });
+  const set = (p: Partial<SheetState>) => setSheet((s) => (s ? { ...s, ...p } : s));
   useEffect(() => () => recRef.current?.stop(), []);
   const mic = () => {
     if (listening) { recRef.current?.stop(); return; }
@@ -357,41 +389,138 @@ function NumberSheet({ doc, sheet, setSheet, showNames, onSave }: { doc: NugaDoc
     const Ctor = W.SpeechRecognition || W.webkitSpeechRecognition;
     if (!Ctor) { setErr("이 브라우저는 음성 입력을 지원하지 않습니다"); return; }
     const r = new Ctor(); r.lang = "ko-KR"; r.interimResults = false;
-    r.onresult = (e) => { const t = e.results[0]?.[0]?.transcript || ""; if (t) setSheet({ ...sheet, memo: (sheet.memo ? sheet.memo + " " : "") + t }); };
+    // 폰의 appendSheetMemo 처럼 뒤에 이어 붙인다
+    r.onresult = (e) => { const t = e.results[0]?.[0]?.transcript || ""; if (t) setSheet((s) => (s ? { ...s, memo: s.memo.trim() ? `${s.memo.trimEnd()} ${t}` : t } : s)); };
     r.onerror = (e) => setErr(e.error === "not-allowed" ? "마이크 권한 필요" : `음성 오류: ${e.error}`);
     r.onend = () => setListening(false);
     recRef.current = r; setErr(""); setListening(true); r.start();
   };
+  const toggleMemo = () => {
+    const open = !memoOpen;
+    setMemoOpen(open);
+    if (open) setFocusMemo(true); else recRef.current?.stop();
+  };
   return (
     <div className="mp-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) setSheet(null); }}>
-      {/* 밤의 시트: 위 테두리에 빛줄기, 오른쪽 위 번짐. 고른 번호 하나만 카테고리 색으로 켜진다 */}
-      <div className="mp-sheet" role="dialog" aria-modal="true" aria-label="번호 입력">
+      <div className="mp-sheet" role="dialog" aria-modal="true" aria-label="기록">
+        {/* 반: 여러 반이면 칩(지금 수업 반이 켜진 채로 열린다), 한 반이면 큰 이름. 오른쪽에 인원 */}
         <div className="mp-sheet-top">
-          {classes.length > 1
-            ? classes.map((c) => <button key={c} className={`mp-nchip cls ${c === sheet.cls ? "on" : ""}`} aria-pressed={c === sheet.cls} onClick={() => set({ cls: c, no: null })}>{c}</button>)
-            : <span className="mp-sheet-cls">{sheet.cls}</span>}
+          {classes.length > 1 ? (
+            <div className="mp-sheet-classes">
+              {classes.map((c) => <button key={c} className={`mp-nchip cls ${c === sheet.cls ? "on" : ""}`} aria-pressed={c === sheet.cls} onClick={() => { if (c !== sheet.cls) set({ cls: c, no: reelStart(c) }); }}>{c}</button>)}
+            </div>
+          ) : <span className="mp-sheet-cls">{sheet.cls}</span>}
           <span className="mp-sheet-n">{size}명</span>
         </div>
-        <div className="mp-sheet-cats">
-          {doc.settings.categories.slice(0, 4).map((c) => (
-            <button key={c.key} className={`mp-nchip cat c${c.key} ${sheet.category === c.key ? "on" : ""}`} aria-pressed={sheet.category === c.key} onClick={() => set({ category: c.key })}><i className="sw" />{c.label}</button>
-          ))}
+        {/* 번호 릴: 반을 바꾸면 새로 만든다 (key) */}
+        <NumberReel key={`${sheet.cls}:${size}`} count={size} initial={clampRow((sheet.no ?? 1) - 1, size) + 1} withNames={withNames}
+          nameOf={(n) => (showNames ? nameOf(doc, sheet.cls, n) : null)} onSelect={(no) => set({ no })} />
+        {/* 메모(선택): 펼쳤을 때만. 마이크는 칸 안 오른쪽 */}
+        {memoOpen && (
+          <Field night label={listening ? "듣는 중…" : "메모"} value={sheet.memo} onChange={(memo) => set({ memo })} err={err} autoFocus={focusMemo}>
+            <button className={`mp-mic ${listening ? "on" : ""}`} onClick={mic} title="음성" aria-label="음성"><MIcon name={listening ? "micOff" : "mic"} /></button>
+          </Field>
+        )}
+        {/* [메모] [저장 · N번]: 저장이 화면의 주인공(ButtonTone.Lit), 메모는 옆의 작은 유리 버튼 */}
+        <div className="mp-sheet-acts">
+          <button className={`mp-memo ${memoOpen ? "open" : ""} ${!memoOpen && sheet.memo.trim() ? "has" : ""}`} role="switch" aria-checked={memoOpen} onClick={toggleMemo}><MIcon name="editNote" size={20} />메모</button>
+          <button className="mp-btn night lit save" disabled={!sheet.no} onClick={onSave}>{sheet.no ? `저장 · ${sheet.no}번` : "저장"}</button>
         </div>
-        <div className="mp-grid">
-          {Array.from({ length: size }, (_, i) => i + 1).map((n) => {
-            const name = showNames ? nameOf(doc, sheet.cls, n) : null;
-            const on = sheet.no === n;
-            return (
-              <button key={n} className={`mp-plate c${sheet.category} ${on ? "on" : ""} ${name ? "named" : ""}`} aria-pressed={on} onClick={() => set({ no: on ? null : n })}>
-                <b>{n}</b>{name && <span>{name}</span>}
-              </button>
-            );
-          })}
-        </div>
-        <Field night label={listening ? "듣는 중…" : "메모"} value={sheet.memo} onChange={(memo) => set({ memo })} err={err}>
-          <button className={`mp-mic ${listening ? "on" : ""}`} onClick={mic} title="음성" aria-label="음성"><MIcon name={listening ? "micOff" : "mic"} /></button>
-        </Field>
-        <button className={`mp-btn cat night save c${sheet.category}`} disabled={!sheet.no} onClick={onSave}>{sheet.no ? `저장 · ${sheet.no}번` : "저장"}</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 세로 번호 릴 1..count (NumberSheet.kt NumberReel). 위아래 두 칸씩 여백을 두어 1번과 마지막 번호도 가운데에 설 수 있다.
+ * 휠·끌기로 굴리면 가장 가까운 칸에 딸깍 멈추고(scroll-snap, 끄는 동안은 끄고 손을 떼면 굴려 맞춘다), 가운데 칸이 바뀔 때마다 [onSelect].
+ * 다른 칸을 누르면 그 번호가 가운데로 굴러온다. 가운데에서 멀수록 작고 흐리다 (재렌더 없이 스크롤마다 style 로 칠한다).
+ * [initial]은 처음 한 번만 읽는다. 밖에서 번호를 바꾸려면 key 로 릴을 새로 만든다.
+ */
+function NumberReel({ count, initial, nameOf: name, withNames, onSelect }: {
+  count: number; initial: number; nameOf: (n: number) => string | null; withNames: boolean; onSelect: (n: number) => void;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const rows = useRef<(HTMLButtonElement | null)[]>([]);
+  const report = useRef(onSelect);
+  report.current = onSelect;
+  const reported = useRef(initial);
+  const raf = useRef(0);
+  const drag = useRef<{ y: number; top: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);
+  const snapTimer = useRef<number>();
+
+  /** 가운데에 선 칸(소수)으로 각 칸의 크기·투명도를 칠한다: 0 → 1.0·1.0, 1 → 0.74·0.58, 2 → 0.56·0.30. 가운데 칸이 바뀌면 알린다 */
+  const paint = () => {
+    const el = scroller.current;
+    if (!el) return;
+    const centre = el.scrollTop / REEL_ROW;
+    rows.current.forEach((r, i) => {
+      if (!r) return;
+      const d = Math.min(Math.abs(i - centre), 2.5);
+      const s = d <= 1 ? 1 - 0.26 * d : 0.74 - 0.18 * (d - 1);
+      const a = d <= 1 ? 1 - 0.42 * d : Math.max(0.58 - 0.28 * (d - 1), 0);
+      r.style.transform = `scale(${s.toFixed(3)})`;
+      r.style.opacity = a.toFixed(3);
+    });
+    const n = clampRow(Math.round(centre), count) + 1;
+    if (n !== reported.current) {
+      reported.current = n;
+      rows.current.forEach((r, i) => r?.setAttribute("aria-selected", String(i + 1 === n)));
+      report.current(n);
+    }
+  };
+  const schedule = () => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(paint); };
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollTop = (initial - 1) * REEL_ROW;
+    paint();
+    return () => { cancelAnimationFrame(raf.current); window.clearTimeout(snapTimer.current); };
+  }, []); // 처음 한 번만: initial 은 마운트 때만 읽는다 (바꾸려면 key 로 새로 만든다)
+  const roll = (i: number) => scroller.current?.scrollTo({ top: clampRow(i, count) * REEL_ROW, behavior: "smooth" });
+
+  // 마우스로 끌어 굴리기: 4px 넘게 움직이면 끌기로 보고 스냅을 끈다. 손을 떼면 가장 가까운 칸으로 굴린 뒤 스냅을 되살린다 (터치는 브라우저가 알아서)
+  const down = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.pointerType === "touch" || !scroller.current) return;
+    window.clearTimeout(snapTimer.current);
+    dragged.current = false;
+    drag.current = { y: e.clientY, top: scroller.current.scrollTop, moved: false };
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current; const el = scroller.current;
+    if (!d || !el) return;
+    const dy = e.clientY - d.y;
+    if (!d.moved) {
+      if (Math.abs(dy) < 4) return;
+      d.moved = true; el.classList.add("drag"); el.setPointerCapture(e.pointerId);
+    }
+    el.scrollTop = d.top - dy;
+  };
+  const up = (e: React.PointerEvent) => {
+    const d = drag.current; const el = scroller.current;
+    drag.current = null;
+    if (!d?.moved || !el) return;
+    dragged.current = true;
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    roll(Math.round(el.scrollTop / REEL_ROW));
+    snapTimer.current = window.setTimeout(() => el.classList.remove("drag"), 360);
+  };
+
+  return (
+    <div className="mp-reel" style={{ height: REEL_ROW * REEL_ROWS }}>
+      {/* 가운데 유리 판: 고른 번호가 서는 자리 (움직이지 않는다) */}
+      <div className="mp-reel-plate" aria-hidden />
+      <div ref={scroller} className="mp-reel-scroll" role="listbox" aria-label="번호" style={{ padding: `${REEL_ROW * ((REEL_ROWS - 1) / 2)}px 0` }}
+        onScroll={schedule} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+        {Array.from({ length: count }, (_, i) => {
+          const n = i + 1;
+          return (
+            <button key={n} ref={(el) => { rows.current[i] = el; }} type="button" role="option" aria-selected={n === initial} title={`${n}번 고르기`}
+              className={`mp-reel-row ${withNames ? "named" : ""}`} onClick={() => { if (!dragged.current) roll(i); }}>
+              <b>{n}</b>{withNames && <span>{name(n) || ""}</span>}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -400,8 +529,10 @@ function NumberSheet({ doc, sheet, setSheet, showNames, onSave }: { doc: NugaDoc
 /* ---------------- 기록 (RecordsScreen.kt) ---------------- */
 
 function RecordsTab({ doc, recs, showNames, sending, onEdit }: { doc: NugaDoc; recs: NugaRecord[]; showNames: boolean; sending: Set<string>; onEdit: (r: NugaRecord) => void }) {
-  const [filter, setFilter] = useState<Category | 0>(0);
-  const list = (filter ? recs.filter((r) => r.category === filter) : recs).slice(0, 150);
+  // 0 = 전체, -1 = 미정(분류 없이 온 기록), 1..4 = 카테고리 (RecordsScreen.kt 와 같음)
+  const [filter, setFilter] = useState<Category | 0 | -1>(0);
+  const hasNone = recs.some((r) => !hasCategory(r.category));
+  const list = (filter === -1 ? recs.filter((r) => !hasCategory(r.category)) : filter ? recs.filter((r) => r.category === filter) : recs).slice(0, 150);
   const days = useMemo(() => { const m = new Map<string, NugaRecord[]>(); for (const r of list) { const k = dateKey(r.time); m.set(k, [...(m.get(k) || []), r]); } return [...m]; }, [list]);
   return (
     <div className="mp-recs">
@@ -409,6 +540,7 @@ function RecordsTab({ doc, recs, showNames, sending, onEdit }: { doc: NugaDoc; r
       {/* 필터: 밤 위 칩. '전체'는 밝은 판, 카테고리는 그 색으로 켜진다 */}
       <div className="mp-filters">
         <button className={`mp-nchip ${filter === 0 ? "on" : ""}`} aria-pressed={filter === 0} onClick={() => setFilter(0)}>전체</button>
+        {hasNone && <button className={`mp-nchip ${filter === -1 ? "on" : ""}`} aria-pressed={filter === -1} onClick={() => setFilter(filter === -1 ? 0 : -1)}>미정</button>}
         {doc.settings.categories.slice(0, 4).map((c) => (
           <button key={c.key} className={`mp-nchip cat c${c.key} ${filter === c.key ? "on" : ""}`} aria-pressed={filter === c.key} onClick={() => setFilter(filter === c.key ? 0 : c.key)}><i className="sw" />{c.label}</button>
         ))}
@@ -433,7 +565,8 @@ function EditDialog({ doc, rec, onClose, onSave, onDelete }: { doc: NugaDoc; rec
   return (
     <div className="mp-scrim center" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="mp-dialog" role="dialog" aria-modal="true">
-        <div className="mp-dtitle">{rec.class} · {rec.no}번 · {doc.settings.categories.find((c) => c.key === rec.category)?.label}</div>
+        {/* 카테고리는 PC가 정했을 때(1..4)만 붙인다. 0(미정)은 반·번호만 */}
+        <div className="mp-dtitle">{[rec.class, `${rec.no}번`, hasCategory(rec.category) ? doc.settings.categories.find((c) => c.key === rec.category)?.label : null].filter(Boolean).join(" · ")}</div>
         <div className="mp-dbody">
           <div className="mp-meta">{koDate(new Date(rec.time))} {fmtHM(rec.time)}</div>
           {rec.voiceMemo?.transcript && <div className="mp-meta">음성: {rec.voiceMemo.transcript}</div>}
@@ -554,7 +687,7 @@ function SettingsTab({ doc, showNames, setShowNames, alarm, setAlarm, onSync }: 
       <div className="mp-sec">옵션</div>
       <div className="mp-card">
         <Toggle title="이름 표시" sub={roster ? `명렬표 ${roster}명` : "명렬표 없음"} on={showNames && roster > 0} disabled={!roster} set={setShowNames} />
-        <Toggle title="수업 시작 알림" sub="카테고리 4버튼" on={alarm} set={setAlarm} />
+        <Toggle title="수업 시작 알림" sub="[기록] 버튼 → 번호" on={alarm} set={setAlarm} />
         <Toggle title="위젯 안내" sub={hint ? "홈 화면 길게 누르기 → 위젯 → 누가 4×2" : ""} on={hint} set={setHint} />
       </div>
       <div className="mp-foot">{sc.year}학년도 {sc.semester}학기 · {sc.grade}학년 {sc.subject}</div>
@@ -573,8 +706,8 @@ function Toggle({ title, sub, on, set, disabled }: { title: string; sub: string;
 
 /* ---------------- 홈 화면 위젯 (NugaWidget.kt) ---------------- */
 
-function WidgetHome({ doc, now, current, next, todayCount, onCategory, onOpenApp, onRecord }: {
-  doc: NugaDoc; now: Date; current: LessonSlot | null; next: Next; todayCount: number; onCategory: (k: Category) => void; onOpenApp: () => void; onRecord: () => void;
+function WidgetHome({ doc, now, current, next, todayCount, onCapture, onOpenApp, onRecord }: {
+  doc: NugaDoc; now: Date; current: LessonSlot | null; next: Next; todayCount: number; onCapture: () => void; onOpenApp: () => void; onRecord: () => void;
 }) {
   const head = current ? `${current.class} · ${current.period}교시` : next ? `예정 · ${next.slot.class} · ${next.slot.period}교시` : "수업 없음";
   const line = sublineOf(doc, now, current, next) ?? "시간표 없음";
@@ -588,9 +721,8 @@ function WidgetHome({ doc, now, current, next, todayCount, onCategory, onOpenApp
           {doc.settings.recording?.enabled && <button className="mp-wrec" onClick={onRecord}>● 녹음</button>}
           <div className="mp-wcount"><b>{todayCount}</b><small>오늘</small></div>
         </div>
-        <div className="mp-wcats">
-          {doc.settings.categories.slice(0, 4).map((c) => <button key={c.key} className={`c${c.key}`} onClick={() => onCategory(c.key)}>{c.label}</button>)}
-        </div>
+        {/* 큰 [기록] 버튼 하나: 밤 위에 켜진 밝은 유리(#DEEBFF)에 남색 글자. 누르면 번호 릴이 열린다 */}
+        <button className="mp-wcapture" onClick={onCapture}><MIcon name="pencil" size={20} />기록</button>
       </div>
       <div className="mp-apps">
         <button onClick={onOpenApp}><span className="mp-appicon"><AppIcon /></span>누가</button>
