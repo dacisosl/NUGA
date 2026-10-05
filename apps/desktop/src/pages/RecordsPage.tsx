@@ -4,13 +4,14 @@ import { ClassTabs, Sheet, useClassStudents } from "../App";
 import { catLabel, fillLesson, perfsOf, recordsOf, standardsFor, useStore } from "../store";
 import { aiReady, estimateAchievementAI } from "../lib/ai";
 import { Chip, Confirm, EditableCell, Empty, Icon, Modal, StudentTag } from "../components/ui";
-import { StairsView } from "../components/StairsView";
+import { StairsPanel } from "../components/StairsBrief";
 import { StudentGrid } from "../components/StudentGrid";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 
 /**
  * 현황판 (메인): 반 탭 → 한 스크롤 안에 위는 기록 계단(반 전체를 한눈에), 아래는 학생 카드 격자.
+ * 기록 계단은 [접기 | 간략히 | 자세히] 로 고른다 (기본 간략히, 고른 보기는 기억 — components/StairsBrief).
  * 카드를 누르면 학생 기록, 카드의 [+]는 그 학생으로 맞춘 기록 추가.
  */
 export function RecordsPage() {
@@ -52,10 +53,8 @@ export function RecordsPage() {
             </button>
           ) : null} />
         <div className="content board" ref={boardRef}>
-          {/* 위: 반 전체 기록 계단 (높이 고정, 찾기는 아래 격자에서) */}
-          <div className="board-stairs">
-            <StairsView key={cls} doc={doc} students={students} onOpen={setOpen} q="" />
-          </div>
+          {/* 위: 반 전체 기록 계단 — 접기(숫자 한 줄) · 간략히(작은 계단) · 자세히(이름표 계단). 찾기는 아래 격자에서 */}
+          <StairsPanel doc={doc} students={students} cls={cls} onOpen={setOpen} />
           {/* 아래: 학생 카드 격자 (반마다 거르기·정렬·찾기를 새로) */}
           <StudentGrid key={cls} doc={doc} students={students} onOpen={setOpen} onAdd={setAdding} />
         </div>

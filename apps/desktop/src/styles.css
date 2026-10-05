@@ -841,7 +841,8 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .topnav .page-title, .onb-title { text-wrap: balance; }
 
 /* =====================================================================
-   현황판 — 한 스크롤: 위 기록 계단(높이 고정, components/stairs.css 의 .board-stairs) → 아래 학생 카드 격자(components/student-grid.css)
+   현황판 — 한 스크롤: 위 기록 계단 자리(components/stairs-brief.css 의 .stairs-panel: 접기 · 간략히 · 자세히=.board-stairs)
+   → 아래 학생 카드 격자(components/student-grid.css)
    ===================================================================== */
 .content.board { display: flex; flex-direction: column; gap: 32px; padding-top: 22px; padding-bottom: 56px; }
 .content.board > * { flex: none; min-width: 0; }

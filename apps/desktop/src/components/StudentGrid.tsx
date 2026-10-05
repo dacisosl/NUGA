@@ -5,16 +5,18 @@ import { Empty, SearchBox, useAchPreviewValue, useAchievementPress } from "./ui"
 import "./student-grid.css";
 
 /**
- * 누가기록 학생 카드 격자 — 사진첩처럼: 위는 기록을 요약한 '사진'(글자로 된 썸네일), 아래는 두 줄 캡션(이름 · 기록 수).
- * 썸네일: 최근 기록(분류 점 · 날짜 · 내용)을 칸이 허락하는 만큼, 최근 8주 리듬 막대, 분류 비율 막대.
- * 기록이 부족한 학생(store 의 lowRuleOf — 계단·생기부 명단과 같은 기준)은 썸네일이 옅은 붉은빛으로 바뀌고 '기록 부족' 표시가 붙는다.
- * 카드 어디를 눌러도 학생 기록(onOpen), 오른쪽 클릭이면 도달 정도 슬라이더, 썸네일의 [+ 기록]은 onAdd.
- * 키보드: 캡션의 이름 단추(학생 기록)와 [+ 기록]이 서로 형제인 두 단추다 (단추 안에 단추를 두지 않는다).
+ * 누가기록 학생 카드 격자 — 학생 한 명에 카드 한 장. 한 테두리 안에 중요한 순서대로 쌓는다:
+ *   이름(카드에서 가장 크게, 맨 위 · 앞에 도달 정도 색 견본) → 번호 · 기록 수와 작은 표시 → 머리선 → 내용.
+ * 내용: 최근 기록(분류 점 · 날짜 · 내용, 최근 것부터 — 첫 줄 날짜가 곧 마지막 기록 날짜)을 칸이 허락하는 만큼,
+ * 맨 아래 최근 8주 리듬 막대와 분류 비율 막대. 같은 격자 줄의 카드는 머리선·기록이 한 높이에서 시작한다(useRowAlign).
+ * 기록이 부족한 학생(store 의 lowRuleOf — 계단·생기부 명단과 같은 기준)은 카드 전체가 옅은 붉은빛으로 바뀌고 '기록 부족' 표시가 붙는다.
+ * 카드 어디를 눌러도 학생 기록(onOpen), 오른쪽 클릭이면 도달 정도 슬라이더, 이름 줄 오른쪽 [+ 기록]은 onAdd.
+ * 키보드: 이름 단추(학생 기록)와 [+ 기록]이 서로 형제인 두 단추다 (단추 안에 단추를 두지 않는다).
  */
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const WEEKS = 8;
-/** 썸네일에 올려 보는 최근 기록 수. 실제로 보이는 수는 칸 높이가 정한다 (넘치는 기록은 통째로 숨고 '외 N건'에 더해진다) */
+/** 카드에 올려 보는 최근 기록 수. 실제로 보이는 수는 칸 높이가 정한다 (넘치는 기록은 통째로 숨고 '외 N건'에 더해진다) */
 const LINES = 6;
 
 type Filter = "all" | "low" | "week0";
@@ -32,7 +34,7 @@ interface Summary {
   /** 마지막 기록 MM/DD, ISO */
   last: string; lastTime: string;
   lines: Line[];
-  /** 썸네일에 올리지 않은 기록 수 (LINES 넘는 것) */
+  /** 카드에 올리지 않은 기록 수 (LINES 넘는 것) */
   rest: number;
   /** 최근 8주 주별 기록 수 (오래된 주 → 이번 주) */
   rhythm: number[];
@@ -48,6 +50,44 @@ const keyOf = (s: Pick<Student, "class" | "no">) => `${s.class}|${s.no}`;
 const pad2 = (n: number) => String(n).padStart(2, "0");
 function mondayMs(d = new Date()): number { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); }
 const textOf = (r: NugaRecord) => (r.note || r.memo || r.voiceMemo?.transcript || "").replace(/\s+/g, " ").trim();
+
+/**
+ * 같은 격자 줄의 카드는 머리선과 기록이 한 높이에서 시작한다: 번호 줄의 작은 표시가 다음 줄로 넘친 카드가 있으면
+ * 그 줄의 카드 모두가 같은 번호 줄 높이(--sg-sub-h)를 잡는다. 넘친 카드가 없는 줄은 한 줄 그대로라 기록 칸을 아낀다.
+ * 카드 높이는 4:5 로 정해져 있어 자리를 잡아도 격자 크기가 변하지 않는다 (재기 ↔ 쓰기가 서로 흔들지 않는다).
+ * 줄바꿈이 달라지는 때 = 격자 너비(창·열 수) · 카드 내용(deps) · 늦게 온 웹 글꼴.
+ */
+function useRowAlign(gridRef: React.RefObject<HTMLDivElement>, deps: React.DependencyList) {
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const align = () => {
+      const cards = Array.from(grid.children) as HTMLElement[];
+      // 먼저 모두 읽는다: 카드의 격자 줄(위치)과 번호 줄 내용의 높이 — 잡아 둔 자리와 상관없이 첫 표시 위 ~ 마지막 표시 아래
+      const seen = cards.map((c) => {
+        let top = Infinity, bottom = -Infinity;
+        for (const k of Array.from(c.querySelector(".sg-sub")?.children ?? []) as HTMLElement[]) {
+          top = Math.min(top, k.offsetTop);
+          bottom = Math.max(bottom, k.offsetTop + k.offsetHeight);
+        }
+        return { row: c.offsetTop, h: bottom > top ? bottom - top : 0 };
+      });
+      const rowMax = new Map<number, number>();
+      for (const x of seen) rowMax.set(x.row, Math.max(rowMax.get(x.row) ?? 0, x.h));
+      // 그다음 바뀐 카드에만 쓴다
+      cards.forEach((c, i) => {
+        const v = `${rowMax.get(seen[i].row) ?? 0}px`;
+        if (c.style.getPropertyValue("--sg-sub-h") !== v) c.style.setProperty("--sg-sub-h", v);
+      });
+    };
+    align();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(align);
+    ro?.observe(grid);
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    fonts?.addEventListener?.("loadingdone", align);
+    return () => { ro?.disconnect(); fonts?.removeEventListener?.("loadingdone", align); };
+  }, deps);
+}
 
 export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: (s: Student) => void; onAdd: (s: Student) => void }): JSX.Element {
   const { doc, students } = props;
@@ -172,10 +212,13 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
     return () => window.removeEventListener("resize", measure);
   }, []);
 
+  const gridRef = useRef<HTMLDivElement>(null);
+  useRowAlign(gridRef, [shown, sums]);
+
   return (
     <section ref={ref} className="sg" aria-label="학생 카드">
       <div className="sg-bar">
-        <span className="eyebrow">학생 {students.length}명{narrowed && <span className="sg-of"> · {shown.length}명 보기</span>}</span>
+        <h2 className="eyebrow">학생 {students.length}명{narrowed && <span className="sg-of"> · {shown.length}명 보기</span>}</h2>
         <div className="seg sg-seg" role="group" aria-label="학생 거르기">
           {seg("all", "전체", counts.all)}
           {seg("low", <><i className="sg-lowdot" aria-hidden />기록 부족</>, counts.low, rule.tip)}
@@ -196,7 +239,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
         <Empty title="조건에 맞는 학생이 없습니다" desc={q.trim() ? `'${q.trim()}' 검색 결과가 없습니다.` : undefined}
           action={<button type="button" className="btn sm" onClick={() => { setFilter("all"); setQ(""); }}>전체 보기</button>} />
       ) : (
-        <div className="sg-grid">
+        <div className="sg-grid" ref={gridRef}>
           {shown.map((s, i) => <StudentCard key={keyOf(s)} s={s} sum={sums.get(keyOf(s))!} i={i} scale={scale} onOpen={open} onAdd={add} />)}
         </div>
       )}
@@ -218,9 +261,10 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
   const name = s.name || `${s.no}번`;
   const add = (e: React.SyntheticEvent) => { e.stopPropagation(); onAdd(s); };
   const achTip = `도달 정도 ${shownAch ?? "—"}${sum.edited ? " (교사 조정)" : sum.lowConf ? " (근거 부족 · 참고용)" : shownAch === null ? " (추정 불가)" : ""}`;
+  // 화면에 쌓인 순서 그대로 읽는다: 이름 → 번호 → 기록 수 · 표시 → 도달 정도
   const label = [
-    `${s.no}번 ${name}`, `기록 ${sum.n}건`, sum.week ? `이번 주 ${sum.week}건` : "", sum.last ? `마지막 기록 ${sum.last}` : "",
-    sum.low ? "기록 부족" : "", sum.pending ? `보완 전 ${sum.pending}건` : "", achTip,
+    s.name || "", `${s.no}번`, sum.n ? `기록 ${sum.n}건` : "기록 없음", sum.last ? `마지막 기록 ${sum.last}` : "",
+    sum.low ? "기록 부족" : "", sum.pending ? `보완 전 ${sum.pending}건` : "", sum.week ? `이번 주 ${sum.week}건` : "", achTip,
   ].filter(Boolean).join(", ");
   const rhythmTip = `최근 8주 기록: ${sum.rhythm.join(" · ")}건 (오른쪽이 이번 주)`;
   const mixTip = sum.mix.map((m) => `${m.label} ${m.n}`).join(" · ");
@@ -238,65 +282,69 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
+    // 칸 크기만이 아니라 기록 줄마다의 높이도 본다: 글꼴이 늦게 와 줄바꿈이 바뀌면 칸 크기는 그대로여도 숨는 기록 수가 달라진다
     const ro = new ResizeObserver(measure);
     ro.observe(ol);
+    for (const li of Array.from(ol.children)) ro.observe(li);
     return () => ro.disconnect();
   }, [sum]);
   const more = hidden + sum.rest;
 
   return (
     <>
-      <div className={`sg-item${sum.low ? " low" : ""}${sum.n ? "" : " zero"}`} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
+      <div className={`sg-card${sum.low ? " low" : ""}`} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
         onClick={() => onOpen(s)} {...bind}>
-        {/* 캡션 = 이 카드의 '열기' 단추 (DOM 에서 먼저 → 탭 순서도 이름 먼저, 화면에서는 썸네일 아래) */}
-        <button type="button" className="sg-open" aria-label={label}>
-          <span className="sg-name">
+        {/* 1. 이름 (가장 크게, 맨 위) = 이 카드의 '열기' 단추. 탭 순서: 이름 → [+ 기록].
+            단추가 스스로 연다 (카드의 onClick 까지 올라가는 것에 기대지 않는다) */}
+        <div className="sg-head">
+          <button type="button" className="sg-open" aria-label={label} onClick={(e) => { e.stopPropagation(); onOpen(s); }}>
             <i className={`sg-sw g${step < 0 ? "x" : step}${sum.lowConf ? " lowconf" : ""}`} title={achTip} aria-hidden />
-            <b>{name}</b><span className="sg-no">· {pad2(s.no)}</span>
-          </span>
-          <span className="sg-meta">{sum.n ? <>기록 {sum.n}건 · 마지막 {sum.last}</> : "기록 없음"}</span>
-        </button>
-
-        <div className="sg-thumb">
-          <div className="sg-top">
-            <span className="sg-count">{sum.n}건</span>
-            {sum.low && <span className="sg-lowb">기록 부족</span>}
-            {sum.pending > 0 && <span className="sg-pend" title={`보완 전 기록 ${sum.pending}건`}>보완 {sum.pending}</span>}
-            <span className="sg-sp" />
-            {sum.week > 0 && <span className="sg-week" title={`이번 주 기록 ${sum.week}건`}><i aria-hidden /><span className="t">이번 주 </span>+{sum.week}</span>}
-            {sum.n > 0 && <button type="button" className="sg-add" onClick={add} aria-label={`${name} 기록 추가`} title="이 학생 기록 추가">+ 기록</button>}
-          </div>
-
-          {sum.n === 0 ? (
-            <div className="sg-none">
-              <span>아직 기록 없음</span>
-              <button type="button" className="btn ghost sm" onClick={add} aria-label={`${name} 기록 추가`}>+ 기록</button>
-            </div>
-          ) : (
-            <ol ref={linesRef} className={`sg-lines${sum.n <= 2 ? " roomy" : ""}`}>
-              {sum.lines.map((l) => (
-                <li key={l.id} className="sg-line" title={l.tip}>
-                  <i className={`sg-dot c${l.cat}`} aria-hidden /><span className="sg-date">{l.md}</span>{l.text}
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {sum.n > 0 && (
-            <div className="sg-foot">
-              {more > 0 && <span className="sg-more">외 {more}건</span>}
-              <div className="sg-rhythm" title={rhythmTip} aria-hidden>
-                {sum.rhythm.map((v, w) => (
-                  <i key={w} className={`${v ? "" : "z"}${w === WEEKS - 1 ? " now" : ""}`}
-                    style={v ? { height: `${Math.max(3, Math.round((Math.min(v, scale) / scale) * 100))}%` } : undefined} />
-                ))}
-              </div>
-              <div className="sg-mix" title={mixTip} aria-hidden>
-                {sum.mix.map((m) => <i key={m.cat} className={`c${m.cat}`} style={{ flexGrow: m.n }} />)}
-              </div>
-            </div>
-          )}
+            <b className="sg-name">{name}</b>
+          </button>
+          {sum.n > 0 && <button type="button" className="sg-add" onClick={add} aria-label={`${name} 기록 추가`} title="이 학생 기록 추가">+ 기록</button>}
         </div>
+
+        {/* 2. 번호 · 기록 수, 이어서 작은 표시 (넘치면 다음 줄로 — 같은 격자 줄의 카드는 높이를 함께 잡는다).
+            마지막 기록 날짜는 바로 아래 첫 기록 줄의 날짜라 여기서는 title·aria-label 로만. 기록 0건이면 번호만 ('아직 기록 없음'은 아래 한 번) */}
+        <div className="sg-sub">
+          <span className="sg-id" title={sum.last ? `마지막 기록 ${sum.last}` : undefined}>
+            <b className="sg-no">{pad2(s.no)}번</b>{sum.n > 0 && ` · 기록 ${sum.n}건`}
+          </span>
+          {sum.low && <span className="sg-lowb">기록 부족</span>}
+          {sum.pending > 0 && <span className="sg-pend" title={`보완 전 기록 ${sum.pending}건`}>보완 {sum.pending}</span>}
+          {sum.week > 0 && <span className="sg-week" title={`이번 주 기록 ${sum.week}건`}><i aria-hidden />이번 주 +{sum.week}</span>}
+        </div>
+
+        {/* 3. 내용: 최근 기록 → 맨 아래 8주 리듬 · 분류 비율 */}
+        {sum.n === 0 ? (
+          <div className="sg-none">
+            <span>아직 기록 없음</span>
+            <button type="button" className="btn ghost sm" onClick={add} aria-label={`${name} 기록 추가`}>+ 기록</button>
+          </div>
+        ) : (
+          <ol ref={linesRef} className={`sg-lines${sum.n <= 2 ? " roomy" : ""}`}>
+            {sum.lines.map((l) => (
+              <li key={l.id} className="sg-line" title={l.tip}>
+                <i className={`sg-dot c${l.cat}`} aria-hidden /><span className="sg-date">{l.md}</span>{l.text}
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {sum.n > 0 && (
+          <div className="sg-foot">
+            {more > 0 && <span className="sg-more">외 {more}건</span>}
+            <div className="sg-rhythm" title={rhythmTip} aria-hidden>
+              {sum.rhythm.map((v, w) => (
+                <i key={w} className={`${v ? "" : "z"}${w === WEEKS - 1 ? " now" : ""}`}
+                  style={v ? { height: `${Math.max(3, Math.round((Math.min(v, scale) / scale) * 100))}%` } : undefined} />
+              ))}
+            </div>
+            <div className="sg-mix" title={mixTip} aria-hidden>
+              {sum.mix.map((m) => <i key={m.cat} className={`c${m.cat}`} style={{ flexGrow: m.n }} />)}
+            </div>
+          </div>
+        )}
       </div>
       {popover}
     </>

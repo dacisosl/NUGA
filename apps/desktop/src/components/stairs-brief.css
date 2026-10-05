@@ -1,0 +1,139 @@
+/* =====================================================================
+   현황판 맨 위 '기록 계단' 자리 (StairsBrief.tsx) — 종이 위 머리 줄 + [접기 | 간략히 | 자세히]
+   · 접기   — 머리 줄에 숫자만 한 줄. 학생 카드가 바로 올라온다
+   · 간략히 — 기본. 낮은 밤의 무대: 왼쪽 숫자 다섯, 오른쪽 이름 없는 작은 계단.
+              무대·바닥·수평선·디딤판·출발선·호박빛(기록 부족)·정상 빛 번짐은 stairs.css 의 클래스를 그대로 쓰고,
+              이름표 대신 학생 수만큼 점(.sb-pile)을 디딤판 위에 세운다 (하늘빛 = 이번 주 기록, 흐림 = 아직)
+   · 자세히 — 기존 기록 계단(.board-stairs > StairsView) 그대로
+   높이는 보기마다 정해 두고(접기 0 · 간략 --sp-brief · 자세히 --sp-full) 바꿀 때만 빠르게 옮긴다 (움직임 줄이기면 바로).
+   이 파일은 stairs.css 뒤에 들어간다(StairsBrief.tsx 가 StairsView 다음에 불러옴). 겹치는 규칙은 .sb-stage 로 한 단계 좁힌다.
+   ===================================================================== */
+
+.stairs-panel {
+  --sp-brief: 228px;                       /* 간략 무대 높이 */
+  --sp-full: clamp(440px, 58vh, 620px);    /* 자세히(.board-stairs) 높이 — 이 값 하나만 쓴다 (stairs.css 는 높이를 두지 않는다) */
+  --sp-gap: 10px;                          /* 머리 줄과 무대 사이 */
+  --sp-dur: .26s;
+  position: relative;
+}
+@media (max-height: 780px) { .stairs-panel { --sp-brief: 212px; } }   /* 1366×768 학교 화면 */
+@media (max-width: 760px) { .stairs-panel { --sp-brief: 340px; } }    /* 좁으면 숫자 위 · 계단 아래로 쌓는다 */
+
+/* ── 머리 줄 (종이): 기록 계단 · 반 · 인원 [· 접힌 숫자] ……… [접기 | 간략히 | 자세히] ── */
+.sp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; min-height: 44px; }
+.sp-title { margin: 0; color: var(--text); font-weight: 650; white-space: nowrap; }
+.sp-title::before { background: var(--text2); }   /* 앞 가는 선은 학생 카드 머리말(.eyebrow)과 같은 색 */
+.sp-meta { font-size: 12.5px; font-weight: 500; color: var(--text2); white-space: nowrap; font-feature-settings: var(--num); }
+/* 접기: 숫자만 한 줄 (가는 세로 선 뒤에). 출발선·기록 부족이 있으면 따뜻한 색 */
+.sp-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; margin: 0; padding-left: 14px; border-left: 1px solid var(--hair-2);
+  font-size: 12.5px; font-weight: 500; line-height: 20px; color: var(--text2); white-space: nowrap;
+  font-variant-numeric: tabular-nums; font-feature-settings: var(--num);
+  animation: sb-fade var(--d-2, .2s) var(--ease-out, ease-out) backwards;
+}
+.sp-sum > span + span::before { content: "·"; margin: 0 8px; color: var(--text3); }
+.sp-sum b { margin: 0 1px 0 3px; font-weight: 650; color: var(--text); }
+.sp-sum .hot, .sp-sum .hot b { color: var(--warn); }
+.sp-fill { flex: 1 1 0; min-width: 0; }
+.sp-seg { flex: none; }
+
+/* ── 몸: 보기마다 높이. 옮기는 동안만 잘라 무대가 아래 카드 위로 비치지 않게 (쉬는 동안은 무대 그림자를 살린다) ── */
+.sp-body { display: flow-root; height: 0; }   /* flow-root: 아래 margin-top 이 몸 밖으로 새지 않게 (잘릴 때·쉴 때 같은 자리) */
+.stairs-panel[data-view="brief"] .sp-body { height: calc(var(--sp-brief) + var(--sp-gap)); }
+.stairs-panel[data-view="full"] .sp-body { height: calc(var(--sp-full) + var(--sp-gap)); }
+.stairs-panel:is([data-view="none"], [data-moving]) .sp-body { overflow: hidden; }
+.stairs-panel[data-moving] .sp-body { transition: height var(--sp-dur) var(--ease-std, ease); }
+.sp-body > * { margin-top: var(--sp-gap); }
+.stairs-panel .board-stairs { height: var(--sp-full); }
+/* 자세히: 머리 줄이 이미 '기록 계단 · 반 · 인원'을 말하므로 무대 안 같은 머리말은 접는다 (그만큼 계단 칸이 높아진다) */
+.stairs-panel .stairs-head .eyebrow { display: none; }
+
+/* ── 간략 무대: 기록 계단의 밤(배경·유리 테두리·바닥·수평선)을 그대로, 높이·여백·숫자만 줄인다 ── */
+.sb-wrap { height: var(--sp-brief); display: flex; flex-direction: column; container-type: inline-size; }
+.stairs-stage.sb-stage {
+  --floor-h: 30px; --sb-off: rgba(163,183,210,.30);
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: 44px;
+  padding: 18px 24px var(--floor-h);
+}
+.sb-stage .stairs-horizon { left: 24px; right: 24px; }
+
+/* 왼쪽: 숫자 다섯(작게) + 아래 [자세히 보기]. 숫자 이름이 곧 범례 (하늘빛 점 = 이번 주 기록, 호박빛 점선 = 기록 부족 구간) */
+.sb-left { min-width: 0; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: 10px; padding-bottom: 8px; animation: sb-fade .4s var(--ease-out, ease-out) backwards; }
+/* 숫자 줄은 여기서 모두 정한다 (stairs.css 의 좁은 무대 규칙이 넷째 칸 선을 지우지 않게 한 단계 좁혀 쓴다) */
+.stairs-stage.sb-stage .kpis { display: flex; flex-wrap: nowrap; }
+.stairs-stage.sb-stage .kpis .kpi { gap: 6px; padding: 0 18px; border-left: 1px solid var(--dline-2, rgba(171,201,241,.22)); }
+.stairs-stage.sb-stage .kpis .kpi:first-child { padding-left: 0; border-left: 0; }
+.stairs-stage.sb-stage .kpi .k { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; }
+.stairs-stage.sb-stage .kpi b { font-size: 24px; letter-spacing: -.04em; }
+.stairs-stage.sb-stage .kpi b small { font-size: 12px; margin-left: 2px; }
+.stairs-stage.sb-stage .kpi .meter { width: 64px; }
+.sb-key { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 6px rgba(120,170,255,.8); }
+.sb-lowk { flex: none; width: 12px; border-top: 1px dashed var(--amber); }
+.stairs-stage.sb-stage .sb-more { flex: none; margin-left: -10px; gap: 2px; padding-right: 6px; }
+/* 빈 반(기록 0건): 맨 윗 디딤판 위 오른쪽에 한 줄 (기록 계단의 안내문 자리) */
+.sb-note { position: absolute; top: 0; right: 4px; z-index: 3; margin: 0; pointer-events: none; font-size: 12px; font-weight: 500; color: var(--ink2); white-space: nowrap; }
+
+/* 오른쪽: 작은 계단 — 칸은 stairs.css 의 .stair-col / .stair-step / .stair-start 그대로, 이름표 대신 점 무리 */
+.sb-field { position: relative; z-index: 1; min-width: 0; min-height: 0; }
+.sb-stairs { justify-content: end; }   /* 칸 너비 상한(COL_MAX)에 걸리면 계단은 오른쪽, 빛이 드는 쪽에 선다 */
+.sb-stairs .stair-col { cursor: pointer; }
+.sb-stairs.narrow .stair-range { white-space: normal; }   /* 칸이 좁으면 '11건 / 이상' 두 줄 (첫 디딤판이 그만큼 높다) */
+.sb-pile {
+  position: relative; z-index: 2; display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 3px;
+  max-width: calc(var(--per, 6) * 9px - 3px); padding-bottom: 6px;
+  animation: sb-rise .4s var(--ease-out, ease-out) backwards; animation-delay: calc(200ms + var(--i, 0) * 40ms);
+}
+.sb-pile i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--sb-off); }
+.sb-pile i.on { background: var(--dot); box-shadow: 0 0 6px rgba(120,170,255,.75); }
+.sb-stairs .stair-col:hover .sb-pile i:not(.on) { background: rgba(171,201,241,.44); }
+.stair-col.peak .sb-pile { background: radial-gradient(60% 50% at 50% 100%, rgb(var(--bloom-rgb, 84 149 253) / .16), transparent 70%); }
+/* 출발선: 바닥 띠에 '출발선 N명' 한 줄 (간략 무대는 바닥이 낮다) */
+.sb-stage .stair-start .sb-startlab { position: absolute; left: 4px; top: 8px; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.sb-stage .stair-start .sb-startlab > * { position: static; flex: none; white-space: nowrap; }
+
+/* 명단 없음 */
+.sb-stage .sb-empty { grid-column: 1 / -1; margin: auto; }
+.sb-stage .sb-empty p { margin: 0 0 4px; }
+
+/* 숫자 다섯을 세 칸 격자로 접기 (숫자 줄 ≈ 380px → 250px, 계단에 그만큼 너비를 돌려준다. 둘째 줄 첫 칸은 선 없이).
+   나란히 놓일 때: 무대가 좁으면, 칸이 많으면(data-many, 9칸 이상) 조금 더 넓은 무대에서부터. 쌓일 때: 한 줄이 안 들어갈 때만 */
+@media (min-width: 761px) {
+  @container (max-width: 860px) {
+    .stairs-stage.sb-stage .kpis { display: grid; grid-template-columns: repeat(3, auto); row-gap: 10px; justify-content: start; }
+    .stairs-stage.sb-stage .kpis .kpi:nth-child(3n+1) { padding-left: 0; border-left: 0; }
+    .sb-left { gap: 6px; padding-bottom: 4px; }
+  }
+  @container (max-width: 1240px) {
+    .stairs-stage.sb-stage[data-many] .kpis { display: grid; grid-template-columns: repeat(3, auto); row-gap: 10px; justify-content: start; }
+    .stairs-stage.sb-stage[data-many] .kpis .kpi:nth-child(3n+1) { padding-left: 0; border-left: 0; }
+    .sb-stage[data-many] .sb-left { gap: 6px; padding-bottom: 4px; }
+  }
+}
+/* 좁은 창: 숫자 위 · 계단 아래 (높이는 .stairs-panel --sp-brief 가 함께 늘어난다) */
+@media (max-width: 760px) {
+  .stairs-stage.sb-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); row-gap: 12px; padding: 16px 16px var(--floor-h); }
+  .sb-stage .stairs-horizon { left: 16px; right: 16px; }
+  .sb-left { gap: 6px; padding-bottom: 0; }
+  @container (max-width: 440px) {
+    .stairs-stage.sb-stage .kpis { display: grid; grid-template-columns: repeat(3, auto); row-gap: 10px; justify-content: start; }
+    .stairs-stage.sb-stage .kpis .kpi:nth-child(3n+1) { padding-left: 0; border-left: 0; }
+  }
+}
+
+@keyframes sb-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes sb-fade { from { opacity: 0; } }
+
+/* ── 접근성·인쇄 가드 ── */
+@media (prefers-reduced-motion: reduce) {
+  .stairs-panel[data-moving] .sp-body { transition: none; }
+  .sp-sum, .sb-left, .sb-pile { animation: none; }
+}
+@media (forced-colors: active) {
+  .sb-pile i { forced-color-adjust: none; background: GrayText; box-shadow: none; }
+  .sb-pile i.on, .sb-key { forced-color-adjust: none; background: Highlight; box-shadow: none; }
+  .sb-lowk { border-top-color: CanvasText; }
+}
+@media print {
+  .stairs-panel { display: none !important; }
+}
