@@ -9,6 +9,8 @@
 
 ## 바로 쓰기
 
+배포 주소: **https://dacisosl.github.io/NUGA/whale/** (dev 에 푸시하면 GitHub Pages 가 다시 만듭니다. 데스크톱 웹은 그대로 `/NUGA/`.)
+
 ```bash
 python tools/build.py        # src → dist/index.html (한 파일, 약 157KB)
 ```
@@ -41,5 +43,5 @@ whale/
 
 - 브라우저 점검은 Python Playwright 스크립트(`flow.py` 등) 대신 위 표의 순서로 직접 확인했습니다. 이 PC에는 Playwright 가 없습니다.
 - 시연 영상(`video/`)과 안내 PDF(`guide/`) 도구는 아직 넣지 않았습니다.
-- 갤럭시 워치 앱, 데모용 합성 수업 음성, 배포 URL 은 제작 문서 13절 "남은 일" 그대로입니다.
+- 갤럭시 워치 앱, 데모용 합성 수업 음성은 제작 문서 13절 "남은 일" 그대로입니다. 웹앱은 GitHub Pages(`/NUGA/whale/`)에 배포했고, 누가 서버(Cloudflare Worker)는 아직 배포 전이라 AI·폰 연결·나이스는 설정에서 서버 주소를 넣어야 켜집니다.
 - 고정 원칙에 맞춰 "학생에게 보내기(서버 저장)"와 "웨일 스페이스 학생 로그인"을 없애고 학생용 QR 쪽지로 바꿨습니다(제작 문서도 함께 고침).
