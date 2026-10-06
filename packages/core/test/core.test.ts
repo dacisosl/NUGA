@@ -484,3 +484,31 @@ describe("bulk records (일괄 기록 붙여넣기 · OCR 글)", () => {
     expect(r.map((x) => [x.date, x.no])).toEqual([["2026-09-25", 3], ["2026-09-25", 5], ["2027-02-10", 7]]);
   });
 });
+
+describe("local draft — 활동 + 세부 행동 + 드러난 역량", () => {
+  const rec = (id: string, date: string, category: string, topic: string, text: string) => ({ id, date, category, lesson: "", topic, text });
+  const base = { achievement: 65, targetLength: 1500, lengthMode: "bytes" as const, subject: "화학Ⅰ", performance: [] };
+
+  it("역량은 학생이 한 행동에서만 이끌고(장면 이름의 낱말은 보지 않음), 맞는 행동이 없으면 붙이지 않는다", () => {
+    const out = generateLocalDraft({ ...base, records: [rec("a", "09/01", "질문", "산·염기 평형", "탐구 발표 계산에서 단위 처리 방법을 질문"), rec("b", "09/02", "기타", "완충 용액", "수업 준비물을 챙김")] });
+    expect(out.sentences[0].spans?.find((x) => x.kind === "competency")?.text).toBe("원리를 정확히 알고자 탐구하는 태도");
+    expect(out.sentences[1].spans?.some((x) => x.kind === "competency")).toBe(false);
+    for (const s of out.sentences) expect(s.spans?.map((x) => x.text).join("")).toBe(s.text);
+  });
+
+  it("같은 행동을 다른 수업에서 한 기록은 한 문장으로 묶고, 거듭 보인 역량은 끝에서 한 번 묶는다", () => {
+    const out = generateLocalDraft({ ...base, records: [
+      rec("a", "09/01", "협동", "산·염기 평형", "산·염기 평형 퀴즈 활동에서 모둠원에게 풀이를 설명"),
+      rec("b", "09/08", "협동", "완충 용액", "완충 용액 퀴즈 활동에서 모둠원에게 풀이를 설명"),
+      rec("c", "09/10", "질문", "완충 용액", "완충 용액 실험에서 pH 측정 오차의 원인을 질문"),
+      rec("d", "09/20", "질문", "용해 평형", "용해 평형 수업에서 공통 이온 효과가 생기는 까닭을 질문"),
+    ] });
+    expect(out.text).toContain("산·염기 평형과 완충 용액 퀴즈 활동에서 모둠원에게 풀이를 설명");
+    expect(out.sentences.find((x) => x.text.includes("퀴즈 활동"))!.evidence).toEqual(["a", "b"]);
+    const last = out.sentences[out.sentences.length - 1];
+    expect(last.text).toMatch(/^여러 활동에서 .+ 거듭 드러남\.$/);
+    expect([...last.evidence].sort()).toEqual(["c", "d"]);
+    const comps = out.sentences.flatMap((x) => x.spans?.filter((p) => p.kind === "competency").map((p) => p.text) || []);
+    expect(new Set(comps).size).toBe(comps.length); // 같은 역량 문구를 되풀이하지 않는다
+  });
+});

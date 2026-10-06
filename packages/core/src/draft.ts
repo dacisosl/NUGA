@@ -1,6 +1,6 @@
 import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, LengthMode, NugaRecord, Performance, SpanKind, Standard, TeacherGuide } from "./types";
 import { approxCharsForBytes, isNominalEnding, josa, lengthIn, lengthWindow, modeLabel } from "./text";
-import { achievementGuide } from "./achievement";
+import { achievementGuide, gradeOf } from "./achievement";
 import { fmtMD } from "./ids";
 import { lessonLabel } from "./timetable";
 
@@ -97,6 +97,15 @@ function composeGuide(item: string, contentRules: string[]): string {
     "② 핵심 맥락: 학생을 설명하는 핵심 맥락을 정하고, 근거가 구체적이며 학생 개인의 행동이 잘 드러나는 대표 사례를 고른다. 관련 없는 활동에 하나의 서사를 억지로 부여하지 않는다.",
     "③ 초안: '과제·주제 → 학생의 구체적 수행 과정 → 드러난 특성·성취' 흐름을 기본으로 하되, 모든 요소를 억지로 채우거나 같은 문장 틀을 반복하지 않는다. 기록을 날짜순으로 나열하지 말고 관련 있는 활동을 묶어 하나의 흐름으로 쓴다.",
     "④ 검토: 모든 사실과 평가 표현을 원자료와 대조해 근거 없는 표현·과장·반복·불필요한 수식어·억지 연결을 지운다.",
+    "",
+    "[3-1. 문장 구성 — 활동만 나열하지 않는다]",
+    "- 활동을 쓰는 문장에는 세 가지를 함께 담는다: ① 활동(어떤 수업 주제·과제에서 무엇을 했는지) ② 세부 행동(그 활동에서 학생이 구체적으로 한 일 — 방법, 쓴 자료, 든 근거, 맡은 역할, 낸 결과) ③ 드러난 역량(그 행동이 보여 주는 역량이나 특성).",
+    "- 활동과 세부 행동은 누가기록·PDF기록에 적힌 그대로 가져온다. 기록에 없는 행동·과정·결과·동기를 만들지 않는다.",
+    "- 역량은 '기록에 적힌 행동'에서 이끌어 내어 이름 붙인다. 기록에 구체적 행동이 있는데 활동 이름만 쓰고 끝내지 않는다. 행동 근거가 약하면 역량을 빼고 행동까지만 쓴다.",
+    "- 행동 → 역량 연결의 예 (사실이 아니라 연결 방법의 예): 근거를 들어 설명함 → 논리적으로 설명하는 능력 · 그래프나 표로 정리하고 경향을 해석함 → 자료 해석 능력 · 실험 조건을 바꾸어 비교함 → 과학적 탐구 능력 · 모둠원의 오개념을 바로잡아 줌 → 개념 이해와 설명 능력 · 생활 속 사례를 조사해 원리로 설명함 → 개념의 실생활 적용 능력 · 오답을 다시 정리함 → 스스로 점검하고 보완하는 자기주도적 학습 태도 · 역할을 나누고 의견을 조율함 → 협업·조정 능력 · 궁금한 점을 질문함 → 탐구하려는 태도.",
+    "- 문장 틀은 구조만 참고하고 사실은 기록에서 가져온다: '[주제] 활동에서 [세부 행동]하며 [역량]을 보여줌.', '[세부 행동]하는 과정에서 [역량]이 드러남.' 같은 틀을 되풀이하지 말고 이음말을 바꾼다.",
+    "- 여러 기록에서 같은 역량이 되풀이해 드러나면 문단 끝에서 그 공통점을 한 문장으로 묶는다(근거 id 를 모두 단다). 한 기록에서만 보이면 묶지 않는다.",
+    "- 문단 전체가 '이 학생이 무엇을 어떻게 배우고, 거기서 어떤 역량이 드러나는가'로 자연스럽게 읽히도록 관련 활동을 이어 쓴다.",
     "",
     "[4. 문체]",
     "- 교사가 관찰해 기록하는 학교생활기록부 어체로 쓴다. '~함', '~보임', '~드러남' 등 명사형 종결을 기본으로 하되 자연스럽게 쓴다.",
@@ -224,10 +233,13 @@ export function userPrompt(req: DraftRequest): string {
 
 /* ---------------- 로컬 규칙 기반 생성기 (AI 없이 동작) ---------------- */
 /*
- * 원칙(기본 지침과 같음): 교사가 남긴 관찰 내용만 문장으로 옮긴다.
- * - 단원·차시 번호를 쓰지 않고, 수업 주제는 메모에 장면이 없을 때 한 번만 자연스럽게 붙인다.
- * - 여러 학생에게 똑같이 들어갈 상투적 총평 문장을 만들지 않는다.
+ * 원칙(기본 지침과 같음): 활동과 세부 행동은 교사가 남긴 관찰 내용을 그대로 옮기고,
+ * 그 행동이 보여 주는 역량을 '기록에 적힌 행동 낱말'에서 이끌어 잇는다 (COMP_RULES — 맞는 낱말이 없으면 분류로, 그것도 없으면 붙이지 않는다).
+ * - 문장 = [수업 주제] + [세부 행동(기록 그대로)] + [드러난 역량]. 예: '…오개념을 바로잡아 주며 개념을 정확히 이해하고 설명하는 능력을 보여줌.'
+ * - 단원·차시 번호를 쓰지 않고, 수업 주제는 메모에 장면이 없을 때 두 번까지만 자연스럽게 붙인다.
  * - 같은 주제의 기록 두 개는 "~하고, ~함"으로 이어 한 문장으로 만든다.
+ * - 같은 역량을 두 문장에 되풀이하지 않고, 여러 기록에서 같은 역량이 보이면 끝에 한 문장으로 묶는다.
+ * - 여러 학생에게 똑같이 들어갈 상투적 총평 문장을 만들지 않는다.
  */
 
 function hashStr(s: string): number { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -260,6 +272,99 @@ function linkForm(clause: string): string | null {
   return null;
 }
 
+/*
+ * 기록 속 행동 → 드러난 역량. 앞에 있을수록 구체적이다 (한 문장에 하나, 이미 쓴 역량은 건너뛴다).
+ * phrase = 문장 안에서 행동 뒤에 잇는 역량 (행동의 낱말을 되풀이하지 않게), trait = 여러 기록에서 거듭 보일 때 끝 문장에 쓰는 모습
+ */
+interface CompRule { key: string; re: RegExp; phrase: string; trait?: string }
+const COMP_RULES: CompRule[] = [
+  { key: "misconception", re: /오개념[^.]*(바로잡|고쳐|고치|설명|반박)|(바로잡|고쳐)[^.]*오개념/, phrase: "개념을 정확히 이해하고 설명하는 능력", trait: "개념을 정확히 이해하려는 태도" },
+  { key: "teach", re: /(모둠원|친구|동료|짝)(들)?에게[^.]*(설명|알려|가르|도와|도움)/, phrase: "동료의 이해를 돕는 협력적 태도", trait: "모둠원과 지식을 나누며 함께 배우려는 태도" },
+  { key: "connect", re: /연결|관련지|이전\s*단원/, phrase: "배운 개념을 통합적으로 이해하려는 태도" },
+  { key: "evidence", re: /근거/, phrase: "논리적으로 설명하는 능력", trait: "근거를 바탕으로 생각을 펼치는 논리적 사고" },
+  { key: "critical", re: /반박|비판|오류를?\s*찾|타당성|검토/, phrase: "주장을 따져 보는 비판적 사고력" },
+  { key: "question", re: /질문|궁금/, phrase: "원리를 정확히 알고자 탐구하는 태도", trait: "궁금한 점을 질문으로 확인하는 탐구적 태도" },
+  { key: "hypothesis", re: /가설|예측/, phrase: "가설을 세우고 확인하는 탐구 능력" },
+  { key: "inquiry", re: /실험|변인|측정|조건을?\s*바꾸/, phrase: "과학적으로 탐구하는 능력" },
+  { key: "compare", re: /비교|장단점|차이점/, phrase: "대상을 비교하여 분석하는 사고력" },
+  { key: "model", re: /모형|모델링/, phrase: "추상적인 개념을 구체화하는 능력" },
+  { key: "structure", re: /개념\s*지도|마인드\s*맵|구조화|도식/, phrase: "개념 사이의 관계를 구조화하는 능력", trait: "배운 내용을 스스로 구조화하는 학습 습관" },
+  { key: "reflect", re: /오답|수정|보완|피드백|다시\s*(정리|작성|풀)|재정리/, phrase: "스스로 점검하고 보완하는 자기주도적 학습 태도", trait: "스스로 점검하고 보완하는 학습 습관" },
+  { key: "role", re: /담당|맡/, phrase: "맡은 역할을 책임 있게 수행하는 태도", trait: "공동 활동에서 맡은 몫을 책임 있게 해내는 모습" },
+  { key: "lead", re: /주도|이끌|조율|역할을?\s*나누/, phrase: "공동 과제를 이끄는 리더십", trait: "공동 활동을 이끄는 주도성" },
+  { key: "interpret", re: /경향|해석|분석/, phrase: "자료를 분석하고 해석하는 능력" },
+  { key: "visual", re: /그래프|도표|표로|시각화|그림으로/, phrase: "내용을 시각적으로 표현하는 능력" },
+  { key: "quant", re: /계산|수식/, phrase: "정량적으로 문제를 해결하는 능력" },
+  { key: "apply", re: /실생활|생활\s*속|일상|적용/, phrase: "배운 개념을 실생활에 적용하는 능력" },
+  { key: "info", re: /기사|자료를?\s*(찾|조사|검색)|조사/, phrase: "필요한 정보를 찾아 활용하는 능력" },
+  { key: "collab", re: /모둠|협력|협동|토의|토론|함께/, phrase: "협력하여 문제를 해결하는 능력", trait: "모둠 활동에 협력적으로 참여하는 모습" },
+  { key: "organize", re: /보고서|정리|요약|노트/, phrase: "배운 내용을 체계적으로 정리하는 능력", trait: "배운 내용을 스스로 정리하는 학습 습관" },
+  { key: "express", re: /발표|설명|전달/, phrase: "자신의 생각을 조리 있게 전달하는 의사소통 능력", trait: "자신의 생각을 조리 있게 전달하는 모습" },
+];
+/** 내용에 맞는 낱말이 없을 때 분류로 (미정·기타는 붙이지 않는다) */
+const CAT_COMP: Record<string, string> = { 질문: "question", 발표: "express", 협동: "collab" };
+const COMP_BY_KEY = new Map(COMP_RULES.map((r) => [r.key, r]));
+
+/** 기록을 장면('~에서' 앞 — 수업·활동 이름)과 학생이 한 행동('~에서' 뒤)으로. '~에서'가 없으면 전부 행동 */
+function sceneSplit(text: string): { scene: string; act: string } {
+  const i = text.lastIndexOf("에서 ");
+  return i > 0 ? { scene: text.slice(0, i).trim(), act: text.slice(i + 3).trim() } : { scene: "", act: text.trim() };
+}
+
+/**
+ * 기록 묶음의 대표 역량: 학생이 한 행동 부분에서 가장 구체적인 규칙 하나 (장면 이름의 낱말 — '탐구 발표 계산에서 … 질문'의 '발표' — 은 보지 않는다).
+ * 행동에 맞는 규칙이 없으면 분류로, 그것도 없으면 null. 버금 후보로 넘어가지 않는다 — 기록이 뒷받침하지 않는 역량을 붙이지 않게
+ */
+function compOf(g: AnonRecord[]): CompRule | null {
+  for (const r of g) { const act = sceneSplit(r.text).act; const rule = COMP_RULES.find((x) => x.re.test(act)); if (rule) return rule; }
+  for (const r of g) { const rule = COMP_BY_KEY.get(CAT_COMP[r.category] || ""); if (rule) return rule; }
+  return null;
+}
+/** compOf 의 후보 목록 꼴 (PDF기록 부연용) */
+function compsOf(g: AnonRecord[]): CompRule[] { const c = compOf(g); return c ? [c] : []; }
+
+/**
+ * 같은 행동을 여러 장면에서 한 기록(예: '산·염기 평형 퀴즈 활동에서 모둠원에게 풀이를 설명', '완충 용액 퀴즈 활동에서 …')을 한 절로:
+ * 장면의 공통 꼬리 낱말을 한 번만 — '산·염기 평형과 완충 용액 퀴즈 활동에서 모둠원에게 풀이를 설명'. 장면까지 같으면 '여러 차례'
+ */
+function mergedText(g: AnonRecord[]): string {
+  const parts = g.map((r) => sceneSplit(r.text));
+  const scenes = [...new Set(parts.map((p) => p.scene))];
+  if (scenes.length === 1) return `${scenes[0]}에서 여러 차례 ${parts[0].act}`;
+  const words = scenes.map((s) => s.split(/\s+/));
+  let k = 0;
+  while (words.every((w) => w.length > k + 1 && w[w.length - 1 - k] === words[0][words[0].length - 1 - k])) k++;
+  const suffix = words[0].slice(words[0].length - k).join(" ");
+  const heads = words.map((w) => w.slice(0, w.length - k).join(" "));
+  const n = heads.length;
+  const joined = n === 2 ? `${josa(heads[0], "과/와")} ${heads[1]}` : `${heads.slice(0, n - 2).join(", ")}, ${josa(heads[n - 2], "과/와")} ${heads[n - 1]}`;
+  return `${suffix ? `${joined} ${suffix}` : joined}에서 ${parts[0].act}`;
+}
+
+/** "~함" → "~하며" (뒤에 역량을 잇는 꼴). 잇기 어려우면 null */
+function meForm(clause: string): string | null {
+  const rules: [RegExp, string][] = [[/함$/, "하며"], [/줌$/, "주며"], [/봄$/, "보며"], [/됨$/, "되며"], [/짐$/, "지며"], [/냄$/, "내며"], [/임$/, "이며"], [/움$/, "우며"], [/씀$/, "쓰며"], [/감$/, "가며"], [/옴$/, "오며"], [/([았었였])음$/, "$1으며"]];
+  for (const [re, rep] of rules) if (re.test(clause)) return clause.replace(re, rep);
+  return null;
+}
+/** "~함" → "~하는" (뒤에 '과정에서'를 잇는 꼴). 잇기 어려우면 null */
+function adnForm(clause: string): string | null {
+  const rules: [RegExp, string][] = [[/함$/, "하는"], [/줌$/, "주는"], [/봄$/, "보는"], [/됨$/, "되는"], [/짐$/, "지는"], [/냄$/, "내는"], [/움$/, "우는"], [/씀$/, "쓰는"], [/감$/, "가는"], [/옴$/, "오는"]];
+  for (const [re, rep] of rules) if (re.test(clause)) return clause.replace(re, rep);
+  return null;
+}
+/**
+ * 역량을 맺는 서술어: 도달 정도에 맞춘 강도. '돋보임'(평가)은 가장 높은 단계에서 한 번만 쓰고, 그다음부터는 '드러남'.
+ * show = '~을 보여줌/보임' (행동 + 하며), reveal = '~이 드러남/돋보임' (행동 + 하는 과정에서)
+ */
+function compVerbs(achievement: number | null): { show: string; reveal: () => string } {
+  const g = gradeOf(achievement);
+  let strongLeft = g === "A" ? 1 : 0;
+  const reveal = () => (strongLeft-- > 0 ? "돋보임" : "드러남");
+  return { show: g === "D" || g === "E" || !g ? "보임" : "보여줌", reveal };
+}
+const tail = (word: string, pair: "을/를" | "이/가") => josa(word, pair).slice(word.length);
+
 const TOPIC_FRAMES: ((t: string) => string)[] = [
   (t) => `${t} 수업에서 `,
   (t) => `${josa(t, "을/를")} 배우며 `,
@@ -270,22 +375,34 @@ const TOPIC_FRAMES: ((t: string) => string)[] = [
 function wantsTopic(topic: string, clause: string): boolean {
   if (!topic) return false;
   const key = topic.replace(/[·\s]/g, "").slice(0, 2);
-  if (key && clause.replace(/\s/g, "").includes(key)) return false;
-  if (/에서/.test(clause.slice(0, 18))) return false;
-  return true;
+  if (key && clause.replace(/[·\s]/g, "").includes(key)) return false;
+  if (/에서/.test(clause)) return false;
+  // 긴 메모는 그 자체로 장면을 말한다 (짧은 메모 '질문함'만 수업 주제로 장면을 세운다)
+  return Array.from(clause).length <= 24;
 }
 
-function perfSentence(p: AnonPerf): string {
+/**
+ * PDF기록 문장: '[제목]에서 '[주제]'를 주제로 [발췌의 수행 내용]하며 [드러난 역량]을 보여줌.'
+ * 수행 내용은 발췌의 '주제 — 부연' 뒤쪽을 그대로 쓰고(없으면 '탐구한 내용을 정리함'), 역량은 그 부연의 행동 낱말에서만 이끈다
+ */
+function perfSentence(p: AnonPerf, used: Set<string>, show: string): DraftSentence {
   const src = `${p.excerpt}\n${p.text || ""}`;
   const m = src.match(/주제\s*[:：]\s*([^.\n]+)/);
-  let topic = (m ? m[1] : p.excerpt.split(/[.\n]/)[0] || "").replace(/○+/g, "").replace(/\s+/g, " ").trim();
-  if (topic.startsWith(p.title)) topic = topic.slice(p.title.length).trim();
-  topic = topic.split(/\s[—–-]\s|\s*[:：]\s*/)[0].trim(); // "주제 — 부연"에서 주제만
-  topic = Array.from(topic).slice(0, 36).join("").replace(/[,\s—-]+$/, "");
+  let head = (m ? m[1] : p.excerpt.split(/[.\n]/)[0] || "").replace(/○+/g, "").replace(/\s+/g, " ").trim();
+  if (head.startsWith(p.title)) head = head.slice(p.title.length).trim();
+  const [topic0, ...restParts] = head.split(/\s[—–-]\s|\s*[:：]\s*/);
+  const topic = Array.from(topic0.trim()).slice(0, 36).join("").replace(/[,\s—-]+$/, "");
+  const detail = restParts.join(" ").replace(/[.\s]+$/, "").trim();
   const title = p.title.trim() || "보고서";
-  if (!topic) return `${josa(title, "을/를")} 작성하여 제출함.`;
-  const particle = josa(topic, "을/를").slice(topic.length);
-  return `${title}에서 '${topic}'${particle} 주제로 탐구한 내용을 정리함.`;
+  if (!topic) return { text: `${josa(title, "을/를")} 작성하여 제출함.`, evidence: [p.id] };
+  const lead = `${title}에서 '${topic}'${tail(topic, "을/를")} 주제로 `;
+  const act = detail ? clauseOf({ id: p.id, date: "", category: "", lesson: "", topic: "", text: detail }) : "탐구한 내용을 정리함";
+  const comp = detail ? compsOf([{ id: p.id, date: "", category: "", lesson: "", topic: "", text: detail }]).find((c) => !used.has(c.key)) : undefined;
+  const me = comp ? meForm(act) : null;
+  if (!comp || !me) return { text: `${lead}${act}.`, evidence: [p.id], spans: [{ text: lead, kind: "none" }, { text: `${act}.`, kind: "activity" }] };
+  used.add(comp.key);
+  const spans: DraftSpan[] = [{ text: lead, kind: "none" }, { text: me, kind: "activity" }, { text: " ", kind: "none" }, { text: comp.phrase, kind: "competency" }, { text: `${tail(comp.phrase, "을/를")} ${show}.`, kind: "none" }];
+  return { text: spans.map((x) => x.text).join(""), evidence: [p.id], spans };
 }
 
 const lengthOf = lengthIn;
@@ -307,35 +424,80 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
   const empty = req.records.length - usable.length;
   if (empty) checks.push(`내용이 비어 있는 기록 ${empty}건은 쓰지 않았습니다.`);
 
-  // 같은 주제끼리 최대 두 개씩 묶는다 (날짜 순서는 유지)
+  // 묶기 (날짜 순서는 첫 기록 자리 그대로): 같은 행동을 다른 장면에서 한 기록은 장면을 모아 한 문장으로(최대 3),
+  // 그 밖에는 같은 주제끼리 최대 두 개씩
   const groups: AnonRecord[][] = [];
+  const merged = new Set<AnonRecord[]>();
+  const byAct = new Map<string, AnonRecord[]>();
   for (const r of usable) {
+    const { scene, act } = sceneSplit(r.text);
+    const key = scene && Array.from(act).length >= 6 ? act : "";
+    const same = key ? byAct.get(key) : undefined;
+    if (same && same.length < 3) { same.push(r); merged.add(same); continue; }
     const last = groups[groups.length - 1];
-    if (last && last.length < 2 && last[0].topic && last[0].topic === r.topic && last[0].category !== "기타") last.push(r); else groups.push([r]);
+    if (last && last.length < 2 && !merged.has(last) && !byAct.has(sceneSplit(last[0].text).act) && last[0].topic && last[0].topic === r.topic && last[0].category !== "기타") last.push(r);
+    else { const g = [r]; groups.push(g); if (key) byAct.set(key, g); }
   }
+  const verbs = compVerbs(req.achievement);
+  const usedComp = new Set<string>();
+  const flip = usable.length ? hashStr(usable[0].id) % 2 : 0;
+  /** 역량마다 그 역량이 드러난 기록 (끝의 묶음 문장 근거) */
+  const compSeen = new Map<string, string[]>();
   let topicMentions = 0; let lastTopic = "";
   groups.forEach((g, gi) => {
-    const clauses = g.map(clauseOf).filter(Boolean);
+    const isMerged = merged.has(g);
+    const clauses = isMerged ? [clauseOf({ ...g[0], text: mergedText(g) })] : g.map(clauseOf).filter(Boolean);
     if (!clauses.length) return;
     let body = clauses[0];
     if (clauses.length === 2) { const link = linkForm(clauses[0]); body = link ? `${link} ${clauses[1]}` : clauses[0]; if (!link) g = [g[0]]; }
     const topic = g[0].topic;
     let prefix = "";
-    if (topic && topic !== lastTopic && topicMentions < 1 && wantsTopic(topic, body)) {
+    if (!isMerged && topic && topic !== lastTopic && topicMentions < 2 && wantsTopic(topic, body)) {
       prefix = TOPIC_FRAMES[hashStr(g[0].id) % TOPIC_FRAMES.length](topic); topicMentions++;
     }
     if (topic) lastTopic = topic;
+    // 활동 + 세부 행동(기록 그대로) + 드러난 역량(학생이 한 행동에서 하나). 이미 쓴 역량이면 되풀이하지 않고 행동까지만 —
+    // 여러 번 보인 역량은 끝의 묶음 문장이 받는다
+    const primary = compOf(g);
+    if (primary) compSeen.set(primary.key, [...(compSeen.get(primary.key) || []), ...g.map((r) => r.id)]);
+    const comp = primary && !usedComp.has(primary.key) ? primary : null;
+    const spans: DraftSpan[] = [];
+    const put = (text: string, kind: SpanKind) => { if (text) spans.push({ text, kind }); };
+    put(prefix, "none");
+    const me = comp ? meForm(body) : null, adn = comp ? adnForm(body) : null;
+    // 맺음을 번갈아: '~하며 [역량]을 보여줌' / '~하는 과정에서 [역량]이 드러남' (학생마다 시작이 다르게)
+    if (comp && adn && (usedComp.size + flip) % 2 === 1) {
+      const v = verbs.reveal();
+      put(adn, "activity"); put(" 과정에서 ", "none"); put(comp.phrase, "competency");
+      put(`${tail(comp.phrase, "이/가")} `, "none"); put(v, v === "돋보임" ? "evaluation" : "none"); put(".", "none");
+      usedComp.add(comp.key);
+    } else if (comp && me) {
+      put(me, "activity"); put(" ", "none"); put(comp.phrase, "competency"); put(`${tail(comp.phrase, "을/를")} ${verbs.show}.`, "none");
+      usedComp.add(comp.key);
+    } else put(`${body}.`, "activity");
     let prio = 5 + gi * 0.01;
     if (g.some((r) => emphasize.has(r.category))) prio += 3;
     if (g.every((r) => reduce.has(r.category))) prio -= 4;
-    sents.push({ text: `${prefix}${body}.`, evidence: g.map((r) => r.id), prio });
+    sents.push({ text: spans.map((x) => x.text).join(""), evidence: g.map((r) => r.id), spans, prio });
     if (clauses.length === 2 && g.length === 1) {
       // 잇지 못한 두 번째 기록은 따로 문장으로
       const r2 = usable.find((r) => r.id !== g[0].id && clauseOf(r) === clauses[1]);
       if (r2) sents.push({ text: `${clauses[1]}.`, evidence: [r2.id], prio });
     }
   });
-  req.performance.forEach((p) => sents.push({ text: perfSentence(p), evidence: [p.id], prio: 6 }));
+  req.performance.forEach((p) => sents.push({ ...perfSentence(p, usedComp, verbs.show), prio: 6 }));
+  // 여러 기록에서 거듭 드러난 모습은 끝에서 한 문장으로 묶는다 (두 묶음 이상에서 보일 때만, 가장 많이 보인 것 하나 — 근거는 그 기록들 모두)
+  let best: { rule: CompRule; ids: string[] } | null = null;
+  for (const rule of COMP_RULES) {
+    const ids = [...new Set(compSeen.get(rule.key) || [])];
+    const groupsWith = groups.filter((g) => g.some((r) => ids.includes(r.id))).length;
+    if (groupsWith >= 2 && !best) best = { rule, ids }; // 두 문장 이상에서 보인 것 중 가장 구체적인 역량
+  }
+  if (best) {
+    const trait = best.rule.trait || best.rule.phrase;
+    const spans: DraftSpan[] = [{ text: "여러 활동에서 ", kind: "none" }, { text: trait, kind: "competency" }, { text: `${tail(trait, "이/가")} 거듭 드러남.`, kind: "none" }];
+    sents.push({ text: spans.map((x) => x.text).join(""), evidence: best.ids, spans, prio: 5.5 });
+  }
 
   const { min, max } = lengthWindow(req.targetLength, req.lengthBand);
   const unit = req.lengthMode === "bytes" ? "바이트" : "자";
@@ -357,7 +519,7 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
   const len = lengthOf(text, req.lengthMode);
   if (len < min) checks.push(`근거가 되는 기록이 적어 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}로 작성했습니다.`);
   if (sents.length > kept.length) checks.push(`분량 때문에 ${sents.length - kept.length}개 문장을 뺐습니다.`);
-  return { text, sentences: kept.map(({ text, evidence }) => ({ text, evidence })), checks };
+  return { text, sentences: kept.map(({ text, evidence, spans }) => (spans && spans.map((x) => x.text).join("") === text ? { text, evidence, spans } : { text, evidence })), checks };
 }
 
 export const DRAFT_JSON_SCHEMA = {
