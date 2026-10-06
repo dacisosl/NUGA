@@ -1,7 +1,7 @@
 {
   "name": "nuga",
   "private": true,
-  "version": "0.6.20",
+  "version": "0.6.21",
   "workspaces": ["packages/core", "apps/desktop", "apps/relay"],
   "scripts": {
     "dev": "npm run dev -w @nuga/desktop",
