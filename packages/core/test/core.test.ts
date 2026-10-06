@@ -282,12 +282,12 @@ describe("presets & byte length", () => {
     expect(lengthWindow(1500)).toEqual({ min: 1440, max: 1500 });
     expect(formatLength("가나다 abc", 1500, "bytes")).toBe("13 / 1,500 B · 약 7자");
   });
-  it("local generator stays within byte limit", () => {
+  it("local generator stays within byte limit (+ 30바이트 허용 폭)", () => {
     const doc = makeSampleDoc(3, SAMPLE_NOW);
     const s = doc.students.find((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.note).length >= 4)!;
     const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no);
     const out = generateLocalDraft(buildDraftRequest({ achievement: 60, targetLength: 300, lengthMode: "bytes", subject: "화학Ⅰ", records: recs, performances: [], categories: doc.settings.categories }));
-    expect(countChars(out.text).neisBytes).toBeLessThanOrEqual(300);
+    expect(countChars(out.text).neisBytes).toBeLessThanOrEqual(330);
   });
 });
 
@@ -530,21 +530,23 @@ describe("local draft — 활동 + 세부 행동 + 드러난 역량", () => {
   });
 });
 
-describe("분량 맞추기 — 목표에 가깝게, 한도는 넘기지 않게", () => {
-  it("30바이트(글자 수는 10자)쯤 모자란 것은 목표에 닿은 것으로 본다", async () => {
-    const { lengthFloor } = await import("../src");
+describe("분량 맞추기 — 목표에 가깝게 (±30바이트 허용)", () => {
+  it("목표에서 30바이트(글자 수는 10자) 안쪽이면 모자라도 넘어도 맞은 것으로 본다", async () => {
+    const { lengthFloor, lengthCeil } = await import("../src");
     expect(lengthFloor(1500, "bytes")).toBe(1440); // 목표 구간 아래 끝이 더 낮으면 그대로
     expect(lengthFloor(300, "bytes")).toBe(270);   // 목표가 작으면 30바이트
     expect(lengthFloor(500, "withSpaces")).toBe(480);
+    expect(lengthCeil(1500, "bytes")).toBe(1530);
+    expect(lengthCeil(500, "withSpaces")).toBe(510);
   });
 
-  it("규칙 기반: 기록이 넘치면 역량 표현을 줄이고 기록을 골라 — 한도 안, 목표에서 30바이트 안", () => {
+  it("규칙 기반: 기록이 넘치면 역량 표현을 줄이고 기록을 골라 — 목표에서 30바이트 안", () => {
     const doc = makeSampleDoc(1, SAMPLE_NOW);
     const many = doc.records.filter((r) => r.note).slice(0, 40);
     for (const target of [500, 1000, 1500]) {
       const out = generateLocalDraft(buildDraftRequest({ achievement: 85, targetLength: target, lengthMode: "bytes", subject: "화학Ⅰ", records: many, performances: [], categories: doc.settings.categories }));
       const b = countChars(out.text).neisBytes;
-      expect(b).toBeLessThanOrEqual(target);
+      expect(b).toBeLessThanOrEqual(target + 30);
       expect(b).toBeGreaterThanOrEqual(target - 30);
       expect(out.checks?.some((c) => c.includes("빼고 썼습니다"))).toBe(true);
       // 마무리는 남긴 기록에서만 역량을 모은다 (뺀 기록을 근거로 삼지 않는다)
@@ -554,7 +556,7 @@ describe("분량 맞추기 — 목표에 가깝게, 한도는 넘기지 않게",
     }
   });
 
-  it("규칙 기반: 학생마다 목표가 작아도 한도는 넘지 않고, 기록이 넘치면 목표에 가깝게", () => {
+  it("규칙 기반: 학생마다 목표가 작아도 30바이트 넘게 넘치지 않고, 기록이 넘치면 목표에 가깝게", () => {
     const doc = makeSampleDoc(1, SAMPLE_NOW);
     const studs = doc.students.filter((x) => doc.records.filter((r) => r.class === x.class && r.no === x.no && r.note).length >= 3).slice(0, 8);
     for (const s of studs) {
@@ -564,23 +566,28 @@ describe("분량 맞추기 — 목표에 가깝게, 한도는 넘기지 않게",
       const fullLen = countChars(make(5000).text).neisBytes;
       for (const target of [200, 300, 450, 600, 800, 1500]) {
         const b = countChars(make(target).text).neisBytes;
-        expect(b).toBeLessThanOrEqual(target);
-        if (target >= 450 && target < fullLen) expect(target - b).toBeLessThanOrEqual(30);
+        expect(b).toBeLessThanOrEqual(target + 30);
+        if (target >= 450 && target < fullLen) expect(Math.abs(target - b)).toBeLessThanOrEqual(30);
       }
     }
   });
 
-  it("규칙 기반: 한도를 조금 넘을 때는 기록을 빼기 전에 역량 표현부터 줄인다", () => {
+  it("규칙 기반: 30바이트 안쪽으로 넘치면 그대로 두고, 그보다 넘치면 기록을 빼기 전에 역량 표현부터 줄인다", () => {
     const doc = makeSampleDoc(1, SAMPLE_NOW);
     const s = doc.students.find((x) => x.no === 18)!;
     const recs = doc.records.filter((r) => r.class === s.class && r.no === s.no);
     const make = (targetLength: number) => generateLocalDraft(buildDraftRequest({ achievement: 72, targetLength, lengthMode: "bytes", subject: "화학Ⅰ", records: recs, performances: [], categories: doc.settings.categories }));
     const full = make(5000);
-    const target = countChars(full.text).neisBytes - 20;
+    const fullLen = countChars(full.text).neisBytes;
+    // 20바이트 넘침 → 그대로
+    const near = make(fullLen - 20);
+    expect(near.text).toBe(full.text);
+    expect(near.checks?.some((c) => c.includes("허용 폭(30바이트) 안"))).toBe(true);
+    // 50바이트 넘침 → 역량 표현을 줄여 30바이트 안으로 (기록은 그대로)
+    const target = fullLen - 50;
     const out = make(target);
     const b = countChars(out.text).neisBytes;
-    expect(b).toBeLessThanOrEqual(target);
-    expect(b).toBeGreaterThanOrEqual(target - 30);
+    expect(Math.abs(target - b)).toBeLessThanOrEqual(30);
     expect(out.checks).toContain("분량에 맞추려고 역량 표현을 짧게 줄였습니다.");
     expect(out.checks?.some((c) => c.includes("빼고 썼습니다"))).toBe(false);
     expect(new Set(out.sentences.flatMap((x) => x.evidence))).toEqual(new Set(full.sentences.flatMap((x) => x.evidence)));
@@ -609,6 +616,10 @@ describe("분량 맞추기 — 목표에 가깝게, 한도는 넘기지 않게",
     expect(countChars(t.text).neisBytes).toBe(366); // 첫 · 끝 + 둘째 · 넷째 (셋째를 빼야 가장 길다)
     expect(t.sentences.map((x) => x.evidence[0])).toEqual(["r0", "r1", "r3", "r4"]);
     expect(t.dropped).toBe(1);
+    // 허용 폭(30바이트)을 주면, 목표보다 30바이트 넘게 모자란 쪽(366)보다 조금 넘치는 쪽(424)을 고른다
+    const loose = trimDraftToLimit(res, 400, "bytes", undefined, 30);
+    expect(countChars(loose.text).neisBytes).toBe(424);
+    expect(loose.sentences.map((x) => x.evidence[0])).toEqual(["r0", "r2", "r4"]);
     // 문장 하나도 넘치면 이음말 자리에서 끊어 맺는다 ('~주며' → '~줌')
     const one = trimDraftToLimit({ ...res, sentences: res.sentences.slice(0, 2) }, 120, "bytes");
     expect(one.text).toBe("르샤틀리에 원리 탐구 활동에서 모둠원의 오개념을 바로잡아 줌.");
@@ -625,13 +636,15 @@ describe("분량 맞추기 — 목표에 가깝게, 한도는 넘기지 않게",
     expect(g).toContain("id: r7, r9"); expect(g).toContain("기록에 없는 사실이나 상투적 칭찬으로 늘리지 마세요");
   });
 
-  it("검토: 30바이트 안쪽으로 모자란 것은 분량 미달로 보지 않는다 (넘는 것은 그대로 점검)", () => {
+  it("검토: 목표에서 30바이트 안쪽은 모자라도 넘어도 분량 문제로 보지 않는다", () => {
     const ctx = { target: 300, lengthMode: "bytes" as const, achievement: 60 as number | null, recordCount: 3, lowRecordThreshold: 1, otherDrafts: [], similarityThreshold: 0.6 };
-    const text = "중화 적정 실험에서 오차 원인을 눈금 읽기와 변색 시점으로 나누어 발표함. 산·염기 평형 퀴즈 활동에서 모둠원에게 풀이를 설명하며 협력적 태도를 보여줌.";
+    const text = "중화 적정 실험에서 오차 원인을 눈금 읽기와 변색 시점으로 나누어 발표함. 산·염기 평형 퀴즈 활동에서 모둠원에게 풀이를 설명하며 협력적 태도를 보여줌. 르샤틀리에 원리 탐구 활동에서 모둠원의 오개념을 바로잡아 주며 개념을 정확히 이해하고 설명하는 능력을 잘 보여줌.";
     const b = countChars(text).neisBytes;
+    expect(b).toBeGreaterThan(330); // 허용 폭이 30바이트가 되는 크기 (한도의 10%가 30 이상)
     const lengthIssue = (target: number) => reviewText(text, null, { ...ctx, target }).issues.some((i) => i.kind === "length");
-    expect(lengthIssue(b + 25)).toBe(false);
-    expect(lengthIssue(b + 45)).toBe(true);
-    expect(lengthIssue(b - 5)).toBe(true);
+    expect(lengthIssue(b + 25)).toBe(false); // 25바이트 모자람
+    expect(lengthIssue(b + 45)).toBe(true);  // 45바이트 모자람
+    expect(lengthIssue(b - 25)).toBe(false); // 25바이트 넘침
+    expect(lengthIssue(b - 40)).toBe(true);  // 40바이트 넘침
   });
 });

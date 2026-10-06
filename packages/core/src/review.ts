@@ -1,5 +1,5 @@
 import type { Draft, LengthMode, ReviewIssue, ReviewResult } from "./types";
-import { countChars, lengthFloor, lengthIn, lengthWindow, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
+import { countChars, lengthCeil, lengthFloor, lengthIn, lengthWindow, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
 import { draftSpans, spanRatio } from "./highlight";
 
 /** 기재 금지 사전. 정규식으로 매칭되며 사용자 설정으로 확장 가능. */
@@ -75,9 +75,11 @@ export function reviewText(text: string, sentences: Draft["sentences"] | null, c
   const cc = countChars(trimmed);
   const len = lengthIn(trimmed, ctx.lengthMode);
   const { max } = lengthWindow(ctx.target, ctx.lengthBand);
-  const min = lengthFloor(ctx.target, ctx.lengthMode, ctx.lengthBand); // 30바이트쯤 모자란 것은 괜찮다
+  // 목표에서 30바이트 안쪽은 모자라도 넘어도 괜찮다
+  const min = lengthFloor(ctx.target, ctx.lengthMode, ctx.lengthBand);
+  const ceil = lengthCeil(ctx.target, ctx.lengthMode, ctx.lengthBand);
   const u = ctx.lengthMode === "bytes" ? "B" : "자";
-  if (len > max) issues.push({ kind: "length", message: `분량 초과 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });
+  if (len > ceil) issues.push({ kind: "length", message: `분량 초과 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });
   else if (len < min) {
     if ((ctx.achievement ?? 0) >= 80) issues.push({ kind: "levelA", message: `도달 정도 높음 · 분량 미달 ${len}/${ctx.target}${u}` });
     else if (ctx.recordCount > ctx.lowRecordThreshold) issues.push({ kind: "length", message: `분량 미달 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });

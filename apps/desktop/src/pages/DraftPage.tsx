@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, regenerationInstruction, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
   type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
-  growInstruction, lengthFloor, lengthIn, lengthWindow, shrinkInstruction, trimDraftToLimit,
+  growInstruction, lengthCeil, lengthFloor, lengthIn, lengthWindow, shrinkInstruction, trimDraftToLimit,
 } from "@nuga/core";
 import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
@@ -77,29 +77,30 @@ async function generateChecked(student: Student, records: NugaRecord[], perfs: P
 }
 
 /**
- * 생성 뒤 분량 맞추기 (목표 구간 = 한도의 96~100%, 30바이트쯤 모자란 것은 괜찮다 — 넘는 것은 안 된다).
- *  · 한도를 넘으면: 정확한 수와 줄이는 순서(역량 표현 짧게 → 묶기 → 덜 중요한 기록 빼기)로 다시 쓰게 — 최대 2번, 그래도 넘치면 본문 문장을 덜어 낸다
- *  · 목표보다 많이 짧으면: 아직 쓰지 않은 기록이 있을 때만 한 번 늘리게 (근거 없이 늘리지 않는다)
+ * 생성 뒤 분량 맞추기 (목표 구간 = 한도의 96~100%). 목표에서 30바이트 안쪽이면 모자라도 넘어도 그대로 받는다.
+ *  · 그보다 넘치면: 정확한 수와 줄이는 순서(역량 표현 짧게 → 묶기 → 덜 중요한 기록 빼기)로 목표 안에 다시 쓰게 — 최대 2번, 그래도 넘치면 본문 문장을 덜어 낸다
+ *  · 그보다 짧으면: 아직 쓰지 않은 기록이 있을 때만 한 번 늘리게 (근거 없이 늘리지 않는다)
  */
 async function fitLength(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, res0: DraftProviderResult, limit: number): Promise<{ res: DraftProviderResult; note: string }> {
   const { doc } = useStore.getState();
   const mode = doc.settings.lengthMode, band = doc.settings.lengthBand;
   const { max } = lengthWindow(limit, band);
-  const floor = lengthFloor(limit, mode, band);
+  const floor = lengthFloor(limit, mode, band), ceil = lengthCeil(limit, mode, band);
+  const slack = ceil - max;
   const u = unitOf(doc);
   const lenOf = (t: string) => lengthIn(t, mode);
   const start = lenOf(res0.text);
   let res = res0;
   const steps: string[] = [];
   let why = "";
-  for (let i = 0; i < 2 && lenOf(res.text) > max; i++) {
+  for (let i = 0; i < 2 && lenOf(res.text) > ceil; i++) {
     try {
       const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, shrinkInstruction(lenOf(res.text), limit, mode, band));
       if (lenOf(next.text) < lenOf(res.text)) { res = next; steps.push("줄이기"); }
     } catch { break; }
   }
-  if (lenOf(res.text) > max) {
-    const t = trimDraftToLimit(res, limit, mode, band);
+  if (lenOf(res.text) > ceil) {
+    const t = trimDraftToLimit(res, limit, mode, band, slack);
     res = { ...res, ...t }; steps.push(`문장 ${t.dropped}개 덜기`);
   } else if (lenOf(res.text) < floor) {
     const used = new Set(res.sentences.flatMap((s) => s.evidence));
@@ -109,14 +110,15 @@ async function fitLength(student: Student, records: NugaRecord[], perfs: Perform
       try {
         const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, growInstruction(lenOf(res.text), limit, mode, unused, band));
         const nl = lenOf(next.text);
-        if (nl > lenOf(res.text) && nl <= max) { res = next; steps.push("늘리기"); }
-        else if (nl > max) { const t = trimDraftToLimit(next, limit, mode, band); if (lenOf(t.text) > lenOf(res.text)) { res = { ...next, ...t }; steps.push("늘리기"); } }
+        if (nl > lenOf(res.text) && nl <= ceil) { res = next; steps.push("늘리기"); }
+        else if (nl > ceil) { const t = trimDraftToLimit(next, limit, mode, band, slack); if (lenOf(t.text) > lenOf(res.text)) { res = { ...next, ...t }; steps.push("늘리기"); } }
         if (!steps.length) why = "더 쓸 근거가 마땅치 않아 목표보다 짧게 둠";
       } catch { why = "늘리지 못해 지금 길이로 둠"; }
     }
   }
   const end = lenOf(res.text);
-  const note = steps.length ? `분량 맞춤 ${start.toLocaleString("ko-KR")} → ${end.toLocaleString("ko-KR")}${u} (${steps.join(" · ")})`
+  if (end > max) why = `한도보다 ${(end - max).toLocaleString("ko-KR")}${u} 길지만 허용 폭(${slack}${u}) 안이라 그대로 둠`;
+  const note = steps.length ? `분량 맞춤 ${start.toLocaleString("ko-KR")} → ${end.toLocaleString("ko-KR")}${u} (${steps.join(" · ")}${end > max ? ` · 한도보다 ${(end - max).toLocaleString("ko-KR")}${u} 길지만 허용 폭 안` : ""})`
     : why ? `분량 ${end.toLocaleString("ko-KR")}${u} — ${why}` : "";
   return { res, note };
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
 import type { Category, LengthMode, ReviewResult, Student } from "@nuga/core";
-import { RESULT_LABEL, gradeStep, lengthFloor, lengthWindow } from "@nuga/core";
+import { RESULT_LABEL, gradeStep, lengthCeil, lengthFloor, lengthWindow } from "@nuga/core";
 import { achievementOf, useStore } from "../store";
 
 export function Chip({ cat, label, className = "", onClick, selected }: { cat?: Category | "perf"; label: React.ReactNode; className?: string; onClick?: () => void; selected?: boolean }) {
@@ -236,20 +236,21 @@ export function Toasts() {
   );
 }
 
-/** 분량 막대. 바이트 단위면 "1,452 / 1,500 B · 약 484자" 로 표시한다. 목표 구간은 한도의 96~100% (30바이트쯤 모자란 것은 괜찮게). */
+/** 분량 막대. 바이트 단위면 "1,452 / 1,500 B · 약 484자" 로 표시한다. 목표 구간은 한도의 96~100%, 목표에서 30바이트 안쪽은 모자라도 넘어도 괜찮게. */
 export function LenBar({ len, target, mode, chars, band }: { len: number; target: number; mode?: LengthMode; chars?: number; band?: [number, number] }) {
   const { max } = lengthWindow(target, band);
   const min = mode ? lengthFloor(target, mode, band) : lengthWindow(target, band).min;
+  const top = mode ? lengthCeil(target, mode, band) : max;
   const pct = Math.min(100, (len / Math.max(1, target)) * 100);
-  const cls = len > max ? "over" : len < min ? "low" : "";
+  const cls = len > top ? "over" : len < min ? "low" : "";
   const bytes = mode === "bytes";
   const fmt = (n: number) => n.toLocaleString("ko-KR");
   const unit = bytes ? "B" : "자";
   const modeText = bytes ? "NEIS 바이트" : mode === "withoutSpaces" ? "공백 제외" : "공백 포함";
   return (
-    <span className="flex" title={`목표 ${fmt(min)}~${fmt(max)}${unit} (${modeText}) · 한도 초과 금지`}>
+    <span className="flex" title={`목표 ${fmt(min)}~${fmt(max)}${unit} (${modeText})${top > max ? ` · ${fmt(top - max)}${unit}까지 넘어도 허용` : " · 한도 초과 금지"}`}>
       <span className="lenbar"><i className={cls} style={{ width: pct + "%" }} /><b style={{ left: `${(min / Math.max(1, target)) * 100}%` }} /></span>
-      <span className={`num small ${len > max ? "" : "muted"}`} style={{ color: len > max ? "var(--warn)" : undefined }}>{fmt(len)}/{fmt(target)}{bytes ? " B" : ""}{bytes && chars !== undefined ? ` · 약 ${fmt(chars)}자` : ""}</span>
+      <span className={`num small ${len > top ? "" : "muted"}`} style={{ color: len > top ? "var(--warn)" : undefined }}>{fmt(len)}/{fmt(target)}{bytes ? " B" : ""}{bytes && chars !== undefined ? ` · 약 ${fmt(chars)}자` : ""}</span>
     </span>
   );
 }

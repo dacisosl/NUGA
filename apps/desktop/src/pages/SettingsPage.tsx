@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
   WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
-  LEGACY_LEVEL_SCORE, LENGTH_PRESET, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
+  LEGACY_LEVEL_SCORE, LENGTH_PRESET, lengthSlack, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
   type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
 import { Sheet, TopBar } from "../App";
@@ -556,7 +556,7 @@ function LengthSection() {
             <span>~</span>
             <input type="number" className="num" style={{ width: 70 }} min={50} max={100} value={pct(band[1])} onChange={(e) => setSettings({ lengthBand: [band[0], Math.min(100, Math.max(Number(e.target.value), pct(band[0]))) / 100] })} />%
           </span>
-          <span className="muted small">지금 기준 {Math.ceil(limit * band[0]).toLocaleString("ko-KR")}~{Math.floor(limit * band[1]).toLocaleString("ko-KR")}{unit}. 한도 초과는 금지, 기록이 적으면 미달을 허용합니다.</span>
+          <span className="muted small">지금 기준 {Math.ceil(limit * band[0]).toLocaleString("ko-KR")}~{Math.floor(limit * band[1]).toLocaleString("ko-KR")}{unit}. 초안은 이 구간을 겨냥하고, 목표에서 {lengthSlack(limit, s.lengthMode)}{unit} 안쪽은 모자라도 넘어도 맞은 것으로 봅니다. 기록이 적으면 미달을 허용합니다.</span>
         </div>
       </div>
     </div>

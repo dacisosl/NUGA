@@ -112,12 +112,23 @@ export function lengthWindow(limit: number, band: [number, number] = [0.96, 1.0]
   return { min: Math.min(max, Math.ceil(limit * band[0])), max };
 }
 
-/** 모자라도 괜찮은 폭 (30바이트 · 10자): 이만큼 가까우면 목표에 닿은 것으로 본다. 넘는 쪽은 허용하지 않는다 */
+/**
+ * 허용 폭 (30바이트 · 10자): 목표에서 이만큼 안쪽이면 모자라도 넘어도 맞은 것으로 본다.
+ * 생성은 여전히 목표 구간 안을 겨냥하고, 결과가 허용 폭 안이면 다시 묻거나 자르지 않는다
+ */
 export const LENGTH_SLACK: Record<"withSpaces" | "withoutSpaces" | "bytes", number> = { bytes: 30, withSpaces: 10, withoutSpaces: 10 };
+/** 이 한도에서의 허용 폭: 30바이트(10자)와 한도의 10% 가운데 작은 쪽 (아주 작은 한도에서 폭이 너무 크지 않게) */
+export function lengthSlack(limit: number, mode: "withSpaces" | "withoutSpaces" | "bytes"): number {
+  return Math.min(LENGTH_SLACK[mode], Math.round(limit * 0.1));
+}
 /** 충분히 가까운 아래 끝 = 목표 구간 아래 끝과 '한도 − 허용 폭' 가운데 낮은 쪽 (목표가 작아도 30바이트쯤 모자란 것은 괜찮게) */
 export function lengthFloor(limit: number, mode: "withSpaces" | "withoutSpaces" | "bytes", band?: [number, number]): number {
   const { min, max } = lengthWindow(limit, band);
-  return Math.max(0, Math.min(min, max - LENGTH_SLACK[mode]));
+  return Math.max(0, Math.min(min, max - lengthSlack(limit, mode)));
+}
+/** 받아들이는 위 끝 = 한도 + 허용 폭 (30바이트쯤 넘는 것은 괜찮게) */
+export function lengthCeil(limit: number, mode: "withSpaces" | "withoutSpaces" | "bytes", band?: [number, number]): number {
+  return lengthWindow(limit, band).max + lengthSlack(limit, mode);
 }
 
 export function unitLabel(mode: "withSpaces" | "withoutSpaces" | "bytes"): string {
