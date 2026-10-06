@@ -1,0 +1,91 @@
+name: Release installers (Windows + Android)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - run: npm ci
+      # 로컬 LLM: llama.cpp 의 Windows CPU 빌드(llama-server.exe + DLL)를 설치 파일에 함께 넣는다.
+      # 받지 못하면 로컬 LLM 없이 빌드한다 (앱 데이터 폴더에 직접 넣어도 동작).
+      - name: Fetch llama.cpp (CPU, Windows x64)
+        id: llama
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # llama.cpp 는 빌드마다 b<번호> 사전 릴리스를 낸다. 재현 가능하도록 버전을 고정한다.
+          LLAMA_TAG: b11339
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dest = "apps/desktop/src-tauri/binaries/llama"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          gh release download $env:LLAMA_TAG --repo ggml-org/llama.cpp --pattern "llama-$($env:LLAMA_TAG)-bin-win-cpu-x64.zip" --dir tmp-llama
+          $zip = Get-ChildItem tmp-llama -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath tmp-llama/x -Force
+          $exe = Get-ChildItem tmp-llama/x -Recurse -Filter llama-server.exe | Select-Object -First 1
+          Copy-Item $exe.FullName $dest
+          Get-ChildItem $exe.Directory.FullName -Filter *.dll | Copy-Item -Destination $dest
+          Copy-Item (Get-ChildItem tmp-llama/x -Recurse -Filter LICENSE* | Select-Object -First 1).FullName "$dest/LICENSE-llama.cpp.txt" -ErrorAction SilentlyContinue
+          Write-Output "llama.cpp: $($zip.Name)"; Get-ChildItem $dest | Format-Table Name, Length
+      - name: Build Tauri bundles (with local LLM)
+        if: steps.llama.outcome == 'success'
+        working-directory: apps/desktop
+        run: npx tauri build --config src-tauri/tauri.llama.conf.json
+      - name: Build Tauri bundles
+        if: steps.llama.outcome != 'success'
+        run: npm run tauri -- build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuga-windows
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/msi/*.msi
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      # ubuntu-latest 러너에는 Android SDK가 기본 설치됨 (ANDROID_HOME). 부족한 build-tools는 AGP가 자동 설치.
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build debug APKs (mobile + wear)
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew :shared:test :mobile:assembleDebug :wear:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuga-android
+          path: |
+            android/mobile/build/outputs/apk/debug/*.apk
+            android/wear/build/outputs/apk/debug/*.apk
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            android/mobile/build/outputs/apk/debug/*.apk
+            android/wear/build/outputs/apk/debug/*.apk

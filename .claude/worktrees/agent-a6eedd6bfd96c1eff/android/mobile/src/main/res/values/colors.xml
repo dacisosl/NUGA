@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 밤의 틀 (Theme.kt NugaColors와 같은 값) -->
+    <color name="nuga_navy">#081422</color>
+    <color name="nuga_navy_0">#060F1A</color>
+    <color name="nuga_navy_2">#0D1C2E</color>
+    <color name="nuga_ink">#EAF2FF</color>
+    <color name="nuga_sky">#ACCDFF</color>
+    <!-- 종이 -->
+    <color name="nuga_paper">#F2F6FC</color>
+    <color name="nuga_text">#152D4A</color>
+    <color name="nuga_accent">#245AA7</color>
+    <!-- 카테고리 (웹 c1~c4) -->
+    <color name="nuga_cat1">#2F63B8</color>
+    <color name="nuga_cat2">#16756C</color>
+    <color name="nuga_cat3">#6A48B0</color>
+    <color name="nuga_cat4">#56708D</color>
+</resources>

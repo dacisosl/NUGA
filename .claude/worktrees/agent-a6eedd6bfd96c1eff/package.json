@@ -1,0 +1,14 @@
+{
+  "name": "nuga",
+  "private": true,
+  "version": "0.6.15",
+  "workspaces": ["packages/core", "apps/desktop", "apps/relay"],
+  "scripts": {
+    "dev": "npm run dev -w @nuga/desktop",
+    "build": "node tools/build-privacy.mjs && npm run build -w @nuga/desktop",
+    "privacy": "node tools/build-privacy.mjs",
+    "tauri": "npm run tauri -w @nuga/desktop",
+    "relay": "npm start -w @nuga/relay",
+    "test": "npm test -w @nuga/core && npm test -w @nuga/relay"
+  }
+}

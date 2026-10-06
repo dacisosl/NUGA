@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#081422" />
+    <title>누가</title>
+    <!-- 앱과 같은 밤 바탕: 스타일이 늦게 붙어도 흰 화면이 번쩍이지 않게 -->
+    <style>html { background: #081422; }</style>
+    <!-- Pretendard Variable (SIL OFL, public/fonts) 를 앱에 함께 싣는다. 학교망에서 CDN 이 막혀도 같은 글꼴 -->
+    <link rel="preload" href="/fonts/PretendardVariable.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- 두 번째 대비책: 정적 Pretendard (CDN) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

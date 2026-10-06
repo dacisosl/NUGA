@@ -1,0 +1,16 @@
+{
+  "level": "high",
+  "label": "고등학교",
+  "verified": false,
+  "userModel": "subject",
+  "userModelLabel": "교과형: 한 과목, 여러 반 (선택과목 반 포함)",
+  "timetableMode": "class",
+  "items": ["setuk", "behavior", "autonomy", "club", "career"],
+  "defaultItem": "setuk",
+  "categories": ["질문", "발표", "협동", "탐구"],
+  "suggestWeights": { "inquiry": 0.4, "depth": 0.3, "connection": 0.3 },
+  "styleGuide": "탐구 과정, 개념의 심화와 확장, 개념 간 연결이 기록에 드러난 경우 그 과정을 중심으로 서술한다.",
+  "forbidden": [
+    { "group": "대입 관련", "terms": ["학생부종합", "수시", "정시", "입시", "논문", "특허", "어학 성적", "TOEIC", "TOEFL", "인증 시험"] }
+  ]
+}

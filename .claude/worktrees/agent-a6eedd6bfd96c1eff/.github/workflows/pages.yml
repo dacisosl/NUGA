@@ -1,0 +1,93 @@
+name: Deploy web app to GitHub Pages
+
+# 한 사이트에 두 버전을 함께 올린다.
+#   /NUGA/        ← main 의 데스크톱 웹 (apps/desktop)
+#   /NUGA/whale/  ← dev 의 웨일 버전 (whale/, NWEC 26)
+# 배포는 main 에서만 한다(github-pages 환경 규칙). dev 에 푸시하면 main 의 이 워크플로를
+# 다시 실행시키고, 그 실행이 main·dev 를 모두 받아 같은 사이트를 다시 만든다.
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  redeploy-from-main:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: main/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install (main)
+        working-directory: main
+        run: npm ci
+      - name: Test core + relay
+        working-directory: main
+        run: npm test
+      - name: Build desktop web bundle
+        working-directory: main
+        run: npm run build -w @nuga/desktop
+        env:
+          VITE_BASE: /NUGA/
+
+      - name: Test whale
+        working-directory: dev/whale
+        run: node tools/test.mjs
+      - name: Build whale
+        working-directory: dev/whale
+        run: python tools/build.py
+
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r main/apps/desktop/dist/. site/
+          cp site/index.html site/404.html
+          mkdir -p site/whale
+          cp dev/whale/dist/index.html site/whale/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

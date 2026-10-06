@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- 앱 틀은 늘 밤(남색). 첫 화면이 하얗게 번쩍이지 않도록 창 바탕도 남색, 시스템 막대 아이콘은 밝게 -->
+    <style name="Theme.Nuga" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/nuga_navy</item>
+        <item name="android:statusBarColor">@color/nuga_navy</item>
+        <item name="android:navigationBarColor">@color/nuga_navy_0</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+        <item name="android:colorPrimary">@color/nuga_accent</item>
+        <item name="android:colorAccent">@color/nuga_sky</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 아이콘 (적응형): 밤 장면 바탕 + 하늘빛 계단 선과 끝점 (웹 사이드바 brand-mark와 같은 모양) -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_nuga_bg" />
+    <foreground android:drawable="@drawable/ic_nuga_fg" />
+</adaptive-icon>

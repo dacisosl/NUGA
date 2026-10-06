@@ -1,0 +1,14 @@
+{
+  "level": "elem",
+  "label": "초등학교",
+  "verified": false,
+  "userModel": "homeroom",
+  "userModelLabel": "담임형: 한 반, 여러 교과",
+  "timetableMode": "subject",
+  "items": ["elemSubject", "behavior", "autonomy", "club", "career"],
+  "defaultItem": "elemSubject",
+  "categories": ["학습태도", "발표", "관계", "생활"],
+  "suggestWeights": { "participation": 0.4, "relationship": 0.3, "growth": 0.3 },
+  "styleGuide": "쉬운 표현으로 쓰고, 학생의 성장과 변화가 기록에 드러난 경우 그 과정을 중심으로 서술한다.",
+  "forbidden": []
+}

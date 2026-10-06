@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Night shell: spec token navy-1. -->
+    <color name="nuga_night">#FF081422</color>
+
+    <!--
+        The window under Compose is the same navy as the night sky, so launching never flashes black → navy.
+        Shadow alphas are raised so Modifier.shadow(ambientColor, spotColor) reads as a soft coloured glow
+        under the glass slabs (the platform defaults are tuned for grey elevation on light surfaces).
+    -->
+    <style name="Theme.Nuga.Watch" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowBackground">@color/nuga_night</item>
+        <item name="android:ambientShadowAlpha">0.22</item>
+        <item name="android:spotShadowAlpha">0.40</item>
+    </style>
+</resources>

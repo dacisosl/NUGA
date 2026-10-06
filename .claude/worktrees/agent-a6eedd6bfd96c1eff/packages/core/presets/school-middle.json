@@ -1,0 +1,16 @@
+{
+  "level": "middle",
+  "label": "중학교",
+  "verified": false,
+  "userModel": "subject",
+  "userModelLabel": "교과형: 한 과목, 여러 반",
+  "timetableMode": "class",
+  "items": ["setuk", "behavior", "autonomy", "club", "career"],
+  "defaultItem": "setuk",
+  "categories": ["질문", "발표", "협동", "기타"],
+  "suggestWeights": { "participation": 0.35, "understanding": 0.35, "application": 0.3 },
+  "styleGuide": "수업 참여, 개념 이해, 적용 과정을 중심으로 서술한다.",
+  "forbidden": [
+    { "group": "진로 단정", "terms": ["장래 희망은", "꿈이", "직업을 갖고"] }
+  ]
+}

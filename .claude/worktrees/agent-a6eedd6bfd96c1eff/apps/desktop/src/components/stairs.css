@@ -1,0 +1,299 @@
+/* 한눈에 · 밤의 계단 (StairsView.tsx 에서 불러옴). 종이 위에 열린 밤의 창: 빛나는 유리 계단 + 이름표.
+   토큰은 styles.css :root 이름을 그대로 쓰고, 테마가 없을 때도 보이도록 모두 기본값을 둔다.
+   치수는 StairsView.tsx 와 맞물린다: --plate-h·--plate-gap = PH·GAP. 이름표 너비 --tagw 는 무대 인라인(가장 긴 이름을 재서 정함),
+   디딤판 높이 --t 는 칸(.stair-col)마다 인라인(layout 이 칸마다 따로 푼다). [data-density] --tagw 는 기본값일 뿐이다.
+   이 파일은 styles.css 보다 먼저 들어가므로, 공용 규칙(.stag, .eyebrow …)과 겹치는 곳은 무대 범위로 한 단계 더 좁혀 쓴다.
+   빈 칸은 .vacant (공용 .empty 의 여백·워터마크가 붙지 않게). 판은 .stair-step 의 형제라서 바닥 반사에 이름이 비치지 않는다. */
+
+/* ── 놓이는 자리 (현황판 맨 위 '자세히') ── 높이를 고정해 무대가 눌리지 않고, 그 아래 학생 카드 격자로 페이지가 스크롤된다.
+   높이는 한 곳에서만 정한다: stairs-brief.css 의 .stairs-panel --sp-full (접기·간략히·자세히 사이를 옮길 때 몸 높이도 같은 값을 쓴다) */
+.board-stairs { display: flex; flex-direction: column; }
+.stairs-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: inline-size; }
+
+/* ── 무대: 종이 안의 유일한 어두운 면 ── */
+.stairs-stage {
+  --plate-h: 26px; --plate-gap: 4px; --floor-h: 44px; --tagw: 76px;
+  position: relative; isolation: isolate; overflow: hidden; flex: 1; min-height: 440px;
+  display: flex; flex-direction: column; padding: 22px 26px var(--floor-h);
+  border-radius: var(--r-stage, 12px); color: var(--ink, #EAF2FF); color-scheme: dark;
+  background: var(--grain, none), var(--stage-bg,
+    radial-gradient(46% 58% at 90% -4%, rgb(84 149 253 / .28) 0%, rgb(84 149 253 / .11) 34%, rgb(84 149 253 / .03) 58%, rgb(84 149 253 / 0) 70%),
+    linear-gradient(118deg, transparent 52%, rgba(172,205,255,.05) 60%, transparent 68%),
+    radial-gradient(ellipse at 72% 80%, #142C49 0%, #081422 58%));
+  background-color: var(--navy-1, #081422);
+  box-shadow: 0 0 0 1px #0B1828, inset 0 1px 0 rgba(255,255,255,.07), 0 24px 60px -28px rgba(8,20,34,.7);
+}
+/* 유리 테두리: 빛이 드는 오른쪽 위가 가장 밝다 */
+.stairs-stage::before {
+  content: ""; position: absolute; inset: 0; z-index: 4; padding: 1px; border-radius: inherit; pointer-events: none; opacity: .7;
+  background: var(--edge-light, linear-gradient(225deg, rgba(255,255,255,.75) 0%, rgba(172,205,255,.26) 22%, rgba(172,205,255,.06) 56%, rgba(172,205,255,.16) 100%));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+/* 매끈한 바닥: 무대 자신(z -1)에 그려 뒤 형제가 반사를 덮지 못하게 */
+.stairs-stage::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--floor-h); z-index: -1; pointer-events: none;
+  background: linear-gradient(180deg, var(--floor-reflect, rgba(54,79,125,.30)) 0%, rgba(5,17,35,0) 62%), var(--floor, #051123);
+}
+/* 수평선 = 랜딩의 경로 연결선: 끝(정상 아래)에 빛나는 점 */
+.stairs-horizon { position: absolute; left: 26px; right: 26px; bottom: var(--floor-h); height: 1px; z-index: 0; pointer-events: none; background: linear-gradient(90deg, rgba(55,85,115,.55), #8DB4E9); }
+.stairs-horizon::after { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: #BDD6FA; box-shadow: 0 0 14px #7DA6DF; }
+
+/* ── 머리: 왼쪽 위 KPI(랜딩의 큰 숫자), 오른쪽 위 범례 ── */
+.stairs-head { position: relative; z-index: 1; flex: none; display: flex; align-items: flex-start; flex-wrap: wrap; gap: 16px 32px; animation: stairs-fade .5s var(--ease-out, cubic-bezier(.2,.7,.2,1)) backwards; }
+.stairs-head .eyebrow { flex-basis: 100%; display: inline-flex; align-items: center; gap: 12px; margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: var(--tr-eyebrow, .02em); color: var(--ink2, #A3B7D2); }
+.stairs-head .eyebrow::before { content: ""; flex: none; width: 24px; height: 1px; background: currentColor; opacity: .7; }
+.stairs-head .eyebrow b { color: #C6D6EC; font-weight: 600; font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1); }
+
+.stairs-stage .kpis { display: flex; flex-wrap: wrap; row-gap: 12px; }
+.stairs-stage .kpi { position: relative; display: grid; gap: 7px; justify-items: start; align-content: start; margin: 0; padding: 0 22px; border: 0; border-left: 1px solid var(--dline-2, rgba(171,201,241,.22)); border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.stairs-stage .kpi:first-child { padding-left: 0; border-left: 0; }
+.stairs-stage .kpi .k { font-size: 12px; font-weight: 550; color: var(--ink2, #A3B7D2); white-space: nowrap; }
+.stairs-stage .kpi b { font-size: var(--fs-kpi, 32px); line-height: 1; font-weight: var(--fw-kpi, 650); letter-spacing: var(--tr-kpi, -.045em); color: var(--ink-num, #D6E6FD); white-space: nowrap; font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1); }
+.stairs-stage .kpi b small { font-size: 13px; font-weight: 550; letter-spacing: 0; color: var(--ink3, #7F95B2); margin-left: 3px; }
+.stairs-stage .kpi.warn .k, .stairs-stage .kpi.warn b { color: var(--amber-ink, #FFC9A8); }
+.stairs-stage .kpi.tg { cursor: pointer; }
+.stairs-stage .kpi.tg:disabled { cursor: default; }
+.stairs-stage .kpi.tg:not(:disabled):hover .k { color: var(--ink, #EAF2FF); }
+/* 토글 빛줄: 눌렀을 때만 그어진다 */
+.stairs-stage .kpi.tg::after { content: ""; position: absolute; left: 22px; right: 22px; bottom: -8px; height: 2px; border-radius: 1px; background: var(--sky, #ACCDFF); box-shadow: 0 0 8px rgb(var(--glow-rgb, 125 166 223) / .7); transform: scaleX(0); transform-origin: left; transition: transform var(--d-3, .45s) var(--ease-std, cubic-bezier(.215,.61,.355,1)); }
+.stairs-stage .kpi.tg.warn::after { background: var(--amber, #FFB27A); box-shadow: 0 0 8px rgb(var(--warm-rgb, 255 178 128) / .6); }
+.stairs-stage .kpi.tg[aria-pressed="true"]::after { transform: scaleX(1); }
+.stairs-stage .kpi.tg[aria-pressed="true"] .k { color: var(--ink, #EAF2FF); }
+.stairs-stage .kpi .meter { display: block; width: 96px; height: 2px; border-radius: 1px; background: rgba(171,201,241,.16); overflow: hidden; }
+.stairs-stage .kpi .meter i { display: block; height: 100%; width: calc(var(--v) * 100%); background: linear-gradient(90deg, #6E9EE8, #ACCDFF); box-shadow: 0 0 8px rgba(172,205,255,.7); }
+
+.stairs-legend { margin-left: auto; display: grid; justify-items: end; gap: 7px; font-size: 11.5px; font-weight: 500; color: var(--ink2, #A3B7D2); white-space: nowrap; }
+.stairs-legend .sw { display: inline-flex; gap: 3px; margin: 0 6px; vertical-align: -1px; }
+.stairs-legend .sw i { width: 14px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(171,201,241,.4); }
+.stairs-legend .sw .g0 { background: var(--g0, #EEF2F7); }
+.stairs-legend .sw .g1 { background: var(--g1, #CBD5E1); }
+.stairs-legend .sw .g2 { background: var(--g2, #8E9DB0); }
+.stairs-legend .sw .g3 { background: var(--g3, #475569); }
+.stairs-legend .sw .g4 { background: var(--g4, #161B22); }
+.stairs-legend .wk { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--dot, #9CC6FF); box-shadow: 0 0 6px rgba(120,170,255,.8); }
+.stairs-legend .lowk { display: inline-block; width: 16px; margin: 0 6px 0 12px; vertical-align: 3px; border-top: 1px dashed var(--amber, #FFB27A); }
+.stairs-legend .gxk { display: inline-block; width: 14px; height: 9px; border-radius: 2px; margin: 0 6px 0 12px; vertical-align: -1px; background: repeating-linear-gradient(135deg, rgba(234,242,255,.22) 0 3px, rgba(234,242,255,.06) 3px 5px); outline: 1px dashed rgba(171,201,241,.5); outline-offset: -1px; }
+
+/* ── 계단 칸: 잰 크기 안에 격자를 절대 위치로 (column-gap 0 → 이어진 하나의 계단 실루엣) ── */
+.stairs-field { position: relative; z-index: 1; flex: 1; min-height: 0; margin-top: 22px; }
+.stairs-grid { position: absolute; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr); align-items: stretch; column-gap: 0; }
+.stair-col { position: relative; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.stair-stack { position: relative; z-index: 2; display: grid; grid-auto-flow: column; grid-template-rows: repeat(var(--rows), var(--plate-h)); grid-auto-columns: var(--tagw); gap: var(--plate-gap); justify-content: center; padding: 0 5px 6px; }
+.stair-stack .ph { visibility: hidden; }
+.stairs-stage[data-density="full"] { --tagw: 76px; }
+.stairs-stage[data-density="compact"] { --tagw: 62px; }
+.stairs-stage[data-density="tight"] { --tagw: 46px; }
+
+/* ── 유리 디딤판: 겹겹이 쌓인 기록 판, 빛 받는 앞모서리, 위로 번지는 빛. blur·filter 없음 ── */
+.stair-step {
+  position: relative; width: 100%; height: var(--t, 34px);
+  display: flex; flex-wrap: wrap; align-content: flex-start; align-items: baseline; gap: 1px 6px; padding: 7px 8px 0; border-radius: 3px 3px 0 0;
+  background:
+    linear-gradient(180deg, rgba(234,242,255,.18) 0, rgba(234,242,255,.04) 6px, rgba(234,242,255,0) 18px),
+    linear-gradient(90deg, rgba(255,255,255,0) 45%, rgba(234,242,255,.05) 100%),
+    repeating-linear-gradient(180deg, rgba(172,205,255,.10) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, rgba(53,107,186,.32) 0%, rgba(14,32,56,.74) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), inset 1px 0 0 rgba(172,205,255,.16), inset -1px 0 0 rgba(172,205,255,.08), 0 -10px 30px -16px rgb(var(--bloom-rgb, 84 149 253) / .26);
+  /* 아래 12px(판 줄무늬)만 바닥에 비친다. 글자는 위쪽에만 두어 거꾸로 비치지 않는다 */
+  -webkit-box-reflect: below 0 linear-gradient(transparent calc(100% - 12px), rgba(255,255,255,.13));
+  animation: stairs-rise var(--d-4, .65s) var(--ease-out, cubic-bezier(.2,.7,.2,1)) backwards;
+  animation-delay: calc(var(--i) * var(--stagger-step, 50ms));
+}
+.stair-step[data-tier="2"] { box-shadow: inset 0 1px 0 rgba(255,255,255,.75), inset 1px 0 0 rgba(172,205,255,.18), inset -1px 0 0 rgba(172,205,255,.09), 0 -12px 36px -16px rgb(var(--bloom-rgb, 84 149 253) / .36); }
+.stair-step[data-tier="3"] { box-shadow: inset 0 1px 0 rgba(255,255,255,.9), inset 1px 0 0 rgba(172,205,255,.22), inset -1px 0 0 rgba(172,205,255,.10), 0 -14px 40px -16px rgb(var(--bloom-rgb, 84 149 253) / .42); }
+/* 앞모서리 빛줄: 양 끝이 사라지고 오른쪽 끝에 따뜻한 반사. 높을수록 밝다(opacity 만) */
+.stair-step::before {
+  content: ""; position: absolute; left: 4%; right: 4%; top: -1px; height: 1px; pointer-events: none; opacity: .4;
+  background: linear-gradient(90deg, transparent 0%, rgba(234,242,255,.85) 16%, #fff 70%, var(--spec-warm, #FFF5DB) 88%, transparent 100%);
+  box-shadow: 0 0 10px 1px rgba(172,205,255,.5);
+}
+.stair-step[data-tier="1"]::before { opacity: .6; }
+.stair-step[data-tier="2"]::before { opacity: .8; }
+.stair-step[data-tier="3"]::before { opacity: 1; }
+/* 빛 쪽 모서리가 빛을 받는다 */
+.stair-step::after {
+  content: ""; position: absolute; inset: 0; border: 1px solid rgba(234,242,255,.5); border-bottom: 0; border-radius: inherit; pointer-events: none;
+  -webkit-mask: radial-gradient(ellipse 70% 45% at 100% 0%, #000, transparent 85%); mask: radial-gradient(ellipse 70% 45% at 100% 0%, #000, transparent 85%);
+}
+.stair-range { font-size: 12px; font-weight: 650; letter-spacing: -.01em; line-height: 1.1; color: #DCE9FC; white-space: nowrap; word-break: keep-all; font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1); }
+.stair-range small { font-size: 10.5px; font-weight: 550; color: var(--ink2, #A3B7D2); margin-left: 1px; }
+.stair-n { font-size: 11px; font-weight: 550; line-height: 1.1; color: var(--ink2, #A3B7D2); white-space: nowrap; font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1); }
+.stair-col:hover .stair-step::before { opacity: 1; }
+.stair-col:hover .stair-range { color: var(--ink, #EAF2FF); }
+
+/* 정상: 실제로 오른 가장 높은 칸 하나만 크게 번진다 */
+.stair-col.peak .stair-step { box-shadow: inset 0 1px 0 #fff, inset 1px 0 0 rgba(172,205,255,.24), inset -1px 0 0 rgba(172,205,255,.12), 0 -22px 60px -16px rgba(150,195,255,.58); }
+.stair-col.peak .stair-step::before { opacity: 1; box-shadow: 0 0 14px 2px rgb(var(--glow-rgb, 125 166 223) / .6); }
+.stair-col.peak .stair-stack { background: radial-gradient(60% 40% at 50% 100%, rgb(var(--bloom-rgb, 84 149 253) / .12), transparent 70%); }
+/* 빈 칸: 불 꺼진 유리, 계단은 끊기지 않는다 */
+.stair-col.vacant .stair-step {
+  align-content: flex-start; justify-content: center; padding: 6px 2px 0;
+  background: repeating-linear-gradient(180deg, rgba(172,205,255,.05) 0 1px, transparent 1px 6px), linear-gradient(180deg, rgba(53,107,186,.12), rgba(14,32,56,.5));
+  box-shadow: inset 0 1px 0 rgba(234,242,255,.26), inset 1px 0 0 rgba(172,205,255,.08);
+}
+.stair-col.vacant .stair-step::before { opacity: .12; }
+.stair-col.vacant .stair-step::after { display: none; }
+/* 좁은 빈 칸: '11건 이상' 이 안 들어가면 '11건 / 이상' 두 줄로. 빈 칸은 흐린 디딤판으로만 말하고 글자는 ink2(밝은 웅덩이 위에서도 4.5:1 이상) */
+.stair-col.vacant .stair-range { font-size: 11px; font-weight: 600; color: var(--ink2, #A3B7D2); white-space: normal; text-align: center; }
+.stair-col.vacant .stair-range small { font-size: inherit; font-weight: inherit; color: inherit; }
+/* 빈 칸이 길게 이어질 때 가운데 칸: 이름 없는 가는 디딤판 (칸 이름은 aria-label 로 읽힌다) */
+.stair-col.sliver .stair-step { padding: 0; }
+.stair-col.sliver .stair-step > * { display: none; }
+.stair-col.top.vacant .stair-step { box-shadow: inset 0 1px 0 rgba(255,255,255,.45); }
+/* 기록 부족 구간: 하늘빛 대신 호박빛 앞모서리·점선 기준선·호박빛 범위. 이름표 색은 그대로 */
+.stair-col.low .stair-step { box-shadow: inset 0 1px 0 rgba(255,220,195,.8), inset 1px 0 0 rgb(var(--warm-rgb, 255 178 128) / .14), inset -1px 0 0 rgb(var(--warm-rgb, 255 178 128) / .06), 0 -10px 30px -16px rgb(var(--warm-rgb, 255 178 128) / .36); }
+.stair-col.low .stair-step::before { opacity: 1; background: linear-gradient(90deg, transparent, #FFD9BC 16%, #FFE7D3 80%, transparent); box-shadow: 0 0 10px 1px rgb(var(--warm-rgb, 255 178 128) / .42); }
+.stair-col.low.vacant .stair-step::before { opacity: .5; }
+.stair-col.low .stair-range { color: var(--amber-ink, #FFC9A8); }
+/* 기준선은 이 칸 디딤판 높이(--t) + 판 한 줄 남짓까지만: 무대 위쪽의 어둠을 가르지 않는다 */
+.stair-col.low-edge::after { content: ""; position: absolute; top: auto; bottom: 0; right: 0; height: calc(var(--t, 34px) + 28px); border-right: 1px dashed rgb(var(--warm-rgb, 255 178 128) / .45); pointer-events: none; }
+/* 출발선: 디딤판 없이 바닥의 불 꺼진 점선 위에 선다. 글자는 바닥 띠에 */
+.stair-col.start { padding-right: 6px; }
+.stair-start { position: relative; width: 100%; height: 0; border-top: 1px dashed rgba(172,205,255,.42); }
+.stair-start .stair-range { position: absolute; left: 4px; top: 10px; color: var(--ink2, #A3B7D2); }
+.stair-start .stair-n { position: absolute; left: 4px; top: 26px; color: var(--ink3, #7F95B2); }
+.stair-col.start.low .stair-start { border-top-color: rgb(var(--warm-rgb, 255 178 128) / .6); }
+.stair-col.start.low .stair-range { color: var(--amber-ink, #FFC9A8); }
+
+/* ── 이름표 판 '07 김민준': 위치·색·이번 주 점 세 가지만 말한다 ── */
+.stairs-stage .plate {
+  position: relative; width: var(--tagw); height: var(--plate-h); border-radius: var(--r-plate, 4px);
+  transition: transform var(--d-1, .12s) var(--ease-out, cubic-bezier(.2,.7,.2,1)), opacity var(--d-2, .2s);
+  animation: stairs-rise-sm .45s var(--ease-out, cubic-bezier(.2,.7,.2,1)) backwards;
+  animation-delay: calc(240ms + min(var(--k), 24) * var(--stagger-plate, 12ms));
+}
+.stairs-stage.settled .plate { animation: none; }
+/* StudentTag 가 판 전체를 채운다. 색 단계(.g0–.g4/.gx)·근거 부족(.lowconf)·오른쪽 클릭 창은 StudentTag 그대로 */
+.stairs-stage .plate .stag {
+  position: relative; display: flex; align-items: center; width: 100%; height: 100%; max-width: none; margin: 0;
+  padding: 0 7px 0 25px; border: 0; border-radius: inherit; outline: 0;
+  background: var(--pl-bg, var(--pl-g0, linear-gradient(180deg, #F8FAFC, #E6EBF2))); color: var(--pl-ink, #152D4A);
+  font-family: inherit; font-size: 13px; font-weight: 650; letter-spacing: -.02em; line-height: 1; text-align: left; cursor: pointer;
+  box-shadow: var(--sh-plate, inset 0 1px 0 rgba(255,255,255,.42), 0 0 0 1px rgba(4,10,18,.55), 0 6px 14px -8px rgba(2,8,16,.9));
+}
+.stairs-stage .plate .stag.g0 { --pl-bg: var(--pl-g0, linear-gradient(180deg, #F8FAFC, #E6EBF2)); --pl-ink: var(--g0-ink, #152D4A); }
+.stairs-stage .plate .stag.g1 { --pl-bg: var(--pl-g1, linear-gradient(180deg, #D6DEE8, #C0CBD8)); --pl-ink: var(--g1-ink, #152D4A); }
+.stairs-stage .plate .stag.g2 { --pl-bg: var(--pl-g2, linear-gradient(180deg, #9AA8BA, #8392A6)); --pl-ink: var(--g2-ink, #0B1420); }
+/* g3·g4 는 밤 위에서 혼자서는 묻힌다(2.44 · 1.07:1) → 안쪽 하늘빛 테두리는 필수 */
+.stairs-stage .plate .stag.g3 { --pl-bg: var(--pl-g3, linear-gradient(180deg, #516073, #3E4B5E)); --pl-ink: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 1px var(--g3-ring, rgba(172,205,255,.38)), 0 0 0 1px rgba(4,10,18,.6), 0 6px 14px -8px rgba(2,8,16,.9); }
+.stairs-stage .plate .stag.g4 { --pl-bg: var(--pl-g4, linear-gradient(180deg, #262E3A, #12161D)); --pl-ink: var(--g4-ink, #EAF2FF); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 0 0 1px var(--g4-ring, rgba(172,205,255,.56)), 0 0 0 1px rgba(4,10,18,.7), 0 6px 14px -8px rgba(2,8,16,.9); }
+.stairs-stage .plate .stag.gx { --pl-bg: repeating-linear-gradient(135deg, rgba(234,242,255,.10) 0 4px, rgba(234,242,255,.03) 4px 7px), #14263D; --pl-ink: #C6D6EC; box-shadow: none; outline: 1px dashed rgba(171,201,241,.5); outline-offset: -1px; }
+.stairs-stage .plate .stag.lowconf { outline: 1px dashed currentColor; outline-offset: -3px; }
+.stairs-stage .plate .stag.lowconf::before, .stairs-stage .plate .stag-lv { display: none; }
+/* 오른쪽 여백을 고정: 공용 .stag.sm.nob·터치 화면 규칙이 바꾸지 않게 (이름표 너비는 이 여백으로 잰다). tight·compact 는 아래에서 다시 정한다 */
+.stairs-stage .plate .stag.sm { padding-right: 7px; }
+/* 이름 단추를 판 전체로 넓힌다: 어디를 눌러도 학생 기록, 오른쪽 클릭은 StudentTag 로.
+   이름표 너비는 가장 긴 이름을 재서 정하므로 말줄임(…)을 쓰지 않는다 */
+.stairs-stage .plate .stag-name { display: block; flex: 1; min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: clip; text-decoration: none; cursor: pointer; }
+.stairs-stage .plate .stag-name::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-plate, 4px); }
+.stairs-stage .plate .stag-name:focus-visible { outline: none; box-shadow: none; }
+.stairs-stage .plate .stag-name:focus-visible::after { outline: 2px solid var(--sky, #ACCDFF); outline-offset: 2px; }
+/* 번호: 이름과 같은 글자색(불투명도 없음) */
+.stairs-stage .plate .plate-no {
+  position: absolute; left: 7px; top: 0; bottom: 0; z-index: 1; display: flex; align-items: center; pointer-events: none;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0; line-height: 1; color: var(--g0-ink, #152D4A);
+  font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1);
+}
+.stairs-stage .plate .stag.g1 ~ .plate-no { color: var(--g1-ink, #152D4A); }
+.stairs-stage .plate .stag.g2 ~ .plate-no { color: var(--g2-ink, #0B1420); }
+.stairs-stage .plate .stag.g3 ~ .plate-no { color: #FFFFFF; }
+.stairs-stage .plate .stag.g4 ~ .plate-no { color: var(--g4-ink, #EAF2FF); }
+.stairs-stage .plate .stag.gx ~ .plate-no { color: #C6D6EC; }
+/* 이번 주 점: 판마다 하나뿐인 빛. 판은 overflow 를 자르지 않아 점이 잘리지 않는다 */
+.stairs-stage .plate[data-week]::after { content: ""; position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; background: var(--dot, #9CC6FF); box-shadow: 0 0 0 2px var(--navy-1, #081422), 0 0 8px rgba(120,170,255,.85); }
+/* 마우스·초점 고리는 미리 그려 두고 opacity 만 바꾼다 (box-shadow 는 전환하지 않음) */
+.stairs-stage .plate::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity var(--d-1, .12s); box-shadow: 0 0 0 1px rgba(214,231,255,.85), 0 0 0 4px rgb(var(--glow-rgb, 125 166 223) / .16), 0 10px 22px -10px rgb(var(--bloom-rgb, 84 149 253) / .6); }
+.stairs-stage .plate:hover, .stairs-stage .plate:focus-within { transform: translateY(-1px); z-index: 3; }
+.stairs-stage .plate:hover::before, .stairs-stage .plate:focus-within::before { opacity: 1; }
+.stairs-stage .plate:active { transform: none; }
+.stairs-stage .plate.arrive::before { animation: stairs-arrive .9s var(--ease-out, cubic-bezier(.2,.7,.2,1)); } /* 한 칸 오른 학생: 고리가 한 번 켜졌다 꺼진다 */
+.stairs-stage:is([data-density="compact"], [data-density="tight"], [data-density="ladder"]) .plate .plate-no { display: none; }
+.stairs-stage:is([data-density="compact"], [data-density="ladder"]) .plate .stag { padding-left: 7px; }
+.stairs-stage[data-density="tight"] .plate .stag { padding: 0 5px; font-size: 12px; }
+/* 찾기·KPI 토글: 맞지 않는 이름표는 흐리게만(숨기지 않음 → 실루엣 유지) */
+.stairs-stage.filtering .plate:not(.hit) { opacity: .2; }
+.stairs-stage.filtering .plate.hit::before { opacity: 1; }
+
+/* ── 빈 경우 ── */
+/* 빈 반 안내문: 맨 윗 디딤판 위(인라인 bottom). 자리가 없거나 사다리면 그리지 않는다 */
+.stairs-note { position: absolute; right: 8px; bottom: 0; max-width: 260px; margin: 0; text-align: right; font-size: 13px; line-height: 1.55; color: var(--ink2, #A3B7D2); }
+.stairs-note b { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; color: var(--ink3, #7F95B2); }
+.stairs-empty { position: relative; z-index: 1; margin: auto; display: grid; gap: 8px; justify-items: center; text-align: center; }
+.stairs-empty b { font-size: 16px; font-weight: 650; letter-spacing: -.02em; color: #C6D6EC; }
+.stairs-empty p { margin: 0 0 6px; font-size: 13px; color: var(--ink2, #A3B7D2); }
+.stairs-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.stairs-mark { position: absolute; right: 18px; bottom: calc(var(--floor-h) + 10px); width: 220px; height: 220px; z-index: 0; pointer-events: none; opacity: .10; background: var(--stair-mark, none) no-repeat right bottom / contain; }
+
+/* ── 사다리: 좁은 창·200% 확대. 가로 줄, 높은 칸이 위 ── */
+.stairs-stage[data-density="ladder"] { --tagw: 62px; }
+.stairs-stage[data-density="ladder"] .stairs-grid { display: flex; flex-direction: column-reverse; justify-content: flex-start; gap: 6px; overflow: auto; background-color: transparent; }
+.stairs-stage[data-density="ladder"] .stair-col { flex: none; flex-direction: row; align-items: flex-start; justify-content: flex-start; gap: 10px; padding: 6px 0; border-top: 1px solid var(--dline, rgba(171,201,241,.12)); }
+.stairs-stage[data-density="ladder"] :is(.stair-step, .stair-start) { order: -1; flex: none; width: 92px; height: 28px; margin-left: calc(var(--i) * 6px); padding: 0 8px; border-radius: 4px; display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: space-between; -webkit-box-reflect: none; }
+.stairs-stage[data-density="ladder"] .stair-start { border: 1px dashed rgba(172,205,255,.42); }
+.stairs-stage[data-density="ladder"] .stair-col.start.low .stair-start { border-color: rgb(var(--warm-rgb, 255 178 128) / .6); }
+.stairs-stage[data-density="ladder"] .stair-start :is(.stair-range, .stair-n) { position: static; }
+.stairs-stage[data-density="ladder"] .stair-stack { flex: 1; min-width: 0; grid-auto-flow: row; grid-template-rows: none; grid-auto-rows: var(--plate-h); grid-template-columns: repeat(auto-fill, var(--tagw)); justify-content: start; padding: 0 4px 0 0; }
+.stairs-stage[data-density="ladder"] .stair-stack .ph,
+.stairs-stage[data-density="ladder"] .stair-col.vacant,
+.stairs-stage[data-density="ladder"] .stair-col.low-edge::after,
+.stairs-stage[data-density="ladder"] .stairs-horizon { display: none; }
+/* 좁은 무대: KPI 를 세 칸 격자로 접고 숫자를 줄여 계단 칸 높이를 지킨다 */
+@container (max-width: 640px) {
+  .stairs-stage .kpis { display: grid; grid-template-columns: repeat(3, auto); justify-content: start; }
+  .stairs-stage .kpi:nth-child(3n+1) { padding-left: 0; border-left: 0; }
+  .stairs-stage .kpi.tg:nth-child(3n+1)::after { left: 0; }
+  .stairs-stage .kpi b { font-size: 26px; }
+  .stairs-legend { margin-left: 0; justify-items: start; }
+}
+
+/* ── 이름표 위 카드 (document.body 로 포털, 흐림 예산 3개 중 하나. 도달 정도 창이 열리면 숨는다) ── */
+.stair-tip {
+  position: fixed; z-index: var(--z-pop, 400); min-width: 208px; max-width: 260px; padding: 10px 12px 11px; border-radius: 8px; pointer-events: none;
+  font-size: 12.5px; line-height: 1.55; color: var(--ink2, #A3B7D2); font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1);
+  background: var(--glass-dk-solid, #112338);
+  box-shadow: inset 0 1px 0 rgba(234,242,255,.12), 0 0 0 1px rgba(171,201,241,.2), var(--sh-float-dk, 0 1px 2px rgb(2 8 16 / .5), 0 8px 24px -6px rgb(2 8 16 / .55), 0 24px 60px -18px rgb(2 8 16 / .7));
+  opacity: 0; transform: translateY(4px); transition: opacity var(--d-1, .12s), transform var(--d-1, .12s);
+}
+@supports (backdrop-filter: blur(1px)) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .stair-tip { background: var(--glass-dk, linear-gradient(160deg, rgba(17,35,56,.82), rgba(8,20,34,.90))); -webkit-backdrop-filter: blur(14px) saturate(140%); backdrop-filter: blur(14px) saturate(140%); }
+  }
+}
+.stair-tip.show { opacity: 1; transform: none; }
+.stair-tip b { display: block; margin-bottom: 4px; color: var(--ink, #EAF2FF); font-size: 14px; font-weight: 650; letter-spacing: -.02em; }
+.stair-tip .r { display: flex; justify-content: space-between; gap: 16px; }
+.stair-tip .r em { font-style: normal; color: var(--ink, #EAF2FF); text-align: right; }
+.stair-tip .r.cats { justify-content: flex-start; flex-wrap: wrap; gap: 0 10px; color: var(--ink, #EAF2FF); }
+.stair-tip .sw { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 1.5px; vertical-align: 1px; background: #86B2F2; }
+.stair-tip .sw.c2 { background: #4FB8A6; }
+.stair-tip .sw.c3 { background: #A58BEA; }
+.stair-tip .sw.c4 { background: var(--ink2, #A3B7D2); }
+
+/* ── 동작: 무대가 설 때 한 번 (from 만 → 멈춘 상태가 곧 최종 상태) ── */
+@keyframes stairs-rise { from { opacity: 0; transform: translateY(20px); } }
+@keyframes stairs-rise-sm { from { opacity: 0; transform: translateY(10px); } }
+@keyframes stairs-fade { from { opacity: 0; } }
+@keyframes stairs-arrive { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ── 접근성·인쇄 가드 ── */
+@media (prefers-reduced-motion: reduce) {
+  .stairs-stage, .stairs-stage *, .stairs-stage *::before, .stairs-stage *::after, .stair-tip { animation: none !important; transition: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .stair-tip { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background: var(--glass-dk-solid, #112338) !important; }
+  .stair-step { -webkit-box-reflect: none; }
+}
+@media (prefers-contrast: more) {
+  .stairs-stage { background: var(--navy-1, #081422); }
+  .stairs-stage .plate .stag { box-shadow: 0 0 0 1.5px currentColor !important; }
+  .stairs-stage .stair-step { background: #132A47 !important; box-shadow: inset 0 2px 0 #fff !important; }
+  .stairs-stage .stair-step::before, .stairs-stage .stair-step::after { display: none; }
+}
+@media (forced-colors: active) {
+  .stairs-stage .plate .stag { border: 1px solid CanvasText; }
+  .stairs-stage .stair-step { border-top: 2px solid CanvasText; -webkit-box-reflect: none; }
+  .stairs-stage::before { display: none; }
+}
+@media print {
+  .board-stairs, .stairs-wrap, .stair-tip { display: none !important; }
+}

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  4×2: 머리(수업 · 오늘 기록 수) + 번호 칸 두 줄쯤(3명씩, 스크롤) + 오른쪽 [기록].
+  요즘 런처의 2칸 높이(190dp 안팎)면 두세 줄이 보인다. minHeight는 dp로 칸을 정하는 런처용(머리 + 두 줄 = 180dp),
+  최소 크기는 번호 한 줄 + 머리, 폭은 번호 세 칸 + [기록]이 들어가는 만큼.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:minResizeWidth="240dp"
+    android:minResizeHeight="130dp"
+    android:updatePeriodMillis="1800000"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_desc"
+    android:initialLayout="@layout/glance_default_loading_layout" />
