@@ -108,6 +108,13 @@ describe("draft", () => {
     const p = parseDraftResponse('여기 결과: {"text":"설명함.","sentences":[{"text":"설명함.","evidence":["r1"]}]}');
     expect(p.text).toBe("설명함."); expect(p.sentences[0].evidence).toEqual(["r1"]);
   });
+  it("전체 기재문(text)이 없으면 문장을 이어 만들고, 끊긴 응답은 다시 물을 수 있는 오류로", async () => {
+    const { DraftFormatError } = await import("../src");
+    const p = parseDraftResponse('{"sentences":[{"text":"질문함.","evidence":["r1"]},{"text":"정리함.","evidence":["r2"]}],"checks":[]}');
+    expect(p.text).toBe("질문함. 정리함.");
+    expect(() => parseDraftResponse('{"sentences":[{"text":"질문')).toThrow(DraftFormatError);
+    expect(() => parseDraftResponse("초안을 쓸 수 없습니다")).toThrow(DraftFormatError);
+  });
 });
 
 describe("timetable & sync", () => {
@@ -297,6 +304,9 @@ describe("llm provider layer", () => {
     expect(geminiText({ candidates: [{ content: { parts: [{ text: "생각", thought: true }, { text: '{"a":1}' }] }, finishReason: "STOP" }] })).toBe('{"a":1}');
     expect(() => geminiText({ promptFeedback: { blockReason: "SAFETY" } })).toThrow();
     expect(openAiText({ choices: [{ message: { content: "x" } }] })).toBe("x");
+    // 길이 한도에서 잘린 응답은 앞부분이 있어도 받은 척하지 않는다
+    expect(() => geminiText({ candidates: [{ content: { parts: [{ text: '{"sentences":[{"text":"질문함' }] }, finishReason: "MAX_TOKENS" }] })).toThrow(/잘림/);
+    expect(() => openAiText({ choices: [{ message: { content: '{"sentences":[' }, finish_reason: "length" }] })).toThrow(/잘림/);
     expect(extractJson('```json\n{"a":1}\n```')).toBe('{"a":1}');
     expect(httpError(401, "{}", "gemini").kind).toBe("auth");
   });

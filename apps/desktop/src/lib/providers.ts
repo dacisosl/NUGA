@@ -27,17 +27,25 @@ function anthropicProvider(model: string): LLMProvider {
   return {
     id: "anthropic", model,
     async generate(req: LLMRequest) {
-      const client = new Anthropic({ apiKey: getKey("anthropic"), dangerouslyAllowBrowser: true, maxRetries: 2, timeout: 120_000 });
+      const client = new Anthropic({ apiKey: getKey("anthropic"), dangerouslyAllowBrowser: true, maxRetries: 2, timeout: 300_000 });
       const base = { model, max_tokens: req.maxTokens ?? 4096, system: req.system, messages: [{ role: "user" as const, content: req.user }] };
       const textOf = (res: Anthropic.Message) => {
         if (res.stop_reason === "refusal") throw new LLMError("모델이 요청을 거절함", "refusal");
+        if (res.stop_reason === "max_tokens") throw new LLMError("응답이 길이 한도에서 잘림", "length");
         return res.content.filter((b): b is Anthropic.TextBlock => b.type === "text").map((b) => b.text).join("");
       };
       try {
         const params = req.schema ? { ...base, output_config: { format: { type: "json_schema", schema: req.schema } } } : base;
         return textOf(await client.messages.create(params as unknown as Anthropic.MessageCreateParamsNonStreaming, { signal: req.signal }));
       } catch (e) {
-        if (e instanceof Anthropic.BadRequestError && req.schema) return textOf(await client.messages.create(base, { signal: req.signal })); // 구조화 출력 미지원 모델
+        if (e instanceof Anthropic.BadRequestError) {
+          // 구조화 출력을 못 받는 모델이면 형식 없이 한 번 더. 길이 한도를 못 받는 경우는 앱이 한도를 낮춰 다시 묻는다
+          if (req.schema && !/max_tokens/i.test(e.message)) {
+            try { return textOf(await client.messages.create(base, { signal: req.signal })); }
+            catch (e2) { if (e2 instanceof Anthropic.BadRequestError) throw new LLMError(`Claude: ${e2.message}`, "format"); throw e2; }
+          }
+          throw new LLMError(`Claude: ${e.message}`, "format");
+        }
         if (e instanceof Anthropic.AuthenticationError) throw new LLMError("Claude: API 키가 올바르지 않음", "auth");
         if (e instanceof Anthropic.RateLimitError) throw new LLMError("Claude: 요청 한도 초과, 잠시 후 다시 시도", "rate");
         if (e instanceof Anthropic.APIConnectionError) throw new LLMError("Claude: 연결 실패 (네트워크 확인)", "network");

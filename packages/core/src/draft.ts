@@ -178,15 +178,23 @@ const BEHAVIOR_EXAMPLES = [
 /** 기본 초안 지침(교과 세특). 설정 → 개별 설정 → 초안 프롬프트에서 영역마다 바꿀 수 있다. */
 export const DEFAULT_DRAFT_GUIDE = composeGuide("세부능력 및 특기사항", SETUK_RULES, SETUK_EXAMPLES);
 
-/** 앱이 응답을 읽기 위해 항상 덧붙이는 출력 형식 (사용자가 바꿀 수 없음) */
-export const DRAFT_OUTPUT_RULES = [
-  "출력은 JSON 하나만 낸다: {\"text\": 최종 기재문, \"sentences\": [{\"text\": 문장, \"evidence\": [근거 id...]}], \"checks\": [확인 필요 사항...]}.",
-  "text 는 sentences 의 text 를 공백 한 칸으로 이어 붙인 것과 같아야 한다.",
-  "evidence 에는 그 문장의 근거가 된 누가기록·PDF기록의 id 를 넣는다. 근거가 없는 문장은 쓰지 않는다.",
-  "checks 에는 판독 불가·자료 불일치, 규정 적용이 불확실해 뺀 내용, 근거가 모자라 분량이 짧은 이유 등을 짧게 적는다. 없으면 빈 배열로 둔다.",
-  "각 문장은 spans 로도 나눈다: [{\"text\": 구간, \"kind\": activity|competency|evaluation|none}]. activity = 학생이 실제로 한 행동·활동, competency = 그 행동이 보여 주는 역량을 가리키는 말(예: 자기관리 역량, 의사소통 능력), evaluation = 교사의 판단·평가 표현(예: 매우 뛰어남, 성실한 학습자임), none = 이음말·조사 등. spans 의 text 를 순서대로 이어 붙이면 그 문장의 text 와 글자 하나까지 같아야 한다.",
-  "문단 전체에서 activity · competency · evaluation 의 비중이 지침 [0. 목표]의 비율(학생활동 약 50% · 역량 약 25% · 교사의 평가 약 15~20%)에 가깝게 되도록 쓴다. evaluation 이 하나도 없거나 30%를 넘으면 다시 쓴다.",
-].join("\n");
+/**
+ * 앱이 응답을 읽기 위해 항상 덧붙이는 출력 형식 (사용자가 바꿀 수 없음).
+ * 전체 기재문은 따로 받지 않고 문장들을 이어 만든다 (응답 길이를 줄여 '생각하는' 모델이 한도에서 잘리지 않게).
+ * spans = 문장마다 학생활동 · 역량 · 교사의 평가 구간까지 받을지 (응답이 잘렸을 때 다시 묻는 가벼운 형식은 빼고, 구간은 앱이 규칙으로 나눈다)
+ */
+export function draftOutputRules(spans = true): string {
+  return [
+    spans
+      ? "출력은 JSON 하나만 낸다: {\"sentences\": [{\"text\": 문장, \"evidence\": [근거 id...], \"spans\": [구간...]}], \"checks\": [확인 필요 사항...]}. 최종 기재문은 sentences 의 text 를 순서대로 공백 한 칸으로 이어 붙인 것이다."
+      : "출력은 JSON 하나만 낸다: {\"sentences\": [{\"text\": 문장, \"evidence\": [근거 id...]}], \"checks\": [확인 필요 사항...]}. 최종 기재문은 sentences 의 text 를 순서대로 공백 한 칸으로 이어 붙인 것이다.",
+    "evidence 에는 그 문장의 근거가 된 누가기록·PDF기록의 id 를 넣는다. 근거가 없는 문장은 쓰지 않는다.",
+    "checks 에는 판독 불가·자료 불일치, 규정 적용이 불확실해 뺀 내용, 근거가 모자라 분량이 짧은 이유 등을 짧게 적는다. 없으면 빈 배열로 둔다.",
+    ...(spans ? ["spans 는 그 문장을 구간으로 나눈 것이다: [{\"text\": 구간, \"kind\": activity|competency|evaluation|none}]. activity = 학생이 실제로 한 행동·활동, competency = 그 행동이 보여 주는 역량을 가리키는 말(예: 자기관리 역량, 의사소통 능력), evaluation = 교사의 판단·평가 표현(예: 매우 뛰어남, 성실한 학습자임), none = 이음말·조사 등. spans 의 text 를 순서대로 이어 붙이면 그 문장의 text 와 글자 하나까지 같아야 한다."] : []),
+    "문단 전체에서 학생활동 · 역량 · 교사의 평가의 비중이 지침 [0. 목표]의 비율(학생활동 약 50% · 역량 약 25% · 교사의 평가 약 15~20%)에 가깝게 되도록 쓴다. 교사의 평가가 하나도 없거나 30%를 넘으면 다시 쓴다.",
+  ].join("\n");
+}
+export const DRAFT_OUTPUT_RULES = draftOutputRules(true);
 
 export interface PromptPreset { key: string; label: string; text: string }
 export const DRAFT_PROMPT_PRESETS: PromptPreset[] = [
@@ -195,9 +203,9 @@ export const DRAFT_PROMPT_PRESETS: PromptPreset[] = [
   { key: "behavior", label: "행동특성 및 종합의견", text: composeGuide("행동특성 및 종합의견", BEHAVIOR_RULES, BEHAVIOR_EXAMPLES) },
 ];
 
-/** AI 에 보내는 system 프롬프트 = (영역별 지침 또는 기본 지침) + 고정 출력 형식 */
-export function systemPrompt(guide?: string): string {
-  return `${(guide && guide.trim()) || DEFAULT_DRAFT_GUIDE}\n\n[출력 형식 — 앱이 읽는 형식이라 바꿀 수 없음]\n${DRAFT_OUTPUT_RULES}`;
+/** AI 에 보내는 system 프롬프트 = (영역별 지침 또는 기본 지침) + 고정 출력 형식 (spans: 구간까지 받을지) */
+export function systemPrompt(guide?: string, opts?: { spans?: boolean }): string {
+  return `${(guide && guide.trim()) || DEFAULT_DRAFT_GUIDE}\n\n[출력 형식 — 앱이 읽는 형식이라 바꿀 수 없음]\n${draftOutputRules(opts?.spans ?? true)}`;
 }
 
 export function userPrompt(req: DraftRequest): string {
@@ -624,7 +632,6 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
 export const DRAFT_JSON_SCHEMA = {
   type: "object",
   properties: {
-    text: { type: "string" },
     sentences: {
       type: "array",
       items: {
@@ -639,7 +646,24 @@ export const DRAFT_JSON_SCHEMA = {
     },
     checks: { type: "array", items: { type: "string" } },
   },
-  required: ["text", "sentences", "checks"], additionalProperties: false,
+  required: ["sentences", "checks"], additionalProperties: false,
+} as const;
+
+/** 응답이 잘렸을 때 다시 묻는 가벼운 형식: 문장 · 근거 · 확인 사항만 (구간은 앱이 규칙으로 나눈다) */
+export const DRAFT_JSON_SCHEMA_LITE = {
+  type: "object",
+  properties: {
+    sentences: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { text: { type: "string" }, evidence: { type: "array", items: { type: "string" } } },
+        required: ["text", "evidence"], additionalProperties: false,
+      },
+    },
+    checks: { type: "array", items: { type: "string" } },
+  },
+  required: ["sentences", "checks"], additionalProperties: false,
 } as const;
 
 const SPAN_KINDS = new Set(["activity", "competency", "evaluation", "none"]);
@@ -650,15 +674,20 @@ export function cleanSpans(text: string, raw: unknown): DraftSpan[] | undefined 
   return spans.length && spans.map((x) => x.text).join("").trim() === text.trim() ? spans : undefined;
 }
 
-/** 모델 응답 텍스트에서 JSON 추출·검증 */
+/** 응답을 끝까지 받지 못했거나(잘림) 초안 형식이 아니어서 읽지 못함 — 앱이 한 번 더 묻는 경우 */
+export class DraftFormatError extends Error {}
+
+/** 모델 응답 텍스트에서 JSON 추출·검증. 전체 기재문(text)이 없으면 문장들을 이어 만든다 */
 export function parseDraftResponse(raw: string): DraftResponse {
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("응답에 JSON이 없음");
-  const obj = JSON.parse(m[0]) as Partial<DraftResponse>;
-  if (typeof obj.text !== "string") throw new Error("text 누락");
-  const sentences = Array.isArray(obj.sentences) ? obj.sentences.filter((s) => s && typeof s.text === "string").map((s) => ({ text: s.text, evidence: Array.isArray(s.evidence) ? s.evidence.map(String) : [], spans: cleanSpans(s.text, (s as { spans?: unknown }).spans) })) : [];
+  if (!m) throw new DraftFormatError("AI 응답이 중간에 끊겨 초안을 읽지 못함");
+  let obj: Partial<DraftResponse>;
+  try { obj = JSON.parse(m[0]) as Partial<DraftResponse>; } catch { throw new DraftFormatError("AI 응답이 중간에 끊겨 초안을 읽지 못함"); }
+  const sentences = Array.isArray(obj.sentences) ? obj.sentences.filter((s) => s && typeof s.text === "string" && s.text.trim()).map((s) => ({ text: s.text.trim(), evidence: Array.isArray(s.evidence) ? s.evidence.map(String) : [], spans: cleanSpans(s.text.trim(), (s as { spans?: unknown }).spans) })) : [];
+  const text = typeof obj.text === "string" && obj.text.trim() ? obj.text.trim() : sentences.map((s) => s.text).join(" ");
+  if (!text) throw new DraftFormatError("AI 응답에 초안 문장이 없음");
   const checks = Array.isArray(obj.checks) ? obj.checks.map(String).map((x) => x.trim()).filter(Boolean) : [];
-  return { text: obj.text.trim(), sentences, checks };
+  return { text, sentences, checks };
 }
 
 /* ---------------- AI 로 다시 구별하기 ---------------- */
