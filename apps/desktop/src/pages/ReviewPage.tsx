@@ -66,7 +66,7 @@ export function ReviewPage({ tabs }: { tabs?: React.ReactNode }) {
               <button className={`chip clickable ${filter === "all" ? "selected" : ""} outline`} onClick={() => setFilter("all")}>전체 {rows.length}</button>
               {(["pass", "check", "fix", "none"] as ReviewResult[]).map((r) => <button key={r} className={`chip clickable ${r} ${filter === r ? "selected" : ""}`} onClick={() => setFilter(filter === r ? "all" : r)}>{RESULT_LABEL[r]} {counts[r]}</button>)}
               <span className="grow" />
-              <span className="muted small">행 클릭 → 우측 패널</span>
+              <span className="muted small rv-hint">행 클릭 → 우측 패널</span>
             </div>
             <div className="tablewrap grow" style={{ overflow: "auto" }}>
               {visible.length === 0 ? <Empty title="해당 없음" /> : (

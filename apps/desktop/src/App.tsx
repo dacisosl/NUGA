@@ -13,6 +13,8 @@ import { AreaSwitcher } from "./components/AreaSwitcher";
 import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
 import { saveFile } from "./lib/platform";
+// 반응형은 맨 마지막: 화면별 스타일(계단·카드·폰 미리보기)을 좁은 화면에서 덮어쓴다
+import "./responsive.css";
 
 export default function App() {
   const loaded = useStore((s) => s.loaded);
