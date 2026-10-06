@@ -936,6 +936,22 @@ function DisplaySection() {
         <div className="muted small" style={{ marginTop: 8 }}>어느 쪽이든 카드마다 [자세히]/[접기]로 그때그때 펼치고 접을 수 있습니다. 이 설정은 모든 영역에 공통입니다.</div>
       </div>
       <div className="card pad">
+        <h3>학생 카드</h3>
+        <div className="arrival-opts">
+          {([
+            ["plain", "기본 — 깔끔하게", "흰 종이 카드에 가는 테두리. 많은 학생을 차분하게 훑어보기 좋습니다."],
+            ["strong", "강한 구분 — 수집 카드처럼", "카드마다 다른 빛깔의 두꺼운 테두리와 바탕, 오른쪽 위에 기록 수를 크게 보여 줍니다. 옆 카드와 한눈에 갈립니다. 빛깔은 번호 순으로 돌아가며 정해지고 뜻은 없습니다."],
+          ] as const).map(([k, title, desc]) => (
+            <label key={k} className={`arrival-opt ${(s.options.cardLook || "plain") === k ? "on" : ""}`}>
+              <input type="radio" name="cardLook" checked={(s.options.cardLook || "plain") === k} onChange={() => setSettings((x) => ({ ...x, options: { ...x.options, cardLook: k } }))} />
+              <span><b>{title}</b><span className="muted small block">{desc}</span></span>
+              <CardLookPreview look={k} />
+            </label>
+          ))}
+        </div>
+        <div className="muted small" style={{ marginTop: 8 }}>기록이 부족한 학생은 어느 모양이든 옅은 붉은 바탕으로 보입니다. 이 설정은 모든 영역에 공통입니다.</div>
+      </div>
+      <div className="card pad">
         <h3>학생 이름표</h3>
         <div className="col" style={{ gap: 12 }}>
           <Switch on={badge} onChange={(v) => setSettings((x) => ({ ...x, options: { ...x.options, showLevelBadge: v } }))} label={badge ? "도달 정도 숫자 표시 — 이름표 오른쪽 위 숫자를 누르면 조정" : "도달 정도 숫자 숨김 — 이름표 바탕색으로만 표시"} />
@@ -956,6 +972,15 @@ function DisplaySection() {
         </div>
       </div>
     </>
+  );
+}
+
+/** 학생 카드 모양 미리보기: 작은 카드 셋 (셋째는 기록 부족). 빛깔·크기는 student-grid.css .look-pv */
+function CardLookPreview({ look }: { look: "plain" | "strong" }) {
+  return (
+    <span className={`look-pv ${look}`} aria-hidden>
+      {[1, 2, 4].map((t, i) => <i key={t} data-t={t} className={i === 2 ? "low" : undefined}><b /><em /><s /></i>)}
+    </span>
   );
 }
 

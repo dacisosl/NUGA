@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { fmtMD, fmtHM, lessonLabel, nowIso, type Category, type NugaDoc, type NugaRecord, type Student } from "@nuga/core";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { fmtMD, fmtHM, lessonLabel, nowIso, type Category, type NugaDoc, type NugaRecord, type RecordCategory, type Student } from "@nuga/core";
 import { ClassTabs, Sheet, useClassStudents } from "../App";
 import { catLabel, fillLesson, perfsOf, recordsOf, standardsFor, useStore } from "../store";
 import { aiReady, estimateAchievementAI } from "../lib/ai";
@@ -12,7 +12,7 @@ import { StudentEditModal } from "../components/StudentEdit";
 /**
  * 현황판 (메인): 반 탭 → 한 스크롤 안에 위는 기록 계단(반 전체를 한눈에), 아래는 학생 카드 격자.
  * 기록 계단은 [접기 | 간략히 | 자세히] 로 고른다 (기본 간략히, 고른 보기는 기억 — components/StairsBrief).
- * 카드를 누르면 학생 기록, 카드의 [+]는 그 학생으로 맞춘 기록 추가.
+ * 카드를 누르면 학생 기록 창, 카드의 [+ 기록]은 같은 창을 입력칸에 초점을 둔 채 연다 (기록은 그 창 맨 위에서 바로 남긴다).
  */
 export function RecordsPage() {
   const doc = useStore((s) => s.doc);
@@ -36,7 +36,9 @@ export function RecordsPage() {
     toast({ text: fail ? `도달 정도 추정 완료 · 실패 ${fail}명` : `도달 정도 추정 완료 · ${done}명 (교사 조정값은 그대로)` });
   };
   const [open, setOpen] = useState<Student | null>(null);
-  const [adding, setAdding] = useState<Student | null>(null);
+  // [+ 기록]으로 열었으면 입력칸에 바로 초점
+  const [compose, setCompose] = useState(false);
+  const show = (s: Student, write = false) => { setOpen(s); setCompose(write); };
   const supp = doc.settings.supplementEnabled;
   // 반을 바꾸면 맨 위(그 반의 계단)부터 다시 본다: 카드 사이에 머물던 스크롤을 그리기 전에 되돌린다
   const boardRef = useRef<HTMLDivElement>(null);
@@ -54,13 +56,12 @@ export function RecordsPage() {
           ) : null} />
         <div className="content board" ref={boardRef}>
           {/* 위: 반 전체 기록 계단 — 접기(숫자 한 줄) · 간략히(작은 계단) · 자세히(이름표 계단). 찾기는 아래 격자에서 */}
-          <StairsPanel doc={doc} students={students} cls={cls} onOpen={setOpen} />
+          <StairsPanel doc={doc} students={students} cls={cls} onOpen={show} />
           {/* 아래: 학생 카드 격자 (반마다 거르기·정렬·찾기를 새로) */}
-          <StudentGrid key={cls} doc={doc} students={students} onOpen={setOpen} onAdd={setAdding} />
+          <StudentGrid key={cls} doc={doc} students={students} onOpen={show} onAdd={(s) => show(s, true)} />
         </div>
       </Sheet>
-      {open && <StudentDetail student={open} onClose={() => setOpen(null)} onChange={setOpen} />}
-      {adding && <QuickAdd cls={adding.class} initialNo={adding.no} onClose={() => setAdding(null)} />}
+      {open && <StudentDetail student={open} compose={compose} onClose={() => { setOpen(null); setCompose(false); }} onChange={setOpen} />}
     </>
   );
 }
@@ -80,7 +81,7 @@ export async function exportRecordsExcel(doc: NugaDoc): Promise<boolean> {
   return exportSheets(`누가기록-${doc.settings.school.subject || "과목"}-${nowIso().slice(0, 10)}.xlsx`, sheets);
 }
 
-export function StudentDetail({ student: initial, onClose, onChange }: { student: Student; onClose: () => void; onChange?: (s: Student) => void }) {
+export function StudentDetail({ student: initial, compose, onClose, onChange }: { student: Student; compose?: boolean; onClose: () => void; onChange?: (s: Student) => void }) {
   const doc = useStore((s) => s.doc);
   const student = doc.students.find((x) => x.class === initial.class && x.no === initial.no) || initial;
   const [editing, setEditing] = useState(false);
@@ -98,7 +99,8 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
     <Modal onClose={onClose} width="wide" header={<div className="flex"><StudentTag student={student} size="lg" /><span className="muted">{student.class} · {student.no}번</span><span className="chip outline">{recs.length}건</span><button className="btn sm" onClick={() => setEditing(true)}><Icon name="pen" size={13} />번호·이름 수정</button></div>}
       footer={<><span className="muted small">항목을 클릭하면 수정</span><span className="grow" /><button className="btn primary" onClick={goDraft}><Icon name="pen" />초안 작성</button></>}>
       <div className="col" style={{ gap: 14 }}>
-        {recs.length === 0 ? <Empty title="기록 없음" /> : (
+        <RecordComposer key={`${student.class}|${student.no}`} student={student} focus={compose || recs.length === 0} />
+        {recs.length === 0 ? <Empty title="기록 없음" desc="위 입력칸에 첫 기록을 남겨 보세요." /> : (
           <table className="table">
             <thead><tr><th style={{ width: 90 }}>날짜</th><th style={{ width: 70 }}>분류</th><th style={{ width: 200 }}>단원</th><th className="content-h">내용</th><th style={{ width: 70 }}>상태</th><th style={{ width: 40 }} /></tr></thead>
             <tbody>
@@ -131,36 +133,51 @@ export function StudentDetail({ student: initial, onClose, onChange }: { student
 }
 
 /**
- * PC에서 직접 기록 추가 (기획서 확장: 워치 없이도 PC에서 바로 남길 수 있게).
- * cls·initialNo 를 주면 그 반·학생으로 맞춰 연다 (학생 카드의 [+]). 없으면 지금 반의 첫 학생
+ * 학생 기록 창 맨 위 입력칸: 적고 Enter 면 바로 확정 기록 (PC 기록). 줄바꿈은 Shift+Enter, 한글 조합 중 Enter 는 글자 확정만.
+ * 분류는 고르지 않으면 미정(0) — 칩을 다시 누르면 풀린다. 시각은 기본 '지금', [지금 ▾]을 누르면 다른 날짜·시각.
+ * 단원·차시는 진도표에서 자동으로 채워진다 (fillLesson).
  */
-export function QuickAdd({ onClose, cls: clsProp, initialNo }: { onClose: () => void; cls?: string; initialNo?: number }) {
-  const doc = useStore((s) => s.doc);
-  const curCls = useStore((s) => s.cls);
-  const cls = clsProp || curCls;
+function RecordComposer({ student, focus }: { student: Student; focus?: boolean }) {
+  const cats = useStore((s) => s.doc.settings.categories);
   const addRecord = useStore((s) => s.addRecord);
   const toast = useStore((s) => s.toast);
-  const students = doc.students.filter((s) => s.class === cls).sort((a, b) => a.no - b.no);
-  const [no, setNo] = useState<number>(() => (initialNo != null && students.some((s) => s.no === initialNo) ? initialNo : students[0]?.no || 1));
-  const [cat, setCat] = useState<Category>(1);
   const [note, setNote] = useState("");
-  const [date, setDate] = useState(nowIso().slice(0, 16));
+  const [cat, setCat] = useState<RecordCategory>(0);
+  const [when, setWhen] = useState<string | null>(null); // null = 지금
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (focus) ref.current?.focus(); }, [focus]);
+  const text = note.trim();
   const save = () => {
-    const time = nowIso(new Date(date));
-    addRecord({ class: cls, no, category: cat, time, lesson: null, memo: "", voiceMemo: null, note: note.trim(), status: note.trim() ? "confirmed" : "pending", source: "pc" });
-    toast({ text: `${cls} · ${no}번 기록 추가` }); onClose();
+    if (!text) return;
+    const time = when ? nowIso(new Date(when)) : nowIso();
+    addRecord({ class: student.class, no: student.no, category: cat, time, lesson: null, memo: "", voiceMemo: null, note: text, status: "confirmed", source: "pc" });
+    toast({ text: `${student.no}번 ${student.name || ""} 기록 추가`.trim() });
+    setNote(""); setWhen(null);
+    ref.current?.focus();
   };
   return (
-    <Modal title={`기록 추가 · ${cls}`} onClose={onClose} width="narrow" footer={<><span className="grow" /><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save}>저장</button></>}>
-      <div className="col" style={{ gap: 12 }}>
-        <div className="grid2">
-          <div className="field"><label>학생</label><select className="select" value={no} onChange={(e) => setNo(Number(e.target.value))}>{students.map((s) => <option key={s.no} value={s.no}>{s.no}번 {s.name}</option>)}</select></div>
-          <div className="field"><label>일시</label><input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+    <div className="rec-compose">
+      <textarea ref={ref} rows={2} value={note} onChange={(e) => setNote(e.target.value)} aria-label={`${student.name || student.no + "번"} 새 기록`}
+        placeholder="관찰한 내용을 적고 Enter — 바로 기록됩니다 (줄바꿈은 Shift+Enter)"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+          e.preventDefault(); save();
+        }} />
+      <div className="rec-compose-row">
+        <div className="flex wrap rec-cats">
+          {cats.map((c) => <Chip key={c.key} cat={c.key} label={c.label} selected={cat === c.key} onClick={() => setCat(cat === c.key ? 0 : (c.key as Category))} />)}
         </div>
-        <div className="flex wrap">{doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={c.label} selected={cat === c.key} onClick={() => setCat(c.key)} />)}</div>
-        <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="관찰 내용" autoFocus onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save(); }} />
-        <span className="muted small">단원·차시는 진도표에서 자동으로 채워짐</span>
+        <span className="grow" />
+        {when === null ? (
+          <button type="button" className="btn ghost sm" onClick={() => setWhen(nowIso().slice(0, 16))} title="다른 날짜·시각으로 기록">지금 ▾</button>
+        ) : (
+          <span className="flex rec-when">
+            <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} aria-label="기록 시각" />
+            <button type="button" className="btn ghost icon sm" onClick={() => setWhen(null)} aria-label="지금 시각으로" title="지금 시각으로">×</button>
+          </span>
+        )}
+        <button type="button" className="btn primary sm" disabled={!text} onClick={save}><Icon name="plus" size={13} />기록 추가</button>
       </div>
-    </Modal>
+    </div>
   );
 }
