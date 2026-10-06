@@ -96,6 +96,10 @@ export function MobilePage() {
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [editing, setEditing] = useState<NugaRecord | null>(null);
   const [snack, setSnack] = useState<{ text: string; id?: string } | null>(null);
+  // 위젯: 고른 번호(그 반에서만) · 방금 저장 알림 5초 + [취소] (NugaWidget 의 SelNo/SelKey · NoteText)
+  const [wSel, setWSel] = useState<{ cls: string; no: number } | null>(null);
+  const [wNote, setWNote] = useState<{ text: string; id: string } | null>(null);
+  const wNoteTimer = useRef<number>();
   const [sending, setSending] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<Ev[]>([]);
   const snackTimer = useRef<number>();
@@ -136,21 +140,17 @@ export function MobilePage() {
     setSheet({ cls, category: CATEGORY_NONE, no: reelStart(cls), memo: "", source: p.source || "phone" });
   };
 
-  /** 폰 저장 → (전송 1.2초) → PC 도착. 보완을 쓰면 보완 대기로 들어가 알림 모달이 뜬다 */
-  const saveSheet = () => {
-    if (!sheet?.no) return;
+  /** 기록 하나 저장 → (전송 1.2초) → PC 도착. 보완을 쓰면 보완 대기로 들어가 알림 모달이 뜬다. 번호 시트와 위젯 [기록]이 함께 쓴다 */
+  const saveRecord = (p: { cls: string; no: number; category: RecordCategory; memo: string; source: RecordSource }) => {
     const supp = doc.settings.supplementEnabled;
-    const memo = sheet.memo.trim();
+    const memo = p.memo.trim();
     const rec = addRecord({
-      class: sheet.cls, no: sheet.no, category: sheet.category, time: nowIso(now), lesson: lessonFor(doc.settings.progress, sheet.cls, nowIso(now)),
-      memo, voiceMemo: null, note: supp ? "" : memo, status: supp ? "pending" : "confirmed", source: sheet.source,
+      class: p.cls, no: p.no, category: p.category, time: nowIso(now), lesson: lessonFor(doc.settings.progress, p.cls, nowIso(now)),
+      memo, voiceMemo: null, note: supp ? "" : memo, status: supp ? "pending" : "confirmed", source: p.source,
     });
-    // 알림 띠 글자는 폰과 같게: '저장 · 2-3 · 14번' (카테고리는 미정이라 붙지 않는다)
-    const label = `${sheet.cls} · ${sheet.no}번`;
-    setSheet(null);
-    showSnack(`저장 · ${label}`, rec.id);
-    log(`폰 저장 · ${label}${memo ? ` · “${memo}”` : ""} → 전송 대기`, "phone");
-    setSending((p) => new Set(p).add(rec.id));
+    const label = `${p.cls} · ${p.no}번`;
+    log(`${p.source === "widget" ? "위젯" : "폰"} 저장 · ${label}${memo ? ` · “${memo}”` : ""} → 전송 대기`, "phone");
+    setSending((s0) => new Set(s0).add(rec.id));
     window.setTimeout(() => {
       setSending((p) => { const n = new Set(p); n.delete(rec.id); return n; });
       if (!useStore.getState().doc.records.some((r) => r.id === rec.id)) return; // 취소됨
@@ -158,7 +158,28 @@ export function MobilePage() {
       if (popup) { openInbox({ records: [rec.id] }); log("알림 팝업(쉬는 시간 기록) 열림 — 처리하면 오늘 기록에 들어감", "pc"); }
       else if (supp) log("팝업 없이 미반영에 쌓임", "pc");
     }, 1200);
+    return { rec, label };
   };
+  const saveSheet = () => {
+    if (!sheet?.no) return;
+    const { rec, label } = saveRecord({ cls: sheet.cls, no: sheet.no, category: sheet.category, memo: sheet.memo, source: sheet.source });
+    setSheet(null);
+    // 알림 띠 글자는 폰과 같게: '저장 · 2-3 · 14번' (카테고리는 미정이라 붙지 않는다)
+    showSnack(`저장 · ${label}`, rec.id);
+  };
+  /** 위젯의 반 (NugaWidget.Target): 지금 수업 → 다음 수업 → 기록 시트 기본값 */
+  const wCls = current?.class || next?.slot.class || classes[0] || "";
+  const wPicked = wSel && wSel.cls === wCls ? wSel.no : null; // 수업(반)이 바뀌면 고른 번호를 버린다
+  /** 위젯 [기록]: 번호를 골랐으면 바로 저장(미정 · 메모 없이 · 위젯), 머리 둘째 줄에 '✓ 05번 기록' + [취소] 5초. 안 골랐으면 기록 시트 */
+  const widgetCapture = () => {
+    if (!wPicked) { openSheet({ cls: wCls, source: "widget" }); return; }
+    const { rec } = saveRecord({ cls: wCls, no: wPicked, category: CATEGORY_NONE, memo: "", source: "widget" });
+    setWSel(null);
+    setWNote({ text: `✓ ${two(wPicked)}번 기록`, id: rec.id });
+    window.clearTimeout(wNoteTimer.current);
+    wNoteTimer.current = window.setTimeout(() => setWNote(null), 5000);
+  };
+  const widgetUndo = (id: string) => { deleteRecord(id); setWNote(null); log("위젯 저장 취소 · 기록 삭제", "phone"); };
   const undo = (id: string) => { deleteRecord(id); setSnack(null); log("저장 취소 · 기록 삭제", "phone"); };
 
   const phoneRecs = useMemo(() => doc.records.filter((r) => PHONE_SOURCES.has(r.source)).sort((a, b) => b.time.localeCompare(a.time)), [doc.records]);
@@ -196,7 +217,9 @@ export function MobilePage() {
               <div className="mp-status"><b>{hhmm(now)}</b><span className="grow" /><MIcon name="signal" size={15} /><MIcon name="battery" size={16} /></div>
               {view === "widget" ? (
                 <WidgetHome doc={doc} now={now} current={current} next={next} todayCount={todayRecs.length}
-                  onCapture={() => openSheet({ source: "widget" })} onOpenApp={() => setView("app")} onRecord={() => { setView("app"); setTab("rec"); }} />
+                  cls={wCls} size={Math.max(classSize(doc, wCls), 1)} showNames={showNames} sel={wPicked} note={wNote}
+                  onPick={(no) => setWSel(wPicked === no ? null : { cls: wCls, no })} onCapture={widgetCapture} onUndo={widgetUndo}
+                  onOpenApp={() => setView("app")} onRecord={() => { setView("app"); setTab("rec"); }} />
               ) : (
                 <>
                   <div className={`mp-screen ${tab}`}>
@@ -231,6 +254,7 @@ export function MobilePage() {
                 <li><b>폰 시각</b>에서 수업 시간을 고르면 홈 화면이 “지금” 수업으로 바뀝니다.</li>
                 <li>홈의 <b>기록</b> 버튼 → 번호 릴을 굴려(휠·끌기·누르기) 고르고 <b>저장</b>. 5초 안에 <b>취소</b>할 수 있습니다. 카테고리는 고르지 않습니다(미정 → PC에서 정함).</li>
                 <li>1초 뒤 PC에 도착해 <b>쉬는 시간 기록</b> 알림 팝업이 뜹니다. 팝업에서 저장해야 오늘 기록에 들어갑니다.</li>
+                <li><b>홈 화면 위젯</b>: 번호 칸(3명씩, 위아래 스크롤)에서 번호를 누르고 <b>기록</b> → 바로 저장, 5초 안에 위젯의 <b>취소</b>. 번호 없이 <b>기록</b>을 누르면 번호 릴이 열립니다.</li>
                 <li><b>녹음</b> 탭에서 녹음 시작 → 정지하면 합성 수업 스크립트가 도착하고 자동 추천이 만들어집니다.</li>
                 <li>기록 탭에서 메모를 고치거나 지우면 PC에도 반영됩니다.</li>
               </ol>
@@ -705,23 +729,49 @@ function Toggle({ title, sub, on, set, disabled }: { title: string; sub: string;
 
 /* ---------------- 홈 화면 위젯 (NugaWidget.kt) ---------------- */
 
-function WidgetHome({ doc, now, current, next, todayCount, onCapture, onOpenApp, onRecord }: {
-  doc: NugaDoc; now: Date; current: LessonSlot | null; next: Next; todayCount: number; onCapture: () => void; onOpenApp: () => void; onRecord: () => void;
+/**
+ * 4×2 위젯 (Pixel 7 기준 360×232dp): 머리(수업 · 단원 · 녹음 · 오늘 N) 아래 왼쪽 번호 칸(그 반 1..N을 3명씩, 두 줄 반쯤 보이고 위아래 스크롤),
+ * 오른쪽 [기록] (84 너비, 칸 높이 그대로). 번호를 누르면 고르고 다시 누르면 푼다. 이름은 '이름 표시'가 켜졌고 그 반 명렬표가 있을 때만 번호 밑에
+ */
+function WidgetHome({ doc, now, current, next, todayCount, cls, size, showNames, sel, note, onPick, onCapture, onUndo, onOpenApp, onRecord }: {
+  doc: NugaDoc; now: Date; current: LessonSlot | null; next: Next; todayCount: number;
+  cls: string; size: number; showNames: boolean; sel: number | null; note: { text: string; id: string } | null;
+  onPick: (no: number) => void; onCapture: () => void; onUndo: (id: string) => void; onOpenApp: () => void; onRecord: () => void;
 }) {
   const head = current ? `${current.class} · ${current.period}교시` : next ? `예정 · ${next.slot.class} · ${next.slot.period}교시` : "수업 없음";
   const line = sublineOf(doc, now, current, next) ?? "시간표 없음";
+  const roster = studentsOf(doc, cls);
+  const names = showNames && roster.length ? new Map(roster.map((st) => [st.no, st.name])) : null;
   return (
     <div className="mp-home">
       <div className="mp-clock">{hhmm(now)}<small>{koDate(now)}</small></div>
       {/* 위젯은 늘 밤 유리: 어떤 배경화면 위에서도 같은 대비 */}
       <div className="mp-widget">
         <div className="mp-whead">
-          <div className="grow"><b className={current ? "now" : ""}>{head}</b><span>{line}</span></div>
+          <div className="grow">
+            <b className={current ? "now" : ""}>{head}</b>
+            <span className={`mp-wsub${note ? " note" : ""}`}>
+              <span className="t">{note ? note.text : line}</span>
+              {note && <button className="mp-wundo" onClick={() => onUndo(note.id)}>취소</button>}
+            </span>
+          </div>
           {doc.settings.recording?.enabled && <button className="mp-wrec" onClick={onRecord}>● 녹음</button>}
           <div className="mp-wcount"><b>{todayCount}</b><small>오늘</small></div>
         </div>
-        {/* 큰 [기록] 버튼 하나: 밤 위에 켜진 밝은 유리(#DEEBFF)에 남색 글자. 누르면 번호 릴이 열린다 */}
-        <button className="mp-wcapture" onClick={onCapture}><MIcon name="pencil" size={20} />기록</button>
+        <div className="mp-wbody">
+          <div className="mp-wgrid" role="listbox" aria-label={`${cls} 번호`}>
+            {Array.from({ length: size }, (_, i) => i + 1).map((n) => (
+              <button key={n} role="option" aria-selected={n === sel} className={`mp-wtile${n === sel ? " on" : ""}${names ? " named" : ""}`} onClick={() => onPick(n)}>
+                <b>{two(n)}</b>{names && <small>{names.get(n) || ""}</small>}
+              </button>
+            ))}
+          </div>
+          {/* [기록]: 골랐으면 '05번 / 기록' — 누르면 바로 저장. 안 골랐으면 '기록' — 기록 시트(번호 릴)를 그 반으로 */}
+          <button className={`mp-wcapture${sel ? " sel" : ""}`} onClick={onCapture} aria-label={sel ? `${sel}번 기록` : "기록 시트 열기"}>
+            {sel && <b>{two(sel)}번</b>}
+            <span><MIcon name="pencil" size={sel ? 15 : 20} />기록</span>
+          </button>
+        </div>
       </div>
       <div className="mp-apps">
         <button onClick={onOpenApp}><span className="mp-appicon"><AppIcon /></span>누가</button>
