@@ -1,5 +1,5 @@
 import type { AdherenceReport, AdherenceRule, DraftSentence, LengthMode, TeacherGuide } from "./types";
-import { hasExplicitSubject, hasHonorific, isNominalEnding, lengthIn, lengthWindow, similarity, splitSentences } from "./text";
+import { hasExplicitSubject, hasHonorific, isNominalEnding, lengthFloor, lengthIn, lengthWindow, similarity, splitSentences } from "./text";
 import { FORBIDDEN_TERMS } from "./review";
 import { GRADE_STYLE, gradeOf } from "./achievement";
 import { draftSpans, spanRatio } from "./highlight";
@@ -74,7 +74,8 @@ export function checkAdherence(inp: AdherenceInput): AdherenceReport {
 
   // 3. 분량
   const len = lengthIn(text, inp.lengthMode);
-  const { min, max } = lengthWindow(inp.limit, inp.band);
+  const { max } = lengthWindow(inp.limit, inp.band);
+  const min = lengthFloor(inp.limit, inp.lengthMode, inp.band); // 30바이트쯤 모자란 것은 괜찮다
   const u = inp.lengthMode === "bytes" ? "B" : "자";
   add("limit", "한도 이하", len <= max, `${len.toLocaleString("ko-KR")}/${inp.limit.toLocaleString("ko-KR")}${u}`);
   // 기록이 적으면(근거 4건 미만) 미달을 허용한다 (v3 18 예외)

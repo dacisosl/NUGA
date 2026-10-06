@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { create } from "zustand";
 import type { Category, LengthMode, ReviewResult, Student } from "@nuga/core";
-import { RESULT_LABEL, gradeStep, lengthWindow } from "@nuga/core";
+import { RESULT_LABEL, gradeStep, lengthFloor, lengthWindow } from "@nuga/core";
 import { achievementOf, useStore } from "../store";
 
 export function Chip({ cat, label, className = "", onClick, selected }: { cat?: Category | "perf"; label: React.ReactNode; className?: string; onClick?: () => void; selected?: boolean }) {
@@ -236,9 +236,10 @@ export function Toasts() {
   );
 }
 
-/** 분량 막대. 바이트 단위면 "1,452 / 1,500 B · 약 484자" 로 표시한다. 목표 구간은 한도의 96~100%. */
+/** 분량 막대. 바이트 단위면 "1,452 / 1,500 B · 약 484자" 로 표시한다. 목표 구간은 한도의 96~100% (30바이트쯤 모자란 것은 괜찮게). */
 export function LenBar({ len, target, mode, chars, band }: { len: number; target: number; mode?: LengthMode; chars?: number; band?: [number, number] }) {
-  const { min, max } = lengthWindow(target, band);
+  const { max } = lengthWindow(target, band);
+  const min = mode ? lengthFloor(target, mode, band) : lengthWindow(target, band).min;
   const pct = Math.min(100, (len / Math.max(1, target)) * 100);
   const cls = len > max ? "over" : len < min ? "low" : "";
   const bytes = mode === "bytes";

@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, regenerationInstruction, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
   type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
+  growInstruction, lengthFloor, lengthIn, lengthWindow, shrinkInstruction, trimDraftToLimit,
 } from "@nuga/core";
 import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
-import { aiErrorText, aiReady, generateDraft, labelDraft } from "../lib/ai";
+import { aiErrorText, aiReady, generateDraft, labelDraft, type DraftProviderResult } from "../lib/ai";
 import { pickFile } from "../lib/platform";
 import { extractText, hasTextLayer, loadDocument, makeExcerpt, maskedThumb, scrubNames, suggestMasks, type DocPage, type ExtractProgress, type Rect } from "../lib/docOcr";
 import { MaskEditor } from "../components/MaskEditor";
@@ -65,7 +66,59 @@ async function generateChecked(student: Student, records: NugaRecord[], perfs: P
       if (nrep.score >= rep.score) { res = next; rep = nrep; }
     } catch { break; }
   }
-  return { res, rep, first, tries };
+  // 분량 맞추기 (AI 초안만, 규칙 기반은 생성기 안에서 맞춘다)
+  let fit = "";
+  if (res.provider !== "rules") {
+    const f = await fitLength(student, records, perfs, w, res, limit);
+    if (f.res !== res) { res = f.res; rep = adherenceOf(doc, student, res.text, res.sentences, limit); }
+    fit = f.note;
+  }
+  return { res, rep, first, tries, fit };
+}
+
+/**
+ * 생성 뒤 분량 맞추기 (목표 구간 = 한도의 96~100%, 30바이트쯤 모자란 것은 괜찮다 — 넘는 것은 안 된다).
+ *  · 한도를 넘으면: 정확한 수와 줄이는 순서(역량 표현 짧게 → 묶기 → 덜 중요한 기록 빼기)로 다시 쓰게 — 최대 2번, 그래도 넘치면 본문 문장을 덜어 낸다
+ *  · 목표보다 많이 짧으면: 아직 쓰지 않은 기록이 있을 때만 한 번 늘리게 (근거 없이 늘리지 않는다)
+ */
+async function fitLength(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, res0: DraftProviderResult, limit: number): Promise<{ res: DraftProviderResult; note: string }> {
+  const { doc } = useStore.getState();
+  const mode = doc.settings.lengthMode, band = doc.settings.lengthBand;
+  const { max } = lengthWindow(limit, band);
+  const floor = lengthFloor(limit, mode, band);
+  const u = unitOf(doc);
+  const lenOf = (t: string) => lengthIn(t, mode);
+  const start = lenOf(res0.text);
+  let res = res0;
+  const steps: string[] = [];
+  let why = "";
+  for (let i = 0; i < 2 && lenOf(res.text) > max; i++) {
+    try {
+      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, shrinkInstruction(lenOf(res.text), limit, mode, band));
+      if (lenOf(next.text) < lenOf(res.text)) { res = next; steps.push("줄이기"); }
+    } catch { break; }
+  }
+  if (lenOf(res.text) > max) {
+    const t = trimDraftToLimit(res, limit, mode, band);
+    res = { ...res, ...t }; steps.push(`문장 ${t.dropped}개 덜기`);
+  } else if (lenOf(res.text) < floor) {
+    const used = new Set(res.sentences.flatMap((s) => s.evidence));
+    const unused = [...records.filter((r) => hasText(r) && !used.has(r.id)).map((r) => r.id), ...perfs.filter((p) => !used.has(p.id)).map((p) => p.id)];
+    if (!unused.length) why = "근거로 쓸 기록을 다 써서 목표보다 짧게 둠";
+    else {
+      try {
+        const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, growInstruction(lenOf(res.text), limit, mode, unused, band));
+        const nl = lenOf(next.text);
+        if (nl > lenOf(res.text) && nl <= max) { res = next; steps.push("늘리기"); }
+        else if (nl > max) { const t = trimDraftToLimit(next, limit, mode, band); if (lenOf(t.text) > lenOf(res.text)) { res = { ...next, ...t }; steps.push("늘리기"); } }
+        if (!steps.length) why = "더 쓸 근거가 마땅치 않아 목표보다 짧게 둠";
+      } catch { why = "늘리지 못해 지금 길이로 둠"; }
+    }
+  }
+  const end = lenOf(res.text);
+  const note = steps.length ? `분량 맞춤 ${start.toLocaleString("ko-KR")} → ${end.toLocaleString("ko-KR")}${u} (${steps.join(" · ")})`
+    : why ? `분량 ${end.toLocaleString("ko-KR")}${u} — ${why}` : "";
+  return { res, note };
 }
 
 function makeDraft(student: Student, w: Working, review: ReturnType<typeof reviewText>, prev?: Draft): Draft {
@@ -187,8 +240,8 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     const history: DraftHistory[] = [...w.history, { role: "user", text: msg, at: nowIso() }];
     setW((x) => ({ ...x, history }));
     try {
-      const { res, rep, first, tries } = await generateChecked(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
-      const adh = `반영도 ${Math.round(rep.score * 100)}% (${rep.passed}/${rep.total})${tries ? ` · 어긴 문장 다시 쓰기 ${tries}회 (처음 ${Math.round(first * 100)}%)` : ""}`;
+      const { res, rep, first, tries, fit } = await generateChecked(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
+      const adh = `반영도 ${Math.round(rep.score * 100)}% (${rep.passed}/${rep.total})${tries ? ` · 어긴 문장 다시 쓰기 ${tries}회 (처음 ${Math.round(first * 100)}%)` : ""}${fit ? ` · ${fit}` : ""}`;
       const base = res.provider === "rules" ? `규칙 기반으로 초안을 갱신함 (AI 꺼짐) · ${adh}` : `초안을 갱신함 (${res.model}) · ${adh}`;
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));

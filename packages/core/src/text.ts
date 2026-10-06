@@ -112,6 +112,14 @@ export function lengthWindow(limit: number, band: [number, number] = [0.96, 1.0]
   return { min: Math.min(max, Math.ceil(limit * band[0])), max };
 }
 
+/** 모자라도 괜찮은 폭 (30바이트 · 10자): 이만큼 가까우면 목표에 닿은 것으로 본다. 넘는 쪽은 허용하지 않는다 */
+export const LENGTH_SLACK: Record<"withSpaces" | "withoutSpaces" | "bytes", number> = { bytes: 30, withSpaces: 10, withoutSpaces: 10 };
+/** 충분히 가까운 아래 끝 = 목표 구간 아래 끝과 '한도 − 허용 폭' 가운데 낮은 쪽 (목표가 작아도 30바이트쯤 모자란 것은 괜찮게) */
+export function lengthFloor(limit: number, mode: "withSpaces" | "withoutSpaces" | "bytes", band?: [number, number]): number {
+  const { min, max } = lengthWindow(limit, band);
+  return Math.max(0, Math.min(min, max - LENGTH_SLACK[mode]));
+}
+
 export function unitLabel(mode: "withSpaces" | "withoutSpaces" | "bytes"): string {
   return mode === "bytes" ? "B" : "자";
 }
