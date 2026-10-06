@@ -1,0 +1,136 @@
+/* =====================================================================
+   모바일 · 태블릿 반응형 — App.tsx 가 맨 마지막에 불러온다 (화면별 CSS 를 덮어쓴다)
+   폭: ≤1100 상단 바 두 줄(styles.css) · ≤900 태블릿 세로(두 칸 화면 → 한 칸) · ≤760 좁은 창 · ≤560 폰
+   원칙: 좁으면 한 칸으로 쌓고 페이지가 통째로 스크롤된다(안쪽 스크롤 칸을 겹치지 않는다).
+        옆으로 넘쳐도 되는 것은 표뿐 — 표는 제자리에서 옆으로 민다. 누르는 것은 32px 이상.
+   ===================================================================== */
+
+/* ---------- ≤ 1100: 노트북 반쪽 창 · 태블릿 가로 ---------- */
+@media (max-width: 1100px) {
+  /* 카드 머리(제목 ······ 도구 단추들): 단추가 넘치면 제목을 누르지 않고 다음 줄로 */
+  .card .flex.between, .card .flex.between > .flex { flex-wrap: wrap; row-gap: 8px; }
+  .card .flex.between > h3 { flex: none; white-space: nowrap; }
+  label.flex { white-space: nowrap; }
+  /* 생기부 생성 · 개별의 학생 머리 */
+  .profile { flex-wrap: wrap; row-gap: 8px; }
+  .profile .muted { white-space: nowrap; }
+}
+
+/* ---------- ≤ 900: 태블릿 세로 ---------- */
+@media (max-width: 900px) {
+  /* 검토: 오른쪽 패널을 표 아래로, 페이지 전체가 스크롤 */
+  .content.noscroll:has(> .review-layout) { overflow: auto; padding-bottom: 40px; }
+  .review-layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .review-layout .tablewrap { max-height: 60vh; }
+  .review-side { overflow: visible; }
+  .rv-hint { display: none; }                         /* '행 클릭 → 우측 패널': 패널이 아래로 내려왔다 */
+}
+
+/* ---------- ≤ 760: 좁은 창 ---------- */
+@media (max-width: 760px) {
+  :root { --pad: 16px; }
+  /* 두 번째 띠(생기부 생성의 개별 · 일괄 · 검토 + 보기 스위치): 줄을 넘긴다 */
+  .main.one .topbar { flex-wrap: wrap; row-gap: 8px; padding-left: 12px; padding-right: 12px; }
+  /* 반 탭이 많으면 옆으로 민다 */
+  .tabsrow { gap: 18px; overflow-x: auto; scrollbar-width: none; }
+  .tabsrow::-webkit-scrollbar { display: none; }
+  .tabsrow .tab { flex: none; }
+
+  /* 설정: 왼쪽 목록 → 위쪽 가로 띠 (옆으로 밀어 고른다) */
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .settings-nav { flex-direction: row; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(-1 * var(--pad)); padding: 2px var(--pad) 6px; }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav button { flex: none; flex-direction: row; align-items: center; gap: 6px; min-height: 34px; white-space: nowrap; }
+  .settings-nav button.active { box-shadow: 0 0 0 1px var(--hair-2), 0 1px 2px rgba(21,45,74,.06), inset 0 -2px 0 var(--accent); }
+  .settings-nav .tag { margin-top: 0; }
+  .scope-note { flex-wrap: wrap; gap: 2px 10px; }
+
+  /* 생기부 생성 · 개별: 명단은 위쪽 가로 띠, 아래로 학생 → 기록 → 초안 창. 페이지 전체가 스크롤 */
+  .content.noscroll:has(> .draft-layout) { overflow: auto; padding-bottom: 24px; }
+  .draft-layout { grid-template-columns: minmax(0, 1fr); height: auto; gap: 12px; }
+  .stulist { display: flex; overflow-x: auto; overflow-y: hidden; flex: none; }
+  .stu { flex: none; width: auto; border-bottom: 0; border-right: 1px solid var(--hair); padding: 6px 12px 6px 10px; }
+  .stu.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  .stu .n { flex: none; overflow: visible; }
+  .draft-main { min-height: 0; }
+  .draft-scroll { flex: none; overflow: visible; }
+  .chatdock { height: auto !important; }            /* 끌어서 정한 높이는 넓은 화면에서만 */
+  .chatdock .drag { display: none; }
+  .chatdock textarea.draft { min-height: 240px; }
+  .profile { flex-wrap: wrap; row-gap: 8px; padding: 14px 16px 12px; }
+  .profile .stats { margin-left: 0; flex-wrap: wrap; }
+  /* 생기부 생성 · 일괄의 학생 초안 창 */
+  .modal.xl .modal-b { overflow: auto; }
+  .dm-body { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .dm-right { max-height: 50vh; }
+
+  /* 표: 제자리에서 옆으로 민다 (페이지가 옆으로 밀리지 않게) */
+  :is(.content, .card, .modal-b) > .table { display: block; overflow-x: auto; }
+  .content > .flex { flex-wrap: wrap; row-gap: 8px; }
+  /* 두 칸 입력 → 한 칸 */
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+
+  /* 모바일 확인: 폰 화면 + 설명을 위아래로 */
+  .mp-stage { gap: 20px; justify-content: center; }
+  .mp-side { min-width: 0; max-width: none; flex-basis: 100%; }
+}
+
+/* ---------- ≤ 560: 폰 ---------- */
+@media (max-width: 560px) {
+  :root { --pad: 14px; }
+
+  /* 상단 바 두 줄: 로고 · 영역 · 설정 / 미반영 · 저장 · 생기부 생성 (페이지 이름은 그 아래 한 줄) */
+  .topnav { padding: 10px 12px; column-gap: 8px; row-gap: 10px; min-height: 0; }
+  .topnav .mini-link { display: none; }                 /* 폰 화면 미리보기는 PC 시험용 */
+  .topnav .brand { order: 0; gap: 7px; padding: 0; font-size: 18px; }
+  .topnav .brand-en { display: none; }
+  .topnav .area-list { order: 0; flex: 1 1 0; margin-left: 2px; }
+  .topnav > .btn.icon { order: 1; }                     /* 설정 */
+  .topnav .sep { order: 2; }
+  .topnav .sync-dot { order: 3; width: 12px; margin: 0; }
+  .topnav > .split-btn { order: 3; }
+  .topnav > .btn:not(.icon) { order: 3; flex: 1 1 auto; justify-content: center; padding: 0 10px; }
+  .topnav .page-title { order: 4; font-size: 20px; }
+  .topnav .page-chip { order: 4; }
+
+  /* 내용 여백 */
+  .content.board { gap: 22px; padding-top: 14px; }
+  .card.pad { padding: 16px; }
+
+  /* 모달: 아래에서 올라오는 시트 (꽉 찬 너비, 위 모서리만 둥글게). 큰 모달은 화면 전체 */
+  .overlay { padding: 0; align-items: flex-end; }
+  .modal, .modal.wide, .modal.narrow { width: 100%; max-height: calc(100dvh - 24px); border-radius: 16px 16px 0 0; }
+  .modal.xl, .modal.inbox { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .modal-h { flex-wrap: wrap; row-gap: 8px; padding: 16px 16px 10px; }
+  .modal-h > .flex { flex: 1 1 0; flex-wrap: wrap; row-gap: 6px; min-width: 0; }
+  .modal-h .muted { white-space: nowrap; }
+  .modal-b { padding: 4px 16px 16px; }
+  .modal-f { flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+
+  /* 학생 기록 창의 표: 기록 하나 = 한 덩어리 (날짜 · 분류 · 상태 · 삭제 / 단원 / 내용) */
+  .sd-table, .sd-table tbody { display: block; }
+  .sd-table thead { display: none; }
+  .sd-table tr {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 4px 8px;
+    grid-template-areas: "date cat st del" "les les les les" "con con con con";
+    padding: 10px 0; border-bottom: 1px solid var(--hair);
+  }
+  .sd-table td { display: block; height: auto; padding: 0; border: 0; background: none; box-shadow: none; }
+  .sd-table td:nth-child(1) { grid-area: date; white-space: nowrap; }
+  .sd-table td:nth-child(2) { grid-area: cat; justify-self: start; }
+  .sd-table td:nth-child(3) { grid-area: les; max-width: none !important; white-space: normal; }
+  .sd-table td:nth-child(4) { grid-area: con; }
+  .sd-table td:nth-child(5) { grid-area: st; }
+  .sd-table td:nth-child(6) { grid-area: del; }
+  .sd-table tr:hover td.content { background: none; }
+
+  /* 알림: 아래쪽 꽉 찬 너비 */
+  .toasts { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .toast { min-width: 0; max-width: none; }
+
+  /* 모바일 확인: 폰 화면을 창 너비에 맞춰 줄인다 (392px 틀) */
+  .mp-phone { zoom: .86; }
+}
+@media (max-width: 380px) {
+  .mp-phone { zoom: .8; }
+}

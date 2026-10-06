@@ -101,7 +101,7 @@ export function StudentDetail({ student: initial, compose, onClose, onChange }: 
       <div className="col" style={{ gap: 14 }}>
         <RecordComposer key={`${student.class}|${student.no}`} student={student} focus={compose || recs.length === 0} />
         {recs.length === 0 ? <Empty title="기록 없음" desc="위 입력칸에 첫 기록을 남겨 보세요." /> : (
-          <table className="table">
+          <table className="table sd-table">
             <thead><tr><th style={{ width: 90 }}>날짜</th><th style={{ width: 70 }}>분류</th><th style={{ width: 200 }}>단원</th><th className="content-h">내용</th><th style={{ width: 70 }}>상태</th><th style={{ width: 40 }} /></tr></thead>
             <tbody>
               {recs.map((r) => (
@@ -122,7 +122,7 @@ export function StudentDetail({ student: initial, compose, onClose, onChange }: 
         {perfs.length > 0 && (
           <div className="card pad">
             <h3>PDF기록</h3>
-            {perfs.map((p) => <div key={p.id} className="flex small" style={{ padding: "4px 0" }}><Chip cat="perf" label={p.title} /><span className="muted num">{p.date}</span><span className="ellipsis">{p.excerpt}</span></div>)}
+            {perfs.map((p) => <div key={p.id} className="flex small" style={{ padding: "4px 0" }}><Chip cat="perf" label={p.title} /><span className="muted num nowrap">{p.date}</span><span className="ellipsis">{p.excerpt}</span></div>)}
           </div>
         )}
       </div>
