@@ -27,6 +27,7 @@ import kr.nuga.app.record.RecordingService
 import kr.nuga.app.record.RecordingStatus
 import kr.nuga.app.record.TranscribeWorker
 import kr.nuga.app.sync.SyncRepository
+import kr.nuga.app.widget.WidgetUpdater
 import kr.nuga.shared.model.CATEGORY_NONE
 import kr.nuga.shared.model.Config
 import kr.nuga.shared.model.RecordSource
@@ -253,7 +254,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setShowNames(value: Boolean) = viewModelScope.launch { g.prefs.setShowNames(value) }
+    /** 위젯 번호 칸의 이름도 같은 설정을 따른다: 바꾸면 위젯을 다시 그린다 */
+    fun setShowNames(value: Boolean) = viewModelScope.launch {
+        g.prefs.setShowNames(value)
+        WidgetUpdater.updateAll(getApplication())
+    }
     fun setWidgetHint(value: Boolean) = viewModelScope.launch { g.prefs.setWidgetHint(value) }
     fun setAutoOpen(value: Boolean) = viewModelScope.launch {
         g.prefs.setAutoOpenNotify(value)

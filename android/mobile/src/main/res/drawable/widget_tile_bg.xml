@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 위젯 번호 칸: 밤 위 옅은 유리 (번호 릴 가운데 판과 같은 빛, 더 옅게). 하늘빛 1dp 테두리 + 위 모서리 빛줄기(오른쪽이 밝다) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270" android:startColor="#24ACCDFF" android:endColor="#0AACCDFF" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <!-- 테두리: 옅은 하늘빛 선 -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <stroke android:width="1dp" android:color="#47ABC9F1" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <!-- 위 모서리 빛줄기 -->
+    <item android:gravity="top" android:height="1dp" android:left="8dp" android:right="6dp">
+        <shape android:shape="rectangle">
+            <gradient android:angle="0" android:centerX="0.7" android:startColor="#00EAF2FF" android:centerColor="#4DEAF2FF" android:endColor="#00EAF2FF" />
+        </shape>
+    </item>
+</layer-list>
