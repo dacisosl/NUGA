@@ -1,5 +1,5 @@
 import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, LengthMode, NugaRecord, Performance, SpanKind, Standard, TeacherGuide } from "./types";
-import { approxCharsForBytes, isNominalEnding, josa, lengthIn, lengthWindow, modeLabel } from "./text";
+import { approxCharsForBytes, isNominalEnding, josa, lengthFloor, lengthIn, lengthWindow, modeLabel } from "./text";
 import { achievementGuide, gradeOf } from "./achievement";
 import { fmtMD } from "./ids";
 import { lessonLabel } from "./timetable";
@@ -105,7 +105,8 @@ function composeGuide(item: string, contentRules: string[], examples: string[]):
     "[3. 분량]",
     "- [입력 정보]의 목표 구간을 채우고 한도는 넘기지 않는다. 단위(NEIS 바이트 또는 글자)는 요청을 따른다. NEIS 바이트는 한글 1자 3바이트, 영문·숫자·공백 1바이트, 줄바꿈 2바이트다. 줄바꿈 없이 한 문단으로 쓴다.",
     "- 목표를 채우는 방법은 사실을 더하는 것이 아니다. ① 기록의 구체적 세부(대상·방법·근거·결과)를 살려 쓰고 ② 행동의 의미와 역량을 해석하고 ③ 도입과 마무리에서 종합해 평가한다.",
-    "- 그렇게 해도 모자랄 때만 목표보다 짧게 쓰고 그 까닭을 checks 에 적는다. 분량을 채우려고 상투적 칭찬이나 같은 역량을 되풀이하지 않는다. 줄일 때는 구체적 행동과 핵심 근거를 남기고 중복과 수식어부터 지운다.",
+    "- 그렇게 해도 모자랄 때만 목표보다 짧게 쓰고 그 까닭을 checks 에 적는다. 근거 없이 상투적 칭찬이나 같은 역량을 되풀이해 늘리지 않는다.",
+    "- 기록이 분량보다 많으면 모두 넣으려 하지 않는다. 학생 개인의 구체적 행동이 드러나는 기록과 서로 다른 역량을 보여 주는 기록을 고르고, 같은 성격의 기록은 '~하는 등'으로 묶고, 역량·평가 표현은 짧은 이름으로 줄인다(예: '자신의 생각을 조리 있게 전달하는 의사소통 능력' → '의사소통 능력'). 한도는 어떤 경우에도 넘기지 않는다.",
     "",
     "[4. 문체]",
     "- 교사가 관찰해 기록하는 학교생활기록부 어체로 쓴다. '~함', '~임', '~보임', '~드러남', '~판단됨' 등 명사형 종결을 기본으로 자연스럽게 잇는다.",
@@ -216,6 +217,15 @@ export function userPrompt(req: DraftRequest): string {
   if (req.school) lines.push(`- 학년·학년도·학기: ${req.school.grade}학년 · ${req.school.year}학년도 ${req.school.semester}학기`);
   if (req.lengthMode === "bytes") lines.push(`- 분량: NEIS ${req.targetLength}바이트 이하 · 목표 ${min}~${max}바이트 (공백 포함 약 ${approxCharsForBytes(min)}~${approxCharsForBytes(max)}자) · 한도 초과 금지`);
   else lines.push(`- 분량: ${req.targetLength}자 이하 (${modeLabel(req.lengthMode)}) · 목표 ${min}~${max}자 · 한도 초과 금지`);
+  {
+    // 문장 수 가늠 (한 문장 ≈ 80자) · 기록이 분량보다 많거나 아주 적을 때의 안내
+    const chars = req.lengthMode === "bytes" ? approxCharsForBytes(max) : max;
+    const nSent = Math.max(2, Math.round(chars / 80));
+    const usableN = req.records.filter((r) => r.text.trim()).length + req.performance.length;
+    lines.push(`- 문장 수 가늠: 약 ${nSent}문장 (한 문장 70~90자)`);
+    if (usableN > nSent * 1.5) lines.push(`- 기록 ${usableN}건이 이 분량에 다 들어가지 않음: 학생 개인의 구체적 행동이 드러나고 서로 다른 역량을 보여 주는 기록을 골라 쓰고, 같은 성격의 기록은 묶고, 역량·평가 표현은 짧게 쓴다. 한도는 절대 넘기지 않는다.`);
+    else if (usableN <= 2) lines.push("- 기록이 적다: 목표에 못 미쳐도 기록에 없는 내용으로 늘리지 않는다 (checks 에 이유).");
+  }
   if (req.styleGuide) lines.push(`- 학교급 문체: ${req.styleGuide}`);
   lines.push("");
   lines.push("[표현 방향] (교사가 확인한 성취기준 도달 정도에 따른 내부 기준, 문장에 숫자나 등급을 쓰지 않음)");
@@ -251,6 +261,91 @@ export function userPrompt(req: DraftRequest): string {
   lines.push("");
   lines.push(`[요청] ${req.instruction || "위 자료를 모두 검토해, 기록을 나열하지 말고 도입 → 본문 → 마무리로 학생활동 · 역량 · 교사의 평가가 고루 드러나는 초안을 작성해줘."}`);
   return lines.join("\n");
+}
+
+/* ---------------- 분량 맞추기 (생성 뒤 다시 묻기) ---------------- */
+
+const unitOf = (mode: LengthMode) => (mode === "bytes" ? "바이트" : "자");
+const charsOf = (n: number, mode: LengthMode) => (mode === "bytes" ? approxCharsForBytes(n) : n);
+
+/** 한도를 넘은 초안을 줄이게 하는 요청: 정확한 수 + 줄이는 순서(역량 표현 짧게 → 묶기 → 덜 중요한 기록 빼기) */
+export function shrinkInstruction(len: number, limit: number, mode: LengthMode, band?: [number, number]): string {
+  const { min, max } = lengthWindow(limit, band); const u = unitOf(mode);
+  return [
+    `지금 초안은 ${len.toLocaleString("ko-KR")}${u}로 한도 ${max.toLocaleString("ko-KR")}${u}를 ${(len - max).toLocaleString("ko-KR")}${u} 넘습니다. 전체를 ${min.toLocaleString("ko-KR")}~${max.toLocaleString("ko-KR")}${u}(공백 포함 약 ${charsOf(min, mode)}~${charsOf(max, mode)}자)로 다시 써 주세요.`,
+    "줄이는 순서:",
+    "1) 역량·평가 표현을 짧게 — 같은 뜻의 긴 수식을 빼고 핵심 이름만 남긴다 (예: '자신의 생각을 조리 있게 전달하는 의사소통 능력' → '의사소통 능력').",
+    "2) 같은 성격의 기록은 한 문장으로 묶는다 ('~하였고, ~하는 등').",
+    "3) 그래도 길면 덜 중요한 기록을 뺀다 — 학생 개인의 구체적 행동이 드러나는 기록과 서로 다른 역량을 보여 주는 기록을 남긴다.",
+    "도입 → 본문 → 마무리와 학생활동 · 역량 · 교사의 평가의 균형은 유지하고, 기록에 없는 내용은 더하지 마세요. 한도는 절대 넘기지 마세요.",
+  ].join("\n");
+}
+
+/** 목표보다 짧은 초안을, 아직 쓰지 않은 기록이 있을 때만 늘리게 하는 요청 (근거 없는 늘리기 금지) */
+export function growInstruction(len: number, limit: number, mode: LengthMode, unusedIds: string[], band?: [number, number]): string {
+  const { min, max } = lengthWindow(limit, band); const u = unitOf(mode);
+  return [
+    `지금 초안은 ${len.toLocaleString("ko-KR")}${u}로 목표 ${min.toLocaleString("ko-KR")}~${max.toLocaleString("ko-KR")}${u}(공백 포함 약 ${charsOf(min, mode)}~${charsOf(max, mode)}자)보다 ${(min - len).toLocaleString("ko-KR")}${u} 짧습니다.`,
+    `아직 쓰지 않은 기록(id: ${unusedIds.join(", ")})을 더하고, 이미 쓴 기록의 구체적 세부(대상·방법·근거·결과)를 살려 목표에 가깝게 늘려 주세요.`,
+    "기록에 없는 사실이나 상투적 칭찬으로 늘리지 마세요. 더 쓸 근거가 없으면 지금 길이로 두고 checks 에 이유를 적어 주세요. 한도는 넘기지 마세요.",
+  ].join("\n");
+}
+
+/**
+ * 마지막 방어: 그래도 한도를 넘으면 본문 문장을 덜어 낸다 (도입 · 마무리는 남긴다).
+ * 어느 문장을 덜지는 한도 안에서 가장 길게(목표에 가깝게) 남는 쪽으로 고르고, 길이가 같으면 적게 덜어 낸다.
+ * 문장 하나만 남았는데도 넘치면 마지막 이음말('~하며', '~하고,', '~하였고,') 자리에서 끊어 '~함.'으로 맺는다
+ */
+export function trimDraftToLimit(res: DraftResponse, limit: number, mode: LengthMode, band?: [number, number]): DraftResponse & { dropped: number } {
+  const { max } = lengthWindow(limit, band);
+  const all = res.sentences.length ? [...res.sentences] : [{ text: res.text, evidence: [] as string[] }];
+  const lenOf = (xs: DraftSentence[]) => lengthIn(xs.map((x) => x.text).join(" "), mode);
+  let sents = all;
+  if (all.length > 1 && lenOf(all) > max) {
+    // 문장 길이는 더해서 센다 (문장 사이 띄어쓰기 하나씩)
+    const L = all.map((s) => lengthIn(s.text, mode)); const gap = lengthIn(" ", mode);
+    const total = (idx: number[]) => idx.reduce((a, i) => a + L[i], 0) + gap * Math.max(0, idx.length - 1);
+    const fixed = all.length >= 3 && total([0, all.length - 1]) <= max ? [0, all.length - 1] : [0];
+    const body = all.map((_, i) => i).filter((i) => !fixed.includes(i));
+    let best = fixed; let bestLen = total(fixed);
+    if (body.length <= 14) {
+      for (let m = 1; m < 1 << body.length; m++) {
+        const idx = [...fixed, ...body.filter((_, b) => m & (1 << b))];
+        const l = total(idx);
+        if (l <= max && (l > bestLen || (l === bestLen && idx.length > best.length))) { best = idx; bestLen = l; }
+      }
+    } else {
+      // 문장이 아주 많으면 본문 끝에서부터 덜어 낸다
+      const idx = all.map((_, i) => i);
+      while (idx.length > fixed.length && total(idx) > max) idx.splice(idx.length - (fixed.length === 2 ? 2 : 1), 1);
+      best = idx;
+    }
+    sents = all.filter((_, i) => best.includes(i));
+  }
+  const dropped = all.length - sents.length;
+  if (lenOf(sents) > max) {
+    const t = sents[0].text;
+    let cut = "";
+    // 이음말 → 맺음 ('~주며' → '~줌', '~있으며' → '~있음')
+    const ENDS: [string, string][] = [["하였고,", "하였음"], ["하고,", "함"], ["하며", "함"], ["하여", "함"], ["주며", "줌"], ["보며", "봄"], ["되며", "됨"], ["지며", "짐"], ["내며", "냄"], ["이며", "임"], ["우며", "움"], ["쓰며", "씀"], ["가며", "감"], ["오며", "옴"], ["으며", "음"]];
+    for (const m of t.matchAll(new RegExp(`(${ENDS.map(([a]) => a).join("|")}) `, "g"))) {
+      const head = t.slice(0, (m.index ?? 0) + m[0].length - 1).trim();
+      const [link, end] = ENDS.find(([a]) => head.endsWith(a))!;
+      const ended = `${head.slice(0, head.length - link.length)}${end}.`;
+      if (lengthIn(ended, mode) <= max) cut = ended;
+    }
+    if (!cut) {
+      // 이음말도 없으면 글자 단위로 끊고 '등을 수행함.'으로 맺는다 (한도는 어떤 경우에도 넘기지 않는다)
+      const tail = " 등을 수행함.";
+      let chars = Array.from(t);
+      while (chars.length > 1 && lengthIn(chars.join("").replace(/[,.\s]+$/, "") + tail, mode) > max) chars = chars.slice(0, -1);
+      cut = chars.join("").replace(/[,.\s]+$/, "") + tail;
+    }
+    sents[0] = { ...sents[0], text: cut, spans: undefined };
+  }
+  const checks = [...(res.checks || [])];
+  if (dropped) checks.push(`분량 한도를 지키려고 문장 ${dropped}개를 덜어 냈습니다.`);
+  return { text: sents.map((x) => x.text).join(" "), sentences: sents, checks, dropped };
 }
 
 /* ---------------- 로컬 규칙 기반 생성기 (AI 없이 동작) ---------------- */
@@ -434,7 +529,7 @@ function wantsTopic(topic: string, clause: string): boolean {
  * PDF기록 문장: '[제목]에서 '[주제]'를 주제로 [발췌의 수행 내용]하며 [드러난 역량]을 보여줌.'
  * 수행 내용은 발췌의 '주제 — 부연' 뒤쪽을 그대로 쓰고(없으면 '탐구한 내용을 정리함'), 역량은 그 부연의 행동 낱말에서만 이끈다
  */
-function perfSentence(p: AnonPerf, used: Set<string>, show: (phrase: string) => Verb): DraftSentence {
+function perfSentence(p: AnonPerf, used: Set<string>, show: (phrase: string) => Verb, phraseOf: (c: CompRule) => string = (c) => c.phrase): DraftSentence {
   const src = `${p.excerpt}\n${p.text || ""}`;
   const m = src.match(/주제\s*[:：]\s*([^.\n]+)/);
   let head = (m ? m[1] : p.excerpt.split(/[.\n]/)[0] || "").replace(/○+/g, "").replace(/\s+/g, " ").trim();
@@ -450,8 +545,9 @@ function perfSentence(p: AnonPerf, used: Set<string>, show: (phrase: string) => 
   const me = comp ? meForm(act) : null;
   if (!comp || !me) return { text: `${lead}${act}.`, evidence: [p.id], spans: [{ text: lead, kind: "none" }, { text: `${act}.`, kind: "activity" }] };
   used.add(comp.key);
-  const [v, ev] = show(comp.phrase);
-  const spans: DraftSpan[] = [{ text: lead, kind: "none" }, { text: me, kind: "activity" }, { text: " ", kind: "none" }, { text: comp.phrase, kind: "competency" }, { text: `${tail(comp.phrase, "을/를")} `, kind: "none" }, { text: v, kind: ev ? "evaluation" : "none" }, { text: ".", kind: "none" }];
+  const phrase = phraseOf(comp);
+  const [v, ev] = show(phrase);
+  const spans: DraftSpan[] = [{ text: lead, kind: "none" }, { text: me, kind: "activity" }, { text: " ", kind: "none" }, { text: phrase, kind: "competency" }, { text: `${tail(phrase, "을/를")} `, kind: "none" }, { text: v, kind: ev ? "evaluation" : "none" }, { text: ".", kind: "none" }];
   return { text: spans.map((x) => x.text).join(""), evidence: [p.id], spans };
 }
 
@@ -469,7 +565,6 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
   const checks: string[] = [];
 
   type S = DraftSentence & { prio: number };
-  const sents: S[] = [];
   const usable = [...req.records].filter((r) => r.text.trim()).sort((a, b) => a.date.localeCompare(b.date));
   const empty = req.records.length - usable.length;
   if (empty) checks.push(`내용이 비어 있는 기록 ${empty}건은 쓰지 않았습니다.`);
@@ -488,144 +583,251 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
     if (last && last.length < 2 && !merged.has(last) && !byAct.has(sceneSplit(last[0].text).act) && last[0].topic && last[0].topic === r.topic && last[0].category !== "기타") last.push(r);
     else { const g = [r]; groups.push(g); if (key) byAct.set(key, g); }
   }
-  const verbs = compVerbs(req.achievement);
-  const grade = gradeOf(req.achievement);
-  const usedComp = new Set<string>();
-  const flip = usable.length ? hashStr(usable[0].id) % 2 : 0;
-  /** 마무리에서 부를 역량의 짧은 이름 (문장에 나온 순서) */
-  const named: string[] = [];
-  const nameIt = (s: string) => { if (!named.includes(s)) named.push(s); };
-  let topicMentions = 0; let lastTopic = "";
+  /**
+   * 문단 짜기. short = 짧은 이름으로 쓸 역량(COMP_RULES key · 'fam:갈래') — 한도를 넘을 때 기록을 빼기 전에 먼저 줄여 본다(기록을 하나라도 더 남기려고).
+   * gs · ps = 쓸 기록 묶음 · PDF기록 (기록을 골라 뺄 때는 문단을 다시 짜서 도입 · 마무리도 남은 기록에 맞춘다).
+   * close = 마무리 문장을 붙일지 (목표가 아주 작아 기록 하나밖에 못 남길 때만 빼 본다)
+   */
+  const build = (short: Set<string>, gs: AnonRecord[][] = groups, ps: AnonPerf[] = req.performance, close = true): S[] => {
+    const sents: S[] = [];
+    const phraseOf = (c: CompRule) => (short.has(c.key) ? c.short : c.phrase);
+    const traitOf = (f: (typeof FAMS)[number]) => (short.has(`fam:${f.fam}`) ? f.short : f.trait);
+    const verbs = compVerbs(req.achievement);
+    const grade = gradeOf(req.achievement);
+    const usedComp = new Set<string>();
+    const flip = usable.length ? hashStr(usable[0].id) % 2 : 0;
+    /** 마무리에서 부를 역량의 짧은 이름 (문장에 나온 순서) */
+    const named: string[] = [];
+    const nameIt = (s: string) => { if (!named.includes(s)) named.push(s); };
+    let topicMentions = 0; let lastTopic = "";
 
-  /** 한 묶음의 절: 같은 행동 묶음 · 같은 주제 두 기록 · 기록 하나 */
-  const bodyOf = (g: AnonRecord[]): { body: string; g: AnonRecord[]; second?: AnonRecord } | null => {
-    if (merged.has(g)) return { body: clauseOf({ ...g[0], text: mergedText(g) }), g };
-    const clauses = g.map(clauseOf).filter(Boolean);
-    if (!clauses.length) return null;
-    if (clauses.length === 2) {
-      const link = linkForm(clauses[0]);
-      if (link) return { body: `${link} ${clauses[1]}`, g };
-      return { body: clauses[0], g: [g[0]], second: g[1] };
+    /** 한 묶음의 절: 같은 행동 묶음 · 같은 주제 두 기록 · 기록 하나 */
+    const bodyOf = (g: AnonRecord[]): { body: string; g: AnonRecord[]; second?: AnonRecord } | null => {
+      if (merged.has(g)) return { body: clauseOf({ ...g[0], text: mergedText(g) }), g };
+      const clauses = g.map(clauseOf).filter(Boolean);
+      if (!clauses.length) return null;
+      if (clauses.length === 2) {
+        const link = linkForm(clauses[0]);
+        if (link) return { body: `${link} ${clauses[1]}`, g };
+        return { body: clauses[0], g: [g[0]], second: g[1] };
+      }
+      return { body: clauses[0], g };
+    };
+    const prims = gs.map((g) => compOf(g));
+
+    // ① 도입: 같은 성향 갈래가 두 묶음 이상에서 보이면, 그 행동들을 '~하였고, ~하는 등'으로 묶어 성향과 교사의 평가로 시작한다
+    const famCount = new Map<Fam, number>();
+    prims.forEach((p) => { if (p) famCount.set(p.fam, (famCount.get(p.fam) || 0) + 1); });
+    const openFam = FAMS.find((f) => (famCount.get(f.fam) || 0) >= 2);
+    const inOpen = new Set<number>();
+    if (openFam) {
+      const idx = gs.map((_, i) => i).filter((i) => prims[i]?.fam === openFam.fam).slice(0, 3);
+      const parts = idx.map((i) => {
+        const b = bodyOf(gs[i]);
+        if (!b) return null;
+        const t = gs[i][0].topic;
+        return { i, text: `${t && wantsTopic(t, b.body) ? `${t} 수업에서 ` : ""}${b.body}` };
+      }).filter((x): x is { i: number; text: string } => !!x);
+      const last = parts.length >= 2 ? adnForm(parts[parts.length - 1].text) : null;
+      const links = parts.slice(0, -1).map((p) => pastLink(p.text));
+      if (last && links.every(Boolean)) {
+        const evalTail = grade === "A" ? ["이/가", "우수한 학생으로 판단됨"] : grade === "B" ? ["이/가", "돋보이는 학생임"] : grade === "D" || grade === "E" ? ["을/를", "보이는 학생임"] : ["이/가", "드러나는 학생임"];
+        const spans: DraftSpan[] = [];
+        links.forEach((l) => { spans.push({ text: l!, kind: "activity" }, { text: " ", kind: "none" }); });
+        spans.push({ text: last, kind: "activity" }, { text: " 등 ", kind: "none" }, { text: traitOf(openFam), kind: "competency" },
+          { text: `${tail(traitOf(openFam), evalTail[0] as "이/가" | "을/를")} `, kind: "none" }, { text: evalTail[1], kind: "evaluation" }, { text: ".", kind: "none" });
+        sents.push({ text: spans.map((x) => x.text).join(""), evidence: parts.flatMap((p) => gs[p.i].map((r) => r.id)), spans, prio: 7 });
+        for (const p of parts) { inOpen.add(p.i); usedComp.add(prims[p.i]!.key); }
+        nameIt(openFam.short);
+        if (parts.some((p) => gs[p.i][0].topic)) lastTopic = gs[parts[parts.length - 1].i][0].topic;
+      }
     }
-    return { body: clauses[0], g };
-  };
-  const prims = groups.map((g) => compOf(g));
 
-  // ① 도입: 같은 성향 갈래가 두 묶음 이상에서 보이면, 그 행동들을 '~하였고, ~하는 등'으로 묶어 성향과 교사의 평가로 시작한다
-  const famCount = new Map<Fam, number>();
-  prims.forEach((p) => { if (p) famCount.set(p.fam, (famCount.get(p.fam) || 0) + 1); });
-  const openFam = FAMS.find((f) => (famCount.get(f.fam) || 0) >= 2);
-  const inOpen = new Set<number>();
-  if (openFam) {
-    const idx = groups.map((_, i) => i).filter((i) => prims[i]?.fam === openFam.fam).slice(0, 3);
-    const parts = idx.map((i) => {
-      const b = bodyOf(groups[i]);
-      if (!b) return null;
-      const t = groups[i][0].topic;
-      return { i, text: `${t && wantsTopic(t, b.body) ? `${t} 수업에서 ` : ""}${b.body}` };
-    }).filter((x): x is { i: number; text: string } => !!x);
-    const last = parts.length >= 2 ? adnForm(parts[parts.length - 1].text) : null;
-    const links = parts.slice(0, -1).map((p) => pastLink(p.text));
-    if (last && links.every(Boolean)) {
-      const evalTail = grade === "A" ? ["이/가", "우수한 학생으로 판단됨"] : grade === "B" ? ["이/가", "돋보이는 학생임"] : grade === "D" || grade === "E" ? ["을/를", "보이는 학생임"] : ["이/가", "드러나는 학생임"];
+    // ② 본문: 묶음마다 활동 + 세부 행동(기록 그대로) + 드러난 역량(학생이 한 행동에서 하나). 이미 쓴 역량이면 되풀이하지 않고 행동까지만
+    gs.forEach((g0, gi) => {
+      if (inOpen.has(gi)) return;
+      const b = bodyOf(g0);
+      if (!b) return;
+      const { body, g } = b;
+      const topic = g[0].topic;
+      let prefix = "";
+      if (!merged.has(g0) && topic && topic !== lastTopic && topicMentions < 2 && wantsTopic(topic, body)) {
+        prefix = TOPIC_FRAMES[hashStr(g[0].id) % TOPIC_FRAMES.length](topic); topicMentions++;
+      }
+      if (topic) lastTopic = topic;
+      const primary = prims[gi];
+      const comp = primary && !usedComp.has(primary.key) ? primary : null;
       const spans: DraftSpan[] = [];
-      links.forEach((l) => { spans.push({ text: l!, kind: "activity" }, { text: " ", kind: "none" }); });
-      spans.push({ text: last, kind: "activity" }, { text: " 등 ", kind: "none" }, { text: openFam.trait, kind: "competency" },
-        { text: `${tail(openFam.trait, evalTail[0] as "이/가" | "을/를")} `, kind: "none" }, { text: evalTail[1], kind: "evaluation" }, { text: ".", kind: "none" });
-      sents.push({ text: spans.map((x) => x.text).join(""), evidence: parts.flatMap((p) => groups[p.i].map((r) => r.id)), spans, prio: 7 });
-      for (const p of parts) { inOpen.add(p.i); usedComp.add(prims[p.i]!.key); }
-      nameIt(openFam.short);
-      if (parts.some((p) => groups[p.i][0].topic)) lastTopic = groups[parts[parts.length - 1].i][0].topic;
-    }
-  }
+      const put = (text: string, kind: SpanKind) => { if (text) spans.push({ text, kind }); };
+      put(prefix, "none");
+      const me = comp ? meForm(body) : null;
+      const adn = comp && !/과정에서/.test(body) ? adnForm(body) : null; // '실험 과정에서 … 과정에서'를 피한다
+      // 맺음을 번갈아: '~하며 [역량]을 보여줌' / '~하는 과정에서 [역량]이 드러남' (학생마다 시작이 다르게)
+      if (comp && adn && (usedComp.size + flip) % 2 === 1) {
+        const [v, ev] = verbs.reveal();
+        put(adn, "activity"); put(" 과정에서 ", "none"); put(phraseOf(comp), "competency");
+        put(`${tail(phraseOf(comp), "이/가")} `, "none"); put(v, ev ? "evaluation" : "none"); put(".", "none");
+        usedComp.add(comp.key); nameIt(comp.short);
+      } else if (comp && me) {
+        const [v, ev] = verbs.show(phraseOf(comp));
+        put(me, "activity"); put(" ", "none"); put(phraseOf(comp), "competency"); put(`${tail(phraseOf(comp), "을/를")} `, "none"); put(v, ev ? "evaluation" : "none"); put(".", "none");
+        usedComp.add(comp.key); nameIt(comp.short);
+      } else put(`${body}.`, "activity");
+      let prio = 5 + gi * 0.01;
+      if (g.some((r) => emphasize.has(r.category))) prio += 3;
+      if (g.every((r) => reduce.has(r.category))) prio -= 4;
+      sents.push({ text: spans.map((x) => x.text).join(""), evidence: g.map((r) => r.id), spans, prio });
+      if (b.second) {
+        // 잇지 못한 두 번째 기록은 따로 문장으로
+        const c2 = clauseOf(b.second);
+        if (c2) sents.push({ text: `${c2}.`, evidence: [b.second.id], spans: [{ text: `${c2}.`, kind: "activity" }], prio });
+      }
+    });
+    ps.forEach((p) => {
+      const s = perfSentence(p, usedComp, verbs.show, phraseOf);
+      const c = s.spans?.find((x) => x.kind === "competency");
+      if (c) { const rule = COMP_RULES.find((r) => r.phrase === c.text || r.short === c.text); if (rule) nameIt(rule.short); }
+      sents.push({ ...s, prio: 6 });
+    });
 
-  // ② 본문: 묶음마다 활동 + 세부 행동(기록 그대로) + 드러난 역량(학생이 한 행동에서 하나). 이미 쓴 역량이면 되풀이하지 않고 행동까지만
-  groups.forEach((g0, gi) => {
-    if (inOpen.has(gi)) return;
-    const b = bodyOf(g0);
-    if (!b) return;
-    const { body, g } = b;
-    const topic = g[0].topic;
-    let prefix = "";
-    if (!merged.has(g0) && topic && topic !== lastTopic && topicMentions < 2 && wantsTopic(topic, body)) {
-      prefix = TOPIC_FRAMES[hashStr(g[0].id) % TOPIC_FRAMES.length](topic); topicMentions++;
+    // ③ 마무리: 문단에 나온 역량을 짧은 이름으로 모아 도달 정도에 맞는 교사의 평가로 맺는다 (역량이 둘 이상, 문장이 둘 이상일 때)
+    const names = named.slice(0, 3);
+    if (close && names.length >= 2 && sents.length >= 2) {
+      const n = names.length;
+      const joined = n === 2 ? `${josa(names[0], "과/와")} ${names[1]}` : `${names.slice(0, n - 2).join(", ")}, ${josa(names[n - 2], "과/와")} ${names[n - 1]}`;
+      const close: [string, "이/가" | "을/를", string, string][] = [
+        // [앞말, 조사, 평가, 뒷말]
+        grade === "A" ? ["", "을/를", "고루 갖춘 학습자로 판단됨", ""]
+          : grade === "B" ? ["", "이/가", "고루 드러나는 학습자임", ""]
+            : grade === "C" ? ["", "이/가", "드러나는 성실한 학습자임", ""]
+              : grade === "D" || grade === "E" ? ["수업 활동에 참여하며 ", "을/를", "기르려는 모습을 보임", ""]
+                : ["", "이/가", "드러나는 학습자임", ""],
+      ];
+      const [lead, pair, ev] = close[0];
+      const spans: DraftSpan[] = [];
+      if (lead) spans.push({ text: lead, kind: "none" });
+      spans.push({ text: joined, kind: "competency" }, { text: `${tail(joined, pair)} `, kind: "none" }, { text: ev, kind: "evaluation" }, { text: ".", kind: "none" });
+      sents.push({ text: spans.map((x) => x.text).join(""), evidence: [...gs.flat().map((r) => r.id), ...ps.map((p) => p.id)], spans, prio: 6.5 });
     }
-    if (topic) lastTopic = topic;
-    const primary = prims[gi];
-    const comp = primary && !usedComp.has(primary.key) ? primary : null;
-    const spans: DraftSpan[] = [];
-    const put = (text: string, kind: SpanKind) => { if (text) spans.push({ text, kind }); };
-    put(prefix, "none");
-    const me = comp ? meForm(body) : null;
-    const adn = comp && !/과정에서/.test(body) ? adnForm(body) : null; // '실험 과정에서 … 과정에서'를 피한다
-    // 맺음을 번갈아: '~하며 [역량]을 보여줌' / '~하는 과정에서 [역량]이 드러남' (학생마다 시작이 다르게)
-    if (comp && adn && (usedComp.size + flip) % 2 === 1) {
-      const [v, ev] = verbs.reveal();
-      put(adn, "activity"); put(" 과정에서 ", "none"); put(comp.phrase, "competency");
-      put(`${tail(comp.phrase, "이/가")} `, "none"); put(v, ev ? "evaluation" : "none"); put(".", "none");
-      usedComp.add(comp.key); nameIt(comp.short);
-    } else if (comp && me) {
-      const [v, ev] = verbs.show(comp.phrase);
-      put(me, "activity"); put(" ", "none"); put(comp.phrase, "competency"); put(`${tail(comp.phrase, "을/를")} `, "none"); put(v, ev ? "evaluation" : "none"); put(".", "none");
-      usedComp.add(comp.key); nameIt(comp.short);
-    } else put(`${body}.`, "activity");
-    let prio = 5 + gi * 0.01;
-    if (g.some((r) => emphasize.has(r.category))) prio += 3;
-    if (g.every((r) => reduce.has(r.category))) prio -= 4;
-    sents.push({ text: spans.map((x) => x.text).join(""), evidence: g.map((r) => r.id), spans, prio });
-    if (b.second) {
-      // 잇지 못한 두 번째 기록은 따로 문장으로
-      const c2 = clauseOf(b.second);
-      if (c2) sents.push({ text: `${c2}.`, evidence: [b.second.id], spans: [{ text: `${c2}.`, kind: "activity" }], prio });
-    }
-  });
-  req.performance.forEach((p) => {
-    const s = perfSentence(p, usedComp, verbs.show);
-    const c = s.spans?.find((x) => x.kind === "competency");
-    if (c) { const rule = COMP_RULES.find((r) => r.phrase === c.text); if (rule) nameIt(rule.short); }
-    sents.push({ ...s, prio: 6 });
-  });
 
-  // ③ 마무리: 문단에 나온 역량을 짧은 이름으로 모아 도달 정도에 맞는 교사의 평가로 맺는다 (역량이 둘 이상, 문장이 둘 이상일 때)
-  const names = named.slice(0, 3);
-  if (names.length >= 2 && sents.length >= 2) {
-    const n = names.length;
-    const joined = n === 2 ? `${josa(names[0], "과/와")} ${names[1]}` : `${names.slice(0, n - 2).join(", ")}, ${josa(names[n - 2], "과/와")} ${names[n - 1]}`;
-    const close: [string, "이/가" | "을/를", string, string][] = [
-      // [앞말, 조사, 평가, 뒷말]
-      grade === "A" ? ["", "을/를", "고루 갖춘 학습자로 판단됨", ""]
-        : grade === "B" ? ["", "이/가", "고루 드러나는 학습자임", ""]
-          : grade === "C" ? ["", "이/가", "드러나는 성실한 학습자임", ""]
-            : grade === "D" || grade === "E" ? ["수업 활동에 참여하며 ", "을/를", "기르려는 모습을 보임", ""]
-              : ["", "이/가", "드러나는 학습자임", ""],
-    ];
-    const [lead, pair, ev] = close[0];
-    const spans: DraftSpan[] = [];
-    if (lead) spans.push({ text: lead, kind: "none" });
-    spans.push({ text: joined, kind: "competency" }, { text: `${tail(joined, pair)} `, kind: "none" }, { text: ev, kind: "evaluation" }, { text: ".", kind: "none" });
-    sents.push({ text: spans.map((x) => x.text).join(""), evidence: [...usable.map((r) => r.id), ...req.performance.map((p) => p.id)], spans, prio: 6.5 });
-  }
-
+    return sents;
+  };
   const { min, max } = lengthWindow(req.targetLength, req.lengthBand);
   const unit = req.lengthMode === "bytes" ? "바이트" : "자";
   const join = (xs: S[]) => xs.map((s) => s.text).join(" ");
+  const lenOf = (xs: S[]) => lengthOf(join(xs), req.lengthMode);
+
+  // 분량 맞추기. 넣고 뺄 단위 = 기록 묶음 · PDF기록.
+  // 등급: 교사가 강조한 분류 2 · 보통 1 · 줄이라고 한 분류 0 — 낮은 등급부터 빼고, 높은 등급 기록을 낮은 등급 기록과 맞바꾸지 않는다.
+  // 값(같은 등급에서 남길 순서): 다른 묶음에 없는 역량을 보여 줌 > 메모가 구체적임(길이) > 최근. PDF기록은 그보다 위
+  const primKeys = groups.map((g) => compOf(g)?.key);
+  const units = [
+    ...groups.map((g, gi) => ({
+      tier: g.some((r) => emphasize.has(r.category)) ? 2 : g.every((r) => reduce.has(r.category)) ? 0 : 1,
+      value: (primKeys[gi] && primKeys.filter((k) => k === primKeys[gi]).length === 1 ? 1 : 0) + Math.min(0.5, Array.from(g.map((r) => r.text).join("")).length / 160) + gi * 0.001,
+      label: `${g.map((r) => r.date).join("·")} ${g[0].category}`, n: g.length,
+    })),
+    ...req.performance.map((p) => ({ tier: 1, value: 2, label: `PDF기록 '${p.title || "보고서"}'`, n: 1 })),
+  ];
+  const nG = groups.length;
+  const order = units.map((_, k) => k).sort((a, b) => units[a].tier - units[b].tier || units[a].value - units[b].value);
+  const count = (on: boolean[]) => on.filter(Boolean).length;
+  /** 한 가지 짜임: 쓸 기록(on) · 짧게 쓸 역량(short) · 마무리 문장(close) */
+  interface Pick { on: boolean[]; short: Set<string>; close: boolean; sents: S[]; len: number }
+  const mk = (on: boolean[], short: Set<string>, close: boolean): Pick => {
+    const sents = build(short, groups.filter((_, i) => on[i]), req.performance.filter((_, i) => on[nG + i]), close);
+    return { on, short, close, sents, len: lenOf(sents) };
+  };
+  const shortName = (key: string) => COMP_RULES.find((c) => c.key === key)?.short ?? FAMS.find((f) => `fam:${f.fam}` === key)?.short ?? "";
+  const ALL_SHORT = new Set([...COMP_RULES.map((c) => c.key), ...FAMS.map((f) => `fam:${f.fam}`)]);
+
+  const all = units.map(() => true);
+  const base = mk(all, new Set(), true);
+  // '짧게' 요청이면 지금 분량의 절반쯤까지. 아니면 한도까지 채우되, 30바이트쯤 모자란 것은 괜찮다(그 아래면 더 채워 본다)
+  const cap = shorter ? Math.min(max, Math.max(1, Math.round(base.len / 2))) : max;
+  const goal = shorter ? 0 : lengthFloor(req.targetLength, req.lengthMode, req.lengthBand);
+  // 짧게 줄일 수 있는 역량 표현: 문단에 나온 것만, 많이 줄어드는 것부터
+  const baseText = join(base.sents);
+  const shrinkable = [
+    ...COMP_RULES.filter((c) => c.short !== c.phrase && baseText.includes(c.phrase)).map((c) => ({ key: c.key, save: lengthOf(c.phrase, req.lengthMode) - lengthOf(c.short, req.lengthMode) })),
+    ...FAMS.filter((f) => f.short !== f.trait && baseText.includes(f.trait)).map((f) => ({ key: `fam:${f.fam}`, save: lengthOf(f.trait, req.lengthMode) - lengthOf(f.short, req.lengthMode) })),
+  ].sort((a, b) => b.save - a.save).map((x) => x.key);
+
+  /** ① 역량 표현을 하나씩 짧은 이름으로 (많이 줄어드는 것부터, 한도 안에 들 때까지만). 다 줄여도 넘치면 모두 짧게 */
+  const shorten = (p: Pick): Pick => {
+    let cur = p;
+    for (const key of shrinkable) { if (cur.len <= cap) break; cur = mk(cur.on, new Set([...cur.short, key]), cur.close); }
+    return cur.len <= cap ? cur : mk(cur.on, ALL_SHORT, cur.close);
+  };
+  /** ② 기록 고르기: 낮은 등급 · 낮은 값부터 하나씩 빼 본다 */
+  const drop = (p: Pick): Pick => {
+    let cur = p;
+    for (const k of order) { if (cur.len <= cap || count(cur.on) <= 1) break; cur = mk(cur.on.map((v, i) => (i === k ? false : v)), cur.short, cur.close); }
+    return cur;
+  };
+  /** ③ 목표보다 30바이트 넘게 모자라면 채우기: 뺀 기록 다시 넣기 > 줄인 역량 표현 되살리기 > 같은 등급끼리 맞바꾸기 (한도 안에서 가장 길게) */
+  const fill = (p: Pick): Pick => {
+    let cur = p;
+    for (let step = 0; step < 8 && cur.len <= cap && cur.len < goal; step++) {
+      const offs = cur.on.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+      const ons = cur.on.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
+      const text = join(cur.sents);
+      const moves: (() => Pick)[][] = [
+        offs.map((r) => () => mk(cur.on.map((v, i) => (i === r ? true : v)), cur.short, cur.close)),
+        [...cur.short].filter((key) => text.includes(shortName(key))).map((key) => () => mk(cur.on, new Set([...cur.short].filter((x) => x !== key)), cur.close)),
+        offs.flatMap((r) => ons.filter((k) => units[r].tier >= units[k].tier).map((k) => () => mk(cur.on.map((v, i) => (i === r ? true : i === k ? false : v)), cur.short, cur.close))),
+      ];
+      let best: Pick | null = null;
+      for (const group of moves) {
+        for (const move of group) { const m = move(); if (m.len <= cap && m.len > (best ? best.len : cur.len)) best = m; }
+        if (best) break;
+      }
+      if (!best) break;
+      cur = best;
+    }
+    return cur;
+  };
+
+  let pick = base;
+  if (base.len > cap) {
+    // 넘치면: (가) 역량 표현을 줄이고 그래도 넘칠 때만 기록을 고른 것, (나) 역량 표현은 그대로 두고 기록을 고른 것을 견준다.
+    // 둘 다 목표에 못 닿으면(목표가 아주 작을 때) 마무리 문장 없이 기록을 하나 더 남기는 것도 견준다.
+    // 한도 안 > 목표에 닿음 > (닿았으면) 마무리 있음 > 기록을 더 많이 남김 > 더 김 / (못 닿았으면) 더 김 > 마무리 있음
+    const rank = (x: Pick) => (x.len >= goal ? [x.len <= cap ? 1 : 0, 1, x.close ? 1 : 0, count(x.on), x.len] : [x.len <= cap ? 1 : 0, 0, x.len, x.close ? 1 : 0, count(x.on)]);
+    const better = (a: Pick, b: Pick) => { const ra = rank(a), rb = rank(b); for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i]; return false; };
+    const tryClose = (close: boolean) => {
+      const start = close ? base : mk(all, new Set(), false);
+      for (const c of [fill(drop(shorten(start))), fill(drop(start))]) if (pick === base || better(c, pick)) pick = c;
+    };
+    tryClose(true);
+    if (pick.len < goal) tryClose(false);
+  }
+  const sents = pick.sents;
   let kept = [...sents];
-  if (shorter) kept = kept.slice(0, Math.max(1, Math.ceil(kept.length / 2)));
-  while (kept.length > 1 && lengthOf(join(kept), req.lengthMode) > max) {
+  while (kept.length > 1 && lenOf(kept) > cap) {
     const minPrio = Math.min(...kept.map((s) => s.prio));
     kept.splice(kept.findIndex((s) => s.prio === minPrio), 1);
   }
   let text = join(kept);
-  if (lengthOf(text, req.lengthMode) > max && kept.length === 1) {
+  if (lengthOf(text, req.lengthMode) > cap && kept.length === 1) {
     const tail = " 등을 수행함.";
     let chars = Array.from(text);
-    while (chars.length > 1 && lengthOf(chars.join("").replace(/[,\s]+$/, "") + tail, req.lengthMode) > max) chars = chars.slice(0, -1);
+    while (chars.length > 1 && lengthOf(chars.join("").replace(/[,\s]+$/, "") + tail, req.lengthMode) > cap) chars = chars.slice(0, -1);
     text = chars.join("").replace(/[,\s]+$/, "") + tail;
     kept[0] = { ...kept[0], text };
   }
   const len = lengthOf(text, req.lengthMode);
-  if (len < min) checks.push(`근거가 되는 기록이 적어 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}로 작성했습니다.`);
+  const left = units.filter((_, i) => !pick.on[i]);
+  const shortened = pick.short.size > 0 && join(mk(pick.on, new Set(), pick.close).sents) !== join(pick.sents);
+  if (shortened) checks.push("분량에 맞추려고 역량 표현을 짧게 줄였습니다.");
+  if (left.length) checks.push(`분량에 맞추려고 기록 ${left.reduce((a, u) => a + u.n, 0)}건을 빼고 썼습니다: ${left.slice(0, 6).map((u) => u.label).join(", ")}${left.length > 6 ? " 등" : ""}`);
+  if (!pick.close) checks.push("분량이 작아 마무리 문장 없이 썼습니다.");
   if (sents.length > kept.length) checks.push(`분량 때문에 ${sents.length - kept.length}개 문장을 뺐습니다.`);
+  if (len < goal) {
+    checks.push(pick !== base || sents.length > kept.length
+      ? `한도를 넘지 않게 분량을 맞추다 보니 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}가 되었습니다.`
+      : `근거가 되는 기록이 적어 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}로 작성했습니다.`);
+  }
   return { text, sentences: kept.map(({ text, evidence, spans }) => (spans && spans.map((x) => x.text).join("") === text ? { text, evidence, spans } : { text, evidence })), checks };
 }
 

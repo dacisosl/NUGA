@@ -1,5 +1,5 @@
 import type { Draft, LengthMode, ReviewIssue, ReviewResult } from "./types";
-import { countChars, lengthIn, lengthWindow, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
+import { countChars, lengthFloor, lengthIn, lengthWindow, hasExplicitSubject, hasHonorific, isNominalEnding, similarity, splitSentences, suggestNominal } from "./text";
 import { draftSpans, spanRatio } from "./highlight";
 
 /** 기재 금지 사전. 정규식으로 매칭되며 사용자 설정으로 확장 가능. */
@@ -74,7 +74,8 @@ export function reviewText(text: string, sentences: Draft["sentences"] | null, c
   // 6. 글자수
   const cc = countChars(trimmed);
   const len = lengthIn(trimmed, ctx.lengthMode);
-  const { min, max } = lengthWindow(ctx.target, ctx.lengthBand);
+  const { max } = lengthWindow(ctx.target, ctx.lengthBand);
+  const min = lengthFloor(ctx.target, ctx.lengthMode, ctx.lengthBand); // 30바이트쯤 모자란 것은 괜찮다
   const u = ctx.lengthMode === "bytes" ? "B" : "자";
   if (len > max) issues.push({ kind: "length", message: `분량 초과 ${len}/${ctx.target}${u} (목표 ${min}~${max})` });
   else if (len < min) {
