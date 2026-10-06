@@ -445,7 +445,7 @@
 .mp-clock { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; font-size: 64px; font-weight: 400; line-height: 1; text-align: center; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; text-shadow: 0 1px 12px rgba(8,20,34,.25); }
 .mp-clock small { font-size: 15px; font-weight: 500; letter-spacing: 0; }
 .mp-widget {
-  position: relative; display: flex; flex-direction: column; height: 176px; margin-top: 24px; padding: 12px 12px 12px 14px;
+  position: relative; display: flex; flex-direction: column; height: 232px; margin-top: 24px; padding: 12px 12px 9px 11px;   /* 4×2 = 360×232dp (Pixel 7) */
   border: 1px solid rgba(171,201,241,.22); border-radius: 16px; color: #EAF2FF;
   background:
     radial-gradient(circle 220px at 92% 0, rgb(84 149 253 / .28) 0%, rgb(84 149 253 / .08) 50%, rgb(84 149 253 / 0) 100%) border-box,
@@ -453,11 +453,35 @@
   box-shadow: 0 16px 32px -18px rgba(2,8,16,.6);
 }
 .mp-widget::before { content: ""; position: absolute; top: -1px; left: 23px; right: 17px; height: 1px; pointer-events: none; background: linear-gradient(90deg, rgb(234 242 255 / 0), rgb(234 242 255 / .45) 75%, rgb(234 242 255 / 0)); }
-.mp-whead { display: flex; align-items: center; }
+.mp-whead { display: flex; align-items: center; padding-left: 3px; }   /* 번호 칸의 3dp 여백만큼: 제목과 번호 칸 왼쪽 끝을 맞춘다 */
 .mp-whead .grow b, .mp-whead .grow span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-whead .grow b { color: #EAF2FF; font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .mp-whead .grow b.now { color: #ACCDFF; }
 .mp-whead .grow span { color: #A3B7D2; font-size: 12px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
+/* 둘째 줄: 단원 · 차시, 또는 방금 저장 알림(하늘빛 굵게) + [취소] 5초 */
+.mp-whead .grow .mp-wsub { display: flex; align-items: center; gap: 8px; height: 18px; }
+.mp-whead .grow .mp-wsub .t { min-width: 0; }
+.mp-whead .grow .mp-wsub.note .t { color: #ACCDFF; font-weight: 700; }
+.mp-wundo { flex: none; padding: 0 9px; border: 1px solid #52719A; border-radius: 6px; background: rgb(172 205 255 / .08); color: #C6DCFC; font-size: 11px; line-height: 16px; font-weight: 700; }
+.mp-wundo:hover { background: rgb(172 205 255 / .14); }
+/* 아래: 번호 칸(3명씩, 한 칸 46 + 사방 3 → 줄 52) · 5 틈 · [기록] 84 */
+.mp-wbody { flex: 1; min-height: 0; display: flex; gap: 5px; margin-top: 7px; }
+.mp-wgrid { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 52px; scrollbar-width: none; }
+.mp-wgrid::-webkit-scrollbar { display: none; }
+/* 번호 칸 (widget_tile_bg): 밤 위 옅은 유리 + 하늘빛 1 테두리 + 위 모서리 빛줄기. 고른 칸 (widget_tile_on_bg) = [기록]과 같은 켜진 밝은 유리 */
+.mp-wtile {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; margin: 3px;
+  border: 1px solid rgb(171 201 241 / .28); border-radius: 8px; color: #D6E6FD; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, rgb(172 205 255 / .14), rgb(172 205 255 / .04));
+}
+.mp-wtile::before { content: ""; position: absolute; top: -1px; left: 8px; right: 6px; height: 1px; pointer-events: none; background: linear-gradient(90deg, rgb(234 242 255 / 0), rgb(234 242 255 / .3) 70%, rgb(234 242 255 / 0)); }
+.mp-wtile:hover { background: linear-gradient(180deg, rgb(172 205 255 / .2), rgb(172 205 255 / .07)); }
+.mp-wtile b { font-size: 19px; line-height: 22px; font-weight: 700; }
+.mp-wtile.named b { font-size: 17px; line-height: 20px; }
+.mp-wtile small { max-width: 100%; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 12px; font-weight: 500; color: #A3B7D2; }
+.mp-wtile.on { border-color: rgb(255 255 255 / .55); color: #122A47; background: radial-gradient(circle 70px at 94% 0, rgb(255 255 255 / .70), rgb(255 255 255 / 0)) padding-box, linear-gradient(180deg, #DEEBFF, #C3D7F5) padding-box; }
+.mp-wtile.on::before { display: none; }
+.mp-wtile.on small { color: #3D5A80; }
 .mp-wrec { flex: none; margin: 0 10px 0 8px; padding: 7px 10px; border: 1px solid #52719A; border-radius: 6px; background: rgb(172 205 255 / .08); color: #C6DCFC; font-size: 13px; line-height: 16px; font-weight: 700; white-space: nowrap; }
 .mp-wrec:hover { background: rgb(172 205 255 / .14); }
 .mp-wcount { flex: none; display: flex; flex-direction: column; align-items: flex-end; }
@@ -472,6 +496,12 @@
 .mp-wcapture:hover { box-shadow: inset 0 0 0 999px rgb(18 42 71 / .05); }
 .mp-wcapture:active { box-shadow: inset 0 0 0 999px rgb(18 42 71 / .10); }
 .mp-wcapture svg { display: block; }
+/* 번호 칸 옆 [기록]: 84 너비 · 칸 높이 그대로(위아래 3). 골랐으면 '05번' 22 + 연필 15 · '기록' 14 */
+.mp-wbody .mp-wcapture { flex: none; width: 84px; margin: 3px 0; flex-direction: column; gap: 2px; }
+.mp-wcapture > span { display: inline-flex; align-items: center; gap: 6px; }
+.mp-wcapture > b { font-size: 22px; line-height: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mp-wcapture.sel { font-size: 14px; line-height: 18px; }
+.mp-wcapture.sel > span { gap: 4px; }
 .mp-apps { margin-top: auto; display: flex; justify-content: center; }
 .mp-apps button { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: none; color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
 /* 적응형 아이콘을 런처의 동그라미로 자른다 */
