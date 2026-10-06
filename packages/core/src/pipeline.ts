@@ -48,11 +48,13 @@ export function planSlots(req: DraftRequest): Slot[] {
 
 export const SLOT_SYSTEM_PROMPT = [
   "너는 학교생활기록부 문장을 한 문장씩 쓰는 보조자다.",
-  "- 주어진 관찰 기록에 있는 사실만으로 한 문장을 쓴다. 기록에 없는 행동·역량·감정·진로를 만들지 않는다.",
+  "- 사실(활동·행동·결과·반응)은 주어진 관찰 기록에 있는 것만 쓴다. 기록에 없는 행동·결과·감정·진로를 만들지 않는다.",
+  "- 해석은 적극적으로: 기록된 행동이 보여 주는 역량·태도를 이름 붙이고, 교사의 평가를 근거의 양에 맞게 덧붙인다.",
   "- 명사형 종결(~함, ~임, ~보임)로 끝낸다. 주어(학생, 이름)를 쓰지 않는다. 존칭·감탄을 쓰지 않는다.",
   "- 활동(어떤 주제·과제에서) · 세부 행동(무엇을 어떻게 했는지, 기록에 적힌 방법·근거·결과) · 드러난 역량을 한 문장에 담는다. 활동 이름만 쓰고 끝내지 않는다.",
   "- 역량은 기록에 적힌 행동에서 이끌어 낸다 (예: 근거를 들어 설명함 → 논리적으로 설명하는 능력, 그래프로 정리하고 해석함 → 자료 해석 능력). 행동 근거가 약하면 행동까지만 쓴다.",
   "- 문장 틀 예 (구조만): '[주제] 활동에서 [세부 행동]하며 [역량]을 보여줌.'",
+  "- 문장의 자리에 맞춘다. 도입 = 학생의 학습 성향을 행동과 함께 제시하고 평가, 본문 = 활동 · 세부 행동 · 역량, 마무리 = 앞 문장을 종합해 대표 역량과 학습자상을 평가.",
   "- 단원·차시 번호, 대학명, 교외 수상, 부모 정보는 쓰지 않는다.",
   '- 출력은 JSON 하나: {"text": "문장"}',
 ].join("\n");
@@ -75,8 +77,19 @@ export function slotUserPrompt(slot: Slot, req: DraftRequest, prev: string[]): s
     if (isRecord(e)) lines.push(`- ${e.date} | ${e.category} | ${e.topic || "-"} | ${e.text}`);
     else lines.push(`- PDF기록 '${e.title}' | ${e.excerpt}`);
   }
-  if (prev.length) { lines.push("", "[앞 문장들] (같은 표현을 되풀이하지 말 것)"); for (const p of prev.slice(-2)) lines.push(`- ${p}`); }
-  lines.push("", slot.role === "open" ? "[요청] 이 기록으로 첫 문장을 써줘." : "[요청] 이 기록으로 다음 문장을 써줘.");
+  // 도입은 학생 전체의 성향을 말해야 하므로 다른 기록도 짧게 보여 준다 (사실은 이 문장의 기록에서만)
+  if (slot.role === "open") {
+    const others = req.records.filter((r) => r.text.trim() && !slot.evidence.some((e) => e.id === r.id)).slice(0, 8);
+    if (others.length) { lines.push("", "[이 학생의 다른 기록] (성향을 가늠하는 데만 쓰고 이 문장에 옮기지 않음)"); for (const r of others) lines.push(`- ${r.text}`); }
+  }
+  const prevShown = slot.role === "close" ? prev : prev.slice(-2);
+  if (prevShown.length) { lines.push("", "[앞 문장들] (같은 표현·같은 역량을 되풀이하지 말 것)"); for (const p of prevShown) lines.push(`- ${p}`); }
+  const ask = slot.role === "open"
+    ? "[요청] 도입 문장을 써줘: 이 기록의 행동을 근거로, 이 학생의 학습 성향이나 강점을 역량 이름과 교사의 평가로 제시한다. (예 구조: '[행동]하는 모습을 통해 [역량]이 돋보이는 학생임.')"
+    : slot.role === "close"
+      ? "[요청] 마무리 문장을 써줘: 이 기록의 행동을 담으면서 앞 문장들을 종합해 대표 역량과 학습자상을 교사의 평가로 맺는다. (예 구조: '[행동]하는 과정에서 [역량]이 돋보이며, [특성]한 학습자임.')"
+      : "[요청] 본문 문장을 써줘: 수업 주제 → 구체적 행동 → 그 행동이 보여 주는 역량 순으로, 앞 문장과 다른 역량을 드러낸다.";
+  lines.push("", ask);
   return lines.join("\n");
 }
 

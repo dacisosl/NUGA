@@ -108,6 +108,27 @@ export function DraftPage() {
   );
 }
 
+/**
+ * 초안을 쓰는 동안 초안 칸 위에 덮는 표시: 흐르는 빛줄(문장이 들어설 자리) + '초안을 쓰는 중 · 기록 N건 · 12초'.
+ * AI 는 몇십 초 걸릴 수 있어, 8초가 지나면 기다리는 까닭을 한 줄 더 보인다. 움직임 줄이기면 빛줄은 멈춘다(전역 규칙)
+ */
+function DraftLoading({ n, again, ai }: { n: number; again: boolean; ai: boolean }) {
+  const [sec, setSec] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => setSec((x) => x + 1), 1000); return () => window.clearInterval(t); }, []);
+  return (
+    <div className="draft-loading" role="status" aria-live="polite">
+      <div className="dl-lines" aria-hidden><i /><i /><i /><i /><i /></div>
+      <div className="dl-cap">
+        <span className="dl-dots" aria-hidden><i /><i /><i /></span>
+        <b>{again ? "초안을 다시 쓰는 중" : "초안을 쓰는 중"}</b>
+        <span>기록 {n}건 · 학생활동 · 역량 · 교사의 평가를 엮고 있어요</span>
+        <span className="num dl-sec">{sec}초</span>
+      </div>
+      {ai && sec >= 8 && <div className="dl-wait">AI 응답을 기다리는 중입니다. 기록이 많거나 모델이 크면 30초 넘게 걸릴 수 있어요.</div>}
+    </div>
+  );
+}
+
 /** 생기부 생성 안의 세 탭: 개별 · 일괄 · 검토 */
 export function ModeTabs({ mode, setMode }: { mode: "individual" | "batch" | "review"; setMode: (m: "individual" | "batch" | "review") => void }) {
   return (
@@ -249,6 +270,7 @@ function Individual() {
 
   if (!student) return <div className="content"><Empty title="명단 없음" desc="설정 → 반·명단에서 학생을 등록하세요" /></div>;
   const counts = catCounts(recs);
+  const usedN = recs.filter((r) => checked.has(r.id) && hasText(r)).length + perfs.filter((p) => checked.has(p.id)).length;
   const suggestions = SUGGESTIONS;
 
   return (
@@ -321,12 +343,16 @@ function Individual() {
             </div>
             {expanded && (
               <>
-                {(view.split || view.highlight) && w.text && !editView
-                  ? <DraftView className="draft dv-box" style={{ height: Math.max(90, dockH * 0.42) }} text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
-                  : <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />}
+                <div className="draft-wrap">
+                  {(view.split || view.highlight) && w.text && !editView
+                    ? <DraftView className="draft dv-box" style={{ height: Math.max(90, dockH * 0.42) }} text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
+                    : <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />}
+                  {busy && <DraftLoading n={usedN} again={!!w.text} ai={aiOn} />}
+                </div>
                 <div className="chatlog" ref={logRef}>
                   {w.history.length === 0 && <span className="muted small">아래 입력창에 요청을 쓰면 초안이 만들어집니다.</span>}
                   {w.history.map((h, i) => <div key={i} className={`msg ${h.role}`}>{h.text}</div>)}
+                  {busy && <div className="msg assistant typing" aria-hidden><i /><i /><i /></div>}
                 </div>
               </>
             )}
@@ -425,9 +451,12 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
             {busy && <span className="flex small muted"><span className="spin" />생성 중</span>}
           </div>
-          {(view.split || view.highlight) && w.text && !editView
-            ? <DraftView className="dm-draft dv-box" text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
-            : <textarea className="dm-draft" value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />}
+          <div className="draft-wrap dm-wrap">
+            {(view.split || view.highlight) && w.text && !editView
+              ? <DraftView className="dm-draft dv-box" text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
+              : <textarea className="dm-draft" value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />}
+            {busy && <DraftLoading n={usedCount} again={!!w.text} ai={aiOn} />}
+          </div>
           {issues.length > 0 && (
             <div className="dm-issues">
               {issues.slice(0, 5).map((i, k) => <span key={k} className={`chip ${["forbidden", "similar", "noEvidence", "name"].includes(i.kind) ? "fix" : "check"}`} title={i.span || ""}>{ISSUE_LABEL[i.kind]} · {truncate(i.message, 28)}</span>)}
@@ -438,6 +467,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             <div className="chatlog" ref={logRef}>
               {w.history.length === 0 && <span className="muted small">요청을 쓰면 AI가 전체 초안을 다시 써 줍니다. 편집한 내용도 함께 전달됩니다.</span>}
               {w.history.map((h, i) => <div key={i} className={`msg ${h.role}`}>{h.text}</div>)}
+              {busy && <div className="msg assistant typing" aria-hidden><i /><i /><i /></div>}
             </div>
             <div className="suggest">{SUGGESTIONS.map((x) => <button key={x} className="chip outline clickable" onClick={() => generate(x)} disabled={busy}>{x}</button>)}</div>
             <div className="inputbar">
