@@ -3,7 +3,7 @@ import "./styles.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { classList, useStore, type Page } from "./store";
 import { Icon, Toasts } from "./components/ui";
-import { QuickAdd, RecordsPage, exportRecordsExcel } from "./pages/RecordsPage";
+import { RecordsPage, exportRecordsExcel } from "./pages/RecordsPage";
 import { DraftPage } from "./pages/DraftPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { MobilePage } from "./pages/MobilePage";
@@ -59,15 +59,15 @@ export default function App() {
 const PAGE_TITLE: Partial<Record<Page, string>> = { draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
 
 /**
- * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · +기록 · 저장▾ · 생기부 생성 · 설정.
+ * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · 저장▾ · 생기부 생성 · 설정.
  * 교사가 매일 보는 것은 현황판 하나. 생기부 생성은 시즌에만 들어가는 문이다.
+ * PC 기록은 현황판 학생 카드 → 학생 기록 창 맨 위 입력칸에서 (그 학생의 지난 기록을 보며 바로 쓴다).
  */
 function TopNav({ view }: { view: Page }) {
   const setPage = useStore((s) => s.setPage);
   const sync = useStore((s) => s.syncStatus);
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
-  const [adding, setAdding] = useState(false);
   const title = PAGE_TITLE[view];
   return (
     <header className="topnav">
@@ -84,11 +84,9 @@ function TopNav({ view }: { view: Page }) {
         <i className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
       </span>
       <button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="아직 처리하지 않은 추천·수동 기록">미반영 <b className="num">{backlog}</b></button>
-      <button className="btn" onClick={() => setAdding(true)} title="PC에서 바로 기록"><Icon name="plus" />기록</button>
       <SaveMenu />
       <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부 생성</button>
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
-      {adding && <QuickAdd onClose={() => setAdding(false)} />}
     </header>
   );
 }

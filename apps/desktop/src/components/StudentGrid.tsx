@@ -1,5 +1,5 @@
-import React, { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { fmtMD, gradeStep, lessonLabel, type NugaDoc, type NugaRecord, type Performance, type RecordCategory, type Student } from "@nuga/core";
+import React, { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { fmtMD, gradeStep, lessonLabel, type NugaDoc, type NugaRecord, type Performance, type Student } from "@nuga/core";
 import { achievementOf, catLabel, fillLesson, lowRuleOf } from "../store";
 import { Empty, SearchBox, useAchPreviewValue, useAchievementPress } from "./ui";
 import "./student-grid.css";
@@ -8,22 +8,29 @@ import "./student-grid.css";
  * 누가기록 학생 카드 격자 — 학생 한 명에 카드 한 장. 한 테두리 안에 중요한 순서대로 쌓는다:
  *   이름(카드에서 가장 크게, 맨 위 · 앞에 도달 정도 색 견본) → 번호 · 기록 수와 작은 표시 → 머리선 → 내용.
  * 내용: 최근 기록(분류 점 · 날짜 · 내용, 최근 것부터 — 첫 줄 날짜가 곧 마지막 기록 날짜)을 칸이 허락하는 만큼,
- * 맨 아래 최근 8주 리듬 막대와 분류 비율 막대. 같은 격자 줄의 카드는 머리선·기록이 한 높이에서 시작한다(useRowAlign).
+ * 맨 아래 기록 흐름 그래프(3월부터 오늘까지 — 기록이 있는 날 오르고 없는 날 천천히 내려온다, 가장 높을 때·낮을 때에 붉은 점).
+ * 같은 격자 줄의 카드는 머리선·기록이 한 높이에서 시작한다(useRowAlign).
+ * 카드 모양은 설정 → 화면 → 학생 카드: 기본(흰 종이) · 강한 구분(카드마다 다른 색 테두리·바탕, 오른쪽 위에 기록 수 — 수집 카드처럼).
  * 기록이 부족한 학생(store 의 lowRuleOf — 계단·생기부 명단과 같은 기준)은 카드 전체가 옅은 붉은빛으로 바뀌고 '기록 부족' 표시가 붙는다.
  * 카드 어디를 눌러도 학생 기록(onOpen), 오른쪽 클릭이면 도달 정도 슬라이더, 이름 줄 오른쪽 [+ 기록]은 onAdd.
  * 키보드: 이름 단추(학생 기록)와 [+ 기록]이 서로 형제인 두 단추다 (단추 안에 단추를 두지 않는다).
  */
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const WEEKS = 8;
+/**
+ * 기록 흐름: 반의 수업일(그 반 누구라도 기록이 있던 날 — 방학·주말은 건너뛴다)마다 한 점.
+ * 기록이 있는 날 기록 수만큼 오르고, 없는 수업일에는 TREND_HALF 수업일에 절반이 되도록 천천히 내려온다
+ */
+const TREND_HALF = 6;
+const DECAY = Math.pow(0.5, 1 / TREND_HALF);
+/** 강한 구분 카드 색 수 (번호 순으로 돌아가며. 붉은 기운은 '기록 부족'에만 남기므로 넣지 않는다) */
+const TYPES = 7;
 /** 카드에 올려 보는 최근 기록 수. 실제로 보이는 수는 칸 높이가 정한다 (넘치는 기록은 통째로 숨고 '외 N건'에 더해진다) */
 const LINES = 6;
 
 type Filter = "all" | "low" | "week0";
 type Sort = "no" | "few" | "recent";
 
-interface Line { id: string; cat: RecordCategory; md: string; text: string; tip: string }
-interface Mix { cat: RecordCategory; n: number; label: string }
+interface Line { id: string; cat: number; md: string; text: string; tip: string }
 interface Summary {
   /** 건너뜀을 뺀 기록 수 */
   n: number;
@@ -36,9 +43,10 @@ interface Summary {
   lines: Line[];
   /** 카드에 올리지 않은 기록 수 (LINES 넘는 것) */
   rest: number;
-  /** 최근 8주 주별 기록 수 (오래된 주 → 이번 주) */
-  rhythm: number[];
-  mix: Mix[];
+  /** 기록 흐름 (반 수업일마다, 3월 → 오늘) · 가장 높을 때 · 가장 낮을 때(첫 기록 뒤 내려와 닿은 곳) 자리. 없으면 -1 */
+  trend: number[]; hi: number; lo: number;
+  /** 그래프 양 끝 날짜 · 최고 · 최저 날짜 (M/D) */
+  from: string; to: string; hiDay: string; loDay: string;
   low: boolean;
   /** 도달 정도 (부모에서 한꺼번에 계산: 카드가 문서 전체를 구독하지 않게) */
   ach: number | null; edited: boolean; lowConf: boolean;
@@ -49,6 +57,10 @@ interface Summary {
 const keyOf = (s: Pick<Student, "class" | "no">) => `${s.class}|${s.no}`;
 const pad2 = (n: number) => String(n).padStart(2, "0");
 function mondayMs(d = new Date()): number { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime(); }
+/** 학년 시작 = 3월 1일 (1·2월이면 지난해 3월) */
+function schoolStartMs(now = new Date()): number { return new Date(now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1, 2, 1).getTime(); }
+const dayNum = (d: Date) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+const dayMD = (k: number | undefined) => (k ? `${Math.floor(k / 100) % 100}/${k % 100}` : "");
 const textOf = (r: NugaRecord) => (r.note || r.memo || r.voiceMemo?.transcript || "").replace(/\s+/g, " ").trim();
 
 /**
@@ -102,7 +114,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
 
   /** 학생별 요약: 기록을 한 번만 훑어 반 학생별로 나눈 뒤 계산한다. 내용이 같은 학생은 지난 요약 객체를 그대로 쓴다 */
   const prevSums = useRef(new Map<string, Summary>());
-  const { sums, rule, weekMax } = useMemo(() => {
+  const { sums, rule, trendMax } = useMemo(() => {
     const want = new Set(students.map(keyOf));
     const all = new Map<string, NugaRecord[]>(); // 도달 정도 추정용 (문서 순서 그대로, 건너뜀 포함 — achievementOf 와 같은 입력)
     for (const r of doc.records) {
@@ -119,29 +131,38 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
     const live = (s: Student) => (all.get(keyOf(s)) || []).filter((r) => r.status !== "skipped");
     const rule = lowRuleOf(doc.settings, students.map((s) => live(s).length));
     const weekStart = mondayMs();
-    const cats = doc.settings.categories;
     const supp = doc.settings.supplementEnabled;
-    let weekMax = 0;
+    // 기록 흐름의 가로축: 3월 1일부터 지금까지, 이 반 누구라도 기록이 있던 날
+    const fromMs = schoolStartMs(), nowMs = Date.now();
+    const dayOf = (r: NugaRecord) => { const d = new Date(r.time), t = d.getTime(); return t >= fromMs && t <= nowMs ? dayNum(d) : 0; };
+    const daySet = new Set<number>();
+    for (const s of students) for (const r of live(s)) { const d = dayOf(r); if (d) daySet.add(d); }
+    const days = [...daySet].sort((a, b) => a - b);
+    const dayIx = new Map(days.map((d, i) => [d, i]));
+    let trendMax = 0;
     const sums = new Map<string, Summary>();
     for (const s of students) {
       const k = keyOf(s);
       const recs = live(s).sort((a, b) => b.time.localeCompare(a.time));
-      const rhythm = new Array<number>(WEEKS).fill(0);
+      const per = new Array<number>(days.length).fill(0);
       let week = 0, pending = 0;
-      const catN = new Map<RecordCategory, number>();
       for (const r of recs) {
-        const t = new Date(r.time).getTime();
-        const ago = t >= weekStart ? 0 : Math.ceil((weekStart - t) / WEEK_MS);
-        if (ago === 0) week++;
-        if (ago < WEEKS) rhythm[WEEKS - 1 - ago]++;
+        if (new Date(r.time).getTime() >= weekStart) week++;
         if (supp && r.status === "pending") pending++;
-        catN.set(r.category, (catN.get(r.category) || 0) + 1);
+        const ix = dayIx.get(dayOf(r));
+        if (ix !== undefined) per[ix]++;
       }
-      for (const v of rhythm) weekMax = Math.max(weekMax, v);
-      const mix: Mix[] = [
-        ...cats.map((c) => ({ cat: c.key as RecordCategory, n: catN.get(c.key) || 0, label: c.label })),
-        { cat: 0 as RecordCategory, n: catN.get(0) || 0, label: "미정" },
-      ].filter((m) => m.n > 0);
+      // 기록이 있는 날 오르고 없는 날 천천히 내려온다. 최고 = 첫 기록 뒤 가장 높은 곳, 최저 = 내려와 닿은 곳 중 가장 낮은 곳 (같으면 최근)
+      const trend: number[] = [];
+      let y = 0;
+      for (const c of per) { y = y * DECAY + c; trend.push(Math.round(y * 100) / 100); }
+      const first = per.findIndex((c) => c > 0);
+      let hi = -1, lo = -1;
+      if (first >= 0) {
+        for (let j = first; j < trend.length; j++) if (hi < 0 || trend[j] >= trend[hi]) hi = j;
+        for (let j = first + 1; j < trend.length; j++) if (trend[j] < trend[j - 1] && (lo < 0 || trend[j] <= trend[lo])) lo = j;
+        trendMax = Math.max(trendMax, trend[hi]);
+      }
       const lines: Line[] = recs.slice(0, LINES).map((r0) => {
         const r = fillLesson(doc, r0);
         const md = fmtMD(r.time);
@@ -155,7 +176,8 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
       const a = achievementOf(doc, s, { records: all.get(k) || [], performances: perfs.get(k) || [] });
       const body = {
         n: recs.length, week, pending, last: recs[0] ? fmtMD(recs[0].time) : "", lastTime: recs[0]?.time || "",
-        lines, rest: Math.max(0, recs.length - LINES), rhythm, mix, low: rule.isLow(recs.length),
+        lines, rest: Math.max(0, recs.length - LINES), low: rule.isLow(recs.length),
+        trend: first >= 0 ? trend : [], hi, lo, from: dayMD(days[0]), to: dayMD(days[days.length - 1]), hiDay: dayMD(days[hi]), loDay: dayMD(days[lo]),
         ach: a.value, edited: a.edited, lowConf: !a.edited && a.confidence === "low",
       };
       const sig = JSON.stringify([body, s]);
@@ -163,7 +185,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
       sums.set(k, old && old.sig === sig ? old : { ...body, sig });
     }
     prevSums.current = sums;
-    return { sums, rule, weekMax };
+    return { sums, rule, trendMax };
   }, [doc, students]);
 
   const counts = useMemo(() => {
@@ -189,7 +211,8 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
     return list;
   }, [students, sums, q, filter, sort]);
 
-  const scale = Math.max(3, weekMax); // 한 주 1건이 꽉 찬 막대로 보이지 않게
+  const scale = Math.max(2, trendMax); // 반 전체가 같은 눈금 (기록 한 건이 그래프를 꽉 채우지 않게)
+  const look = doc.settings.options.cardLook === "strong" ? "strong" : "plain";
   const seg = (k: Filter, label: React.ReactNode, n: number, title?: string) => (
     <button type="button" className={filter === k ? "active" : ""} aria-pressed={filter === k} title={title}
       disabled={k !== "all" && n === 0 && filter !== k} onClick={() => setFilter(filter === k && k !== "all" ? "all" : k)}>
@@ -216,7 +239,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
   useRowAlign(gridRef, [shown, sums]);
 
   return (
-    <section ref={ref} className="sg" aria-label="학생 카드">
+    <section ref={ref} className="sg" data-look={look} aria-label="학생 카드">
       <div className="sg-bar">
         <h2 className="eyebrow">학생 {students.length}명{narrowed && <span className="sg-of"> · {shown.length}명 보기</span>}</h2>
         <div className="seg sg-seg" role="group" aria-label="학생 거르기">
@@ -266,8 +289,6 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
     s.name || "", `${s.no}번`, sum.n ? `기록 ${sum.n}건` : "기록 없음", sum.last ? `마지막 기록 ${sum.last}` : "",
     sum.low ? "기록 부족" : "", sum.pending ? `보완 전 ${sum.pending}건` : "", sum.week ? `이번 주 ${sum.week}건` : "", achTip,
   ].filter(Boolean).join(", ");
-  const rhythmTip = `최근 8주 기록: ${sum.rhythm.join(" · ")}건 (오른쪽이 이번 주)`;
-  const mixTip = sum.mix.map((m) => `${m.label} ${m.n}`).join(" · ");
 
   // 요약 줄은 칸이 허락하는 만큼: 넘치는 기록은 옆 단으로 밀려 통째로 숨는다(줄 중간이 잘리지 않게). 숨은 수를 재어 '외 N건'에 더한다
   const linesRef = useRef<HTMLOListElement>(null);
@@ -276,8 +297,11 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
     const ol = linesRef.current;
     if (!ol) { setHidden(0); return; }
     const measure = () => {
+      // 첫 단 = 첫 기록과 같은 가로 자리 (강한 구분의 기록 창은 안쪽 여백이 있어 0 이 아니다)
+      const items = Array.from(ol.children) as HTMLElement[];
+      const x0 = items[0]?.offsetLeft ?? 0;
       let h = 0;
-      for (const li of Array.from(ol.children) as HTMLElement[]) if (li.offsetLeft > 0) h++;
+      for (const li of items) if (li.offsetLeft > x0) h++;
       setHidden(h);
     };
     measure();
@@ -292,7 +316,7 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
 
   return (
     <>
-      <div className={`sg-card${sum.low ? " low" : ""}`} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
+      <div className={`sg-card${sum.low ? " low" : ""}`} data-t={(Math.abs(s.no - 1) % TYPES) + 1} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
         onClick={() => onOpen(s)} {...bind}>
         {/* 1. 이름 (가장 크게, 맨 위) = 이 카드의 '열기' 단추. 탭 순서: 이름 → [+ 기록].
             단추가 스스로 연다 (카드의 onClick 까지 올라가는 것에 기대지 않는다) */}
@@ -301,6 +325,8 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
             <i className={`sg-sw g${step < 0 ? "x" : step}${sum.lowConf ? " lowconf" : ""}`} title={achTip} aria-hidden />
             <b className="sg-name">{name}</b>
           </button>
+          {/* 강한 구분에서만 보인다: 오른쪽 위 큰 기록 수 + 색 구슬 (수집 카드의 체력 자리) */}
+          <span className="sg-hp" aria-hidden><small>기록</small>{sum.n}</span>
           {sum.n > 0 && <button type="button" className="sg-add" onClick={add} aria-label={`${name} 기록 추가`} title="이 학생 기록 추가">+ 기록</button>}
         </div>
 
@@ -308,14 +334,14 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
             마지막 기록 날짜는 바로 아래 첫 기록 줄의 날짜라 여기서는 title·aria-label 로만. 기록 0건이면 번호만 ('아직 기록 없음'은 아래 한 번) */}
         <div className="sg-sub">
           <span className="sg-id" title={sum.last ? `마지막 기록 ${sum.last}` : undefined}>
-            <b className="sg-no">{pad2(s.no)}번</b>{sum.n > 0 && ` · 기록 ${sum.n}건`}
+            <b className="sg-no">{pad2(s.no)}번</b>{sum.n > 0 && <span className="sg-cnt"> · 기록 {sum.n}건</span>}
           </span>
           {sum.low && <span className="sg-lowb">기록 부족</span>}
           {sum.pending > 0 && <span className="sg-pend" title={`보완 전 기록 ${sum.pending}건`}>보완 {sum.pending}</span>}
           {sum.week > 0 && <span className="sg-week" title={`이번 주 기록 ${sum.week}건`}><i aria-hidden />이번 주 +{sum.week}</span>}
         </div>
 
-        {/* 3. 내용: 최근 기록 → 맨 아래 8주 리듬 · 분류 비율 */}
+        {/* 3. 내용: 최근 기록 → 맨 아래 기록 흐름 그래프 */}
         {sum.n === 0 ? (
           <div className="sg-none">
             <span>아직 기록 없음</span>
@@ -334,15 +360,7 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
         {sum.n > 0 && (
           <div className="sg-foot">
             {more > 0 && <span className="sg-more">외 {more}건</span>}
-            <div className="sg-rhythm" title={rhythmTip} aria-hidden>
-              {sum.rhythm.map((v, w) => (
-                <i key={w} className={`${v ? "" : "z"}${w === WEEKS - 1 ? " now" : ""}`}
-                  style={v ? { height: `${Math.max(3, Math.round((Math.min(v, scale) / scale) * 100))}%` } : undefined} />
-              ))}
-            </div>
-            <div className="sg-mix" title={mixTip} aria-hidden>
-              {sum.mix.map((m) => <i key={m.cat} className={`c${m.cat}`} style={{ flexGrow: m.n }} />)}
-            </div>
+            {sum.trend.length > 0 && <Trend sum={sum} scale={scale} />}
           </div>
         )}
       </div>
@@ -350,3 +368,39 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
     </>
   );
 }, (a, b) => a.sum === b.sum && a.i === b.i && a.scale === b.scale && a.onOpen === b.onOpen && a.onAdd === b.onAdd);
+
+/**
+ * 기록 흐름 그래프: 가로 = 3월부터 오늘까지 반의 수업일, 세로 = 기록이 있는 날 오르고 없는 날 천천히 내려오는 값(반 전체 같은 눈금).
+ * 선은 늘이는 SVG(non-scaling-stroke), 점은 늘어나지 않게 HTML 로 얹는다 — 가장 높을 때·낮을 때만 살짝 붉게.
+ */
+function Trend({ sum, scale }: { sum: Summary; scale: number }) {
+  const gid = "sgt" + useId().replace(/[^a-zA-Z0-9]/g, "");
+  const v = sum.trend;
+  const W = Math.max(1, v.length - 1);
+  // 위 12 · 아래 4 여백 (점·선이 잘리지 않게). 제곱근 눈금: 기록이 드문 학생의 작은 오르내림도 보이게 (순서는 그대로)
+  const y = (x: number) => 96 - Math.sqrt(Math.min(x, scale) / scale) * 84;
+  const pts = (v.length > 1 ? v : [v[0], v[0]]).map((x, j) => `${j},${y(x).toFixed(1)}`);
+  const line = "M" + pts.join("L");
+  const at = (j: number) => ({ left: `${(j / W) * 100}%`, top: `${y(v[j])}%` });
+  const tip = [`기록 흐름 ${sum.from}–${sum.to}`, "기록이 있는 날 오르고, 없는 수업일에는 천천히 내려옵니다",
+    sum.hi >= 0 ? `가장 높을 때 ${sum.hiDay}` : "", sum.lo >= 0 ? `가장 낮을 때 ${sum.loDay}` : ""].filter(Boolean).join("\n");
+  return (
+    <div className="sg-trend" title={tip} aria-hidden>
+      <div className="sg-plot">
+        <svg viewBox={`0 0 ${W} 100`} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" className="sg-area-a" />
+              <stop offset="1" className="sg-area-b" />
+            </linearGradient>
+          </defs>
+          <path d={`${line}L${W},100L0,100Z`} fill={`url(#${gid})`} />
+          <path d={line} className="sg-line" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {sum.lo >= 0 && <i className="sg-pt lo" style={at(sum.lo)} />}
+        {sum.hi >= 0 && <i className="sg-pt hi" style={at(sum.hi)} />}
+      </div>
+      <div className="sg-trend-x"><span>{sum.from}</span><span>{sum.to}</span></div>
+    </div>
+  );
+}

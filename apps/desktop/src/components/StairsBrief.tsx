@@ -8,7 +8,8 @@ import "./stairs-brief.css";
 /**
  * 현황판 맨 위 '기록 계단' 자리: 종이 위 머리 줄(기록 계단 · 반 · 인원 · [접기 | 간략히 | 자세히]) + 고른 보기.
  *  · 접기   — 머리 줄에 숫자만 한 줄 (평균 · 출발선 · 이번 주 · 기록 부족). 학생 카드가 바로 올라온다
- *  · 간략히 — 기본. 낮은 밤의 무대: 왼쪽 숫자 다섯, 오른쪽 이름 없는 작은 계단(칸마다 유리 디딤판 + 학생 수만큼 점).
+ *  · 간략히 — 기본. 낮은 밤의 무대: 왼쪽 숫자 다섯, 오른쪽 작은 계단(칸마다 유리 디딤판 + 학생 수만큼 점).
+ *             출발선(0건)만은 점 대신 이름표를 모두 세운다 — 가장 먼저 챙길 학생들이라 이름이 바로 읽혀야 한다 (누르면 그 학생 기록).
  *             반이 어디에 모였는지·누가 아직 출발선에 있는지를 1초 안에 읽게 한다. 칸이나 [자세히 보기]를 누르면 자세히
  *  · 자세히 — 기존 기록 계단(StairsView) 그대로
  * 고른 보기는 localStorage 'nuga.board.stairs' 에 기억한다.
@@ -126,6 +127,8 @@ export function StairsPanel({ doc, students, cls, onOpen }: { doc: NugaDoc; stud
 
   const s = useMemo(() => stairStats(doc, students), [doc, students]);
   const hasRoster = students.length > 0;
+  // 간략히의 출발선 이름표 → 그 학생 기록
+  const openNo = (no: number) => { const st = students.find((x) => x.no === no); if (st) onOpen(st); };
   const label = students[0]?.class || cls;
 
   // 랜드마크는 하나만: 자세히의 기록 계단(StairsView)이 스스로 '기록 계단' 구역이므로 이 자리는 제목(h2)만 단 묶음이다
@@ -153,7 +156,7 @@ export function StairsPanel({ doc, students, cls, onOpen }: { doc: NugaDoc; stud
         </div>
       </div>
       <div ref={bodyRef} className="sp-body" aria-hidden={mode === "none" || undefined}>
-        {shown === "brief" && <StairsBrief key={cls} s={s} hasRoster={hasRoster} onMore={openFull} />}
+        {shown === "brief" && <StairsBrief key={cls} s={s} hasRoster={hasRoster} onMore={openFull} onOpen={openNo} />}
         {shown === "full" && (
           <div className="board-stairs">
             <StairsView key={cls} doc={doc} students={students} onOpen={onOpen} q="" />
@@ -166,8 +169,18 @@ export function StairsPanel({ doc, students, cls, onOpen }: { doc: NugaDoc; stud
 
 /* ---------- 간략히: 낮은 밤의 무대 + 이름 없는 작은 계단 ---------- */
 
-/** 점(학생 하나): 6px + 3px 틈. stairs-brief.css .sb-pile 과 같아야 한다 */
-const DOT = 6, DGAP = 3, PITCH = DOT + DGAP;
+/** 점(학생 하나): 8px + 4px 틈. stairs-brief.css .sb-pile 과 같아야 한다 */
+const DOT = 8, DGAP = 4, PITCH = DOT + DGAP;
+/**
+ * 출발선(0건) 학생은 점 대신 이름표('01 홍도윤')를 모두 세운다 — 가장 먼저 챙겨야 할 학생들.
+ * 이름표 높이·틈·좌우 안쪽 여백 · 무리 왼쪽 여백 (stairs-brief.css .sb-names / .sb-name 과 같아야 한다)
+ */
+const CHIP_H = 22, CHIP_GAP = 4, CHIP_ROW = CHIP_H + CHIP_GAP, CHIP_PAD = 8, START_SIDE = 6;
+/**
+ * 출발선 무리 너비: 나머지 칸이 넉넉하게(사람 있는 칸 ROOMY, 빈 칸 그 절반) 남는 만큼, 적어도 무대의 START_SHARE 까지 쓰고
+ * 그 안에서 가장 낮게(줄 적게) 쌓는다. 그래도 계단이 무대에 안 들어가면 나머지 칸이 OCC_MIN 이 될 때까지 더 넓혀 낮춘다
+ */
+const START_SHARE = 0.3, ROOMY = 100, OCC_MIN = 48;
 /** 칸마다 그리는 점 수 상한 (정확한 수는 디딤판의 'N명') · 한 줄 점 수 범위 · 무리 좌우 여백 · 디딤판과 첫 점 줄 사이 */
 const DOT_CAP = 40, PER_MIN = 3, PER_MAX = 12, PILE_SIDE = 8, PILE_GAP = 6;
 /** 칸 너비 상한: 넓은 화면에서 칸이 적으면 납작한 판이 되지 않게, 계단을 오른쪽(빛이 드는 쪽)에 모은다 */
@@ -184,47 +197,82 @@ const RISE_MIN = 6, RISE_MAX = 56, TOP_ROOM = 6, NOTE_ROOM = 26;
 /** 가는 디딤판 너비 (어느 칸이 가늘어지는지는 기록 계단과 같은 sliverRuns) · 빈 칸 너비 비율 */
 const SLIVER_W = 10, VACANT_FR = 0.5;
 
-interface BriefLay { t: number[]; sliver: boolean[]; per: number; template: string; narrow: boolean }
+interface BriefLay {
+  t: number[]; sliver: boolean[]; per: number; template: string; narrow: boolean;
+  /** 출발선 이름표 무리: 이름표 너비 · 열 수 · 맨 윗줄(덜 찬 줄) 이름표 수. 출발선이 비었으면 cols 0 */
+  chipW: number; cols: number; lead: number;
+}
 
 /**
- * 작은 계단 배치. 칸 너비: 사람 있는 칸·출발선 1, 빈 칸 .5, 이어진 빈 칸의 가운데는 가는 디딤판.
+ * 작은 계단 배치. 칸 너비: 사람 있는 칸 1, 빈 칸 .5, 이어진 빈 칸의 가운데는 가는 디딤판, 출발선은 이름표 무리 너비 그대로(비었으면 1).
  * 디딤판 높이는 칸 순서대로 늘 오른다(1칸 = step1, 그다음 rise 씩, 가는 디딤판은 절반) — 점 무리까지 무대에 들어가는 가장 큰 rise.
- * step1 은 디딤판 글자 줄 수로 정한다: 어느 칸이든 rise 가 가장 작아도(RISE_MIN) 글자가 비침 띠 위에서 끝나게.
+ * step1 은 디딤판 글자 줄 수로 정하고, 출발선 이름표 무리보다 높게 둔다(출발선이 1칸보다 높아 보이지 않게).
+ * 출발선 무리는 넉넉한 너비(START_SHARE · ROOMY) 안에서 가장 낮게 쌓고, 계단이 무대에 안 들어가면 더 넓혀 낮춘다.
+ * 끝내 안 들어가면(아주 좁은 창) 가장 낮은 무리로 두고 1칸 디딤판은 글자만큼만 — 이름이 다 보이는 것이 먼저다.
+ * chipW = 이름표 너비 (가장 긴 '01 홍도윤'을 잰 값)
  */
-function briefLayout(counts: number[], W: number, H: number, b: StairBuckets, family: string): BriefLay {
+function briefLayout(counts: number[], W: number, H: number, b: StairBuckets, family: string, chipW: number): BriefLay {
   const S = counts.length;
   const sliver = sliverRuns(counts);
-  const fr = counts.map((n, i): number => (sliver[i] ? 0 : n || i === 0 ? 1 : VACANT_FR));
+  const n0 = counts[0];
+  const fr = counts.map((n, i): number => (sliver[i] || (i === 0 && n0) ? 0 : n || i === 0 ? 1 : VACANT_FR));
+  const frSum = Math.max(VACANT_FR, fr.reduce((a, x) => a + x, 0));
   const slivers = sliver.filter(Boolean).length;
-  const unit = Math.min(COL_MAX, Math.max(0, W - slivers * SLIVER_W) / Math.max(VACANT_FR, fr.reduce((a, x) => a + x, 0)));
-  const per = Math.max(PER_MIN, Math.min(PER_MAX, Math.floor((unit - 2 * PILE_SIDE + DGAP) / PITCH)));
-  // 디딤판 글자 줄 수 (글자는 한 단계 굵게 재어 넉넉히). 사람 있는 칸: '11건 이상 8명' 한 줄 → 이름·인원 두 줄 → 이름까지 접혀 세 줄
-  // (디딤판 좌우 여백 8+8 + 1). 빈 칸: '11건 이상' 한 줄 → '11건 / 이상' 두 줄 (여백 2+2)
-  const rangeW = (i: number, px: number) => textW(String(b.lo(i)), px, 700, family) + textW(`건 ${i === 1 ? "이하" : "이상"}`, px === 12 ? 10.5 : px, 600, family);
-  let occLines = 1, vacLines = 1;
-  for (let i = 1; i < S; i++) {
-    if (sliver[i]) continue;
-    if (counts[i]) {
-      const r = rangeW(i, 12) + 18, nW = textW(`${counts[i]}명`, 11, 600, family); // 18 = small 왼쪽 1 + 여백 16 + 1
-      occLines = Math.max(occLines, unit >= r + 6 + nW ? 1 : unit >= r ? 2 : 3); // 6 = 이름과 인원 사이
-    } else if (unit * VACANT_FR < rangeW(i, 11) + 5) vacLines = 2;
-  }
-  const narrow = occLines === 3;
-  const textNeed = (i: number) => (sliver[i] ? 0 : counts[i] ? TXT_TOP + occLines * TXT_LINE + REFLECT : VAC_TOP + vacLines * VAC_LINE + REFLECT);
-  const pileH = (n: number) => (n ? Math.ceil(Math.min(n, DOT_CAP) / per) * PITCH - DGAP + PILE_GAP : 0);
   const e = counts.map(() => 0); // 1칸에서 몇 단 올랐나
   for (let i = 2; i < S; i++) e[i] = e[i - 1] + (sliver[i] ? 0.5 : 1);
-  let step1 = STEP1;
-  for (let i = 1; i < S; i++) step1 = Math.max(step1, Math.ceil(textNeed(i) - e[i] * RISE_MIN));
   const room = counts.every((n, i) => i === 0 || !n) ? NOTE_ROOM : TOP_ROOM; // 모두 출발선 = 기록 0건 반 → 안내문 자리
-  let rise = RISE_MAX;
-  for (let i = 2; i < S; i++) rise = Math.min(rise, (H - room - step1 - pileH(counts[i])) / e[i]);
-  rise = Math.max(RISE_MIN, Math.floor(rise));
+  // 디딤판 글자 너비 (글자는 한 단계 굵게 재어 넉넉히)
+  const rangeW = (i: number, px: number) => textW(String(b.lo(i)), px, 700, family) + textW(`건 ${i === 1 ? "이하" : "이상"}`, px === 12 ? 10.5 : px, 600, family);
+
+  /** 출발선 무리가 너비 startW · 높이 startH 일 때. lift = 1칸 디딤판을 무리보다 높게 */
+  const attempt = (startW: number, startH: number, lift: boolean) => {
+    const unit = Math.min(COL_MAX, Math.max(0, W - slivers * SLIVER_W - startW) / frSum);
+    const per = Math.max(PER_MIN, Math.min(PER_MAX, Math.floor((unit - 2 * PILE_SIDE + DGAP) / PITCH)));
+    // 디딤판 글자 줄 수. 사람 있는 칸: '11건 이상 8명' 한 줄 → 이름·인원 두 줄 → 이름까지 접혀 세 줄
+    // (디딤판 좌우 여백 8+8 + 1). 빈 칸: '11건 이상' 한 줄 → '11건 / 이상' 두 줄 (여백 2+2)
+    let occLines = 1, vacLines = 1;
+    for (let i = 1; i < S; i++) {
+      if (sliver[i]) continue;
+      if (counts[i]) {
+        const r = rangeW(i, 12) + 18, nW = textW(`${counts[i]}명`, 11, 600, family); // 18 = small 왼쪽 1 + 여백 16 + 1
+        occLines = Math.max(occLines, unit >= r + 6 + nW ? 1 : unit >= r ? 2 : 3); // 6 = 이름과 인원 사이
+      } else if (unit * VACANT_FR < rangeW(i, 11) + 5) vacLines = 2;
+    }
+    const textNeed = (i: number) => (sliver[i] ? 0 : counts[i] ? TXT_TOP + occLines * TXT_LINE + REFLECT : VAC_TOP + vacLines * VAC_LINE + REFLECT);
+    const pileH = (n: number) => (n ? Math.ceil(Math.min(n, DOT_CAP) / per) * PITCH - DGAP + PILE_GAP : 0);
+    let step1 = Math.max(STEP1, lift && startH ? startH + 6 : 0);
+    for (let i = 1; i < S; i++) step1 = Math.max(step1, Math.ceil(textNeed(i) - e[i] * RISE_MIN));
+    let rise = RISE_MAX;
+    for (let i = 2; i < S; i++) rise = Math.min(rise, (H - room - step1 - pileH(counts[i])) / e[i]);
+    rise = Math.max(RISE_MIN, Math.floor(rise));
+    let top = startH;
+    for (let i = 1; i < S; i++) top = Math.max(top, step1 + e[i] * rise + pileH(counts[i]));
+    return { unit, per, narrow: occLines === 3, step1, rise, fits: top + room <= H };
+  };
+
+  // 출발선 이름표 무리: 줄 수 → 열 수 → 너비·높이
+  let cols = 0, rows = 0, startW = 0, startH = 0, lift = true;
+  if (n0) {
+    const maxRows = Math.max(1, Math.floor((H - TOP_ROOM + CHIP_GAP) / CHIP_ROW));
+    const colsAt = (r: number) => Math.ceil(n0 / r);
+    const wAt = (r: number) => colsAt(r) * (chipW + CHIP_GAP) - CHIP_GAP + 2 * START_SIDE;
+    const hAt = (r: number) => Math.ceil(n0 / colsAt(r)) * CHIP_ROW - CHIP_GAP + PILE_GAP;
+    /** 나머지 칸이 칸 너비 w (빈 칸은 절반, 가는 디딤판은 그대로)일 때 쓰는 너비 */
+    const others = (w: number) => counts.reduce((a, n, i) => a + (i === 0 ? 0 : sliver[i] ? SLIVER_W : n ? w : w * VACANT_FR), 0);
+    const hard = Math.max(0, W - others(OCC_MIN)), soft = Math.min(hard, Math.max(W * START_SHARE, W - others(ROOMY)));
+    const first = (lim: number) => { for (let r = 1; r <= maxRows; r++) if (wAt(r) <= lim) return r; return maxRows; };
+    const rSoft = first(soft), rHard = first(hard);
+    rows = rHard; lift = false;
+    for (let r = rSoft; r >= rHard; r--) if (attempt(wAt(r), hAt(r), true).fits) { rows = r; lift = true; break; }
+    cols = colsAt(rows); rows = Math.ceil(n0 / cols);
+    startW = Math.min(W, cols * (chipW + CHIP_GAP) - CHIP_GAP + 2 * START_SIDE); startH = hAt(rows);
+  }
+  const a = attempt(startW, startH, lift);
   return {
-    t: counts.map((_, i) => (i ? Math.round(step1 + e[i] * rise) : 0)),
-    sliver, per, narrow,
+    t: counts.map((_, i) => (i ? Math.round(a.step1 + e[i] * a.rise) : 0)),
+    sliver, per: a.per, narrow: a.narrow, chipW, cols, lead: n0 ? n0 - (rows - 1) * cols : 0,
     // 칸 너비는 px 로 (합이 칸 너비를 넘지 않게 내림). 남는 너비는 왼쪽에 — 격자는 오른쪽에 붙는다 (.sb-stairs justify-content: end)
-    template: fr.map((x, i) => `${sliver[i] ? SLIVER_W : Math.floor(x * unit)}px`).join(" "),
+    template: fr.map((x, i) => `${i === 0 && n0 ? Math.floor(startW) : sliver[i] ? SLIVER_W : Math.floor(x * a.unit)}px`).join(" "),
   };
 }
 
@@ -235,7 +283,10 @@ function colTip(name: string, col: Kid[], wk: number, low: string): string {
   return [head, who, "누르면 자세히 보기"].filter(Boolean).join("\n");
 }
 
-function StairsBrief({ s, hasRoster, onMore }: { s: StairStats; hasRoster: boolean; onMore: () => void }) {
+/** 이름표 글자: 이름이 없는 학생(명단에 번호만)은 번호만 */
+const chipName = (k: Kid) => (k.name === `${k.no}번` ? "" : k.name);
+
+function StairsBrief({ s, hasRoster, onMore, onOpen }: { s: StairStats; hasRoster: boolean; onMore: () => void; onOpen: (no: number) => void }) {
   const setPage = useStore((x) => x.setPage);
   const setSettingsTab = useStore((x) => x.setSettingsTab);
 
@@ -252,13 +303,16 @@ function StairsBrief({ s, hasRoster, onMore }: { s: StairStats; hasRoster: boole
     return () => ro.disconnect();
   }, [hasRoster]);
   const countSig = s.cols.map((c) => c.length).join(",");
-  // 디딤판 글자 줄 수는 글자 너비로 정하므로, 웹 글꼴이 늦게 들어오면(칸 크기가 그대로여도) 다시 잰다 — 기록 계단과 같은 useFontTick
+  const startSig = s.cols[0].map((k) => `${k.no}:${k.name}`).join("|");
+  // 디딤판 글자 줄 수·이름표 너비는 글자 너비로 정하므로, 웹 글꼴이 늦게 들어오면(칸 크기가 그대로여도) 다시 잰다 — 기록 계단과 같은 useFontTick
   const fontTick = useFontTick();
   const lay = useMemo(() => {
     if (box.w <= 0 || box.h <= 0) return null;
     const family = getComputedStyle(document.body).fontFamily || "sans-serif";
-    return briefLayout(countSig.split(",").map(Number), box.w, box.h, s.b, family);
-  }, [countSig, box.w, box.h, s.b.size, fontTick]); // s.b 는 칸 수(countSig 의 길이)와 size 로만 정해진다
+    // 출발선 이름표 너비: 가장 긴 '01 홍도윤' (번호 10.5px · 틈 4 · 이름 12.5px, 한 단계 굵게 재어 넉넉히) + 좌우 여백 + 1
+    const chipW = Math.ceil(Math.max(0, ...s.cols[0].map((k) => textW(pad2(k.no), 10.5, 700, family) + (chipName(k) ? 4 + textW(chipName(k), 12.5, 750, family) : 0)))) + 2 * CHIP_PAD + 1;
+    return briefLayout(countSig.split(",").map(Number), box.w, box.h, s.b, family, chipW);
+  }, [countSig, startSig, box.w, box.h, s.b.size, fontTick]); // s.b 는 칸 수(countSig 의 길이)와 size 로, 출발선 이름은 startSig 로만 정해진다
 
   const { b } = s;
   return (
@@ -298,8 +352,8 @@ function StairsBrief({ s, hasRoster, onMore }: { s: StairStats; hasRoster: boole
                     const name = i ? b.name(i) : "출발선 0건";
                     const cn = ["stair-col", i === 0 && "start", i === b.steps - 1 && "top", i === s.peak && "peak", !col.length && "vacant",
                       lay.sliver[i] && "sliver", low && "low", i === s.lowEdge && "low-edge"].filter(Boolean).join(" ");
-                    // 이번 주 기록이 있는 학생(하늘빛)부터 디딤판에 앉힌다 — 같은 칸 안에서 빛이 한데 모여 보이게
-                    const dots = col.length ? [...col].sort((x, y) => Number(y.week > 0) - Number(x.week > 0) || x.no - y.no).slice(0, DOT_CAP) : [];
+                    // 이번 주 기록이 있는 학생(하늘빛)부터 디딤판에 앉힌다 — 같은 칸 안에서 빛이 한데 모여 보이게. 출발선은 점 대신 이름표
+                    const dots = i && col.length ? [...col].sort((x, y) => Number(y.week > 0) - Number(x.week > 0) || x.no - y.no).slice(0, DOT_CAP) : [];
                     return (
                       <div key={i} role="listitem" className={cn} onClick={onMore}
                         title={colTip(name, col, wk, low ? s.rule.short : "")}
@@ -308,6 +362,18 @@ function StairsBrief({ s, hasRoster, onMore }: { s: StairStats; hasRoster: boole
                         {dots.length > 0 && (
                           <div className="sb-pile" aria-hidden="true">
                             {dots.map((k) => <i key={k.no} className={k.week > 0 ? "on" : undefined} />)}
+                          </div>
+                        )}
+                        {/* 출발선 이름표: 번호 순으로 위 줄부터 읽힌다(덜 찬 줄이 맨 위 — 바닥에 쌓인 모양). 누르면 그 학생 기록 */}
+                        {i === 0 && lay.cols > 0 && (
+                          <div className="sb-names" style={{ "--cols": lay.cols, "--chipw": `${lay.chipW}px` } as React.CSSProperties}>
+                            {col.map((k, j) => (
+                              <button key={k.no} type="button" className="sb-name" style={j === lay.lead ? { gridColumnStart: 1 } : undefined}
+                                title={`${pad2(k.no)} ${k.name} · 아직 기록 없음\n누르면 학생 기록`}
+                                onClick={(ev) => { ev.stopPropagation(); onOpen(k.no); }}>
+                                <span className="no">{pad2(k.no)}</span>{chipName(k)}
+                              </button>
+                            ))}
                           </div>
                         )}
                         {i === 0 ? (

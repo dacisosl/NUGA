@@ -3,7 +3,8 @@
    · 접기   — 머리 줄에 숫자만 한 줄. 학생 카드가 바로 올라온다
    · 간략히 — 기본. 낮은 밤의 무대: 왼쪽 숫자 다섯, 오른쪽 이름 없는 작은 계단.
               무대·바닥·수평선·디딤판·출발선·호박빛(기록 부족)·정상 빛 번짐은 stairs.css 의 클래스를 그대로 쓰고,
-              이름표 대신 학생 수만큼 점(.sb-pile)을 디딤판 위에 세운다 (하늘빛 = 이번 주 기록, 흐림 = 아직)
+              이름표 대신 학생 수만큼 점(.sb-pile)을 디딤판 위에 세운다 (하늘빛 = 이번 주 기록, 속 빈 고리 = 아직).
+              출발선(0건)만은 점 대신 밝은 이름표(.sb-names)를 모두 세운다 — 먼저 챙길 학생들
    · 자세히 — 기존 기록 계단(.board-stairs > StairsView) 그대로
    높이는 보기마다 정해 두고(접기 0 · 간략 --sp-brief · 자세히 --sp-full) 바꿀 때만 빠르게 옮긴다 (움직임 줄이기면 바로).
    이 파일은 stairs.css 뒤에 들어간다(StairsBrief.tsx 가 StairsView 다음에 불러옴). 겹치는 규칙은 .sb-stage 로 한 단계 좁힌다.
@@ -51,7 +52,7 @@
 /* ── 간략 무대: 기록 계단의 밤(배경·유리 테두리·바닥·수평선)을 그대로, 높이·여백·숫자만 줄인다 ── */
 .sb-wrap { height: var(--sp-brief); display: flex; flex-direction: column; container-type: inline-size; }
 .stairs-stage.sb-stage {
-  --floor-h: 30px; --sb-off: rgba(163,183,210,.30);
+  --floor-h: 30px;
   flex: 1; min-height: 0;
   display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: 44px;
   padding: 18px 24px var(--floor-h);
@@ -68,7 +69,7 @@
 .stairs-stage.sb-stage .kpi b { font-size: 24px; letter-spacing: -.04em; }
 .stairs-stage.sb-stage .kpi b small { font-size: 12px; margin-left: 2px; }
 .stairs-stage.sb-stage .kpi .meter { width: 64px; }
-.sb-key { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 6px rgba(120,170,255,.8); }
+.sb-key { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #C4DCFF; box-shadow: inset 0 0 0 1px #fff, 0 0 8px 1px rgba(120,170,255,.85); }
 .sb-lowk { flex: none; width: 12px; border-top: 1px dashed var(--amber); }
 .stairs-stage.sb-stage .sb-more { flex: none; margin-left: -10px; gap: 2px; padding-right: 6px; }
 /* 빈 반(기록 0건): 맨 윗 디딤판 위 오른쪽에 한 줄 (기록 계단의 안내문 자리) */
@@ -80,14 +81,38 @@
 .sb-stairs .stair-col { cursor: pointer; }
 .sb-stairs.narrow .stair-range { white-space: normal; }   /* 칸이 좁으면 '11건 / 이상' 두 줄 (첫 디딤판이 그만큼 높다) */
 .sb-pile {
-  position: relative; z-index: 2; display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 3px;
-  max-width: calc(var(--per, 6) * 9px - 3px); padding-bottom: 6px;
+  position: relative; z-index: 2; display: flex; flex-wrap: wrap-reverse; justify-content: center; gap: 4px;
+  max-width: calc(var(--per, 6) * 12px - 4px); padding-bottom: 6px;
   animation: sb-rise .4s var(--ease-out, ease-out) backwards; animation-delay: calc(200ms + var(--i, 0) * 40ms);
 }
-.sb-pile i { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--sb-off); }
-.sb-pile i.on { background: var(--dot); box-shadow: 0 0 6px rgba(120,170,255,.75); }
-.sb-stairs .stair-col:hover .sb-pile i:not(.on) { background: rgba(171,201,241,.44); }
+/* 점 8px: 아직 = 밝은 고리(속은 옅게), 이번 주 기록 = 꽉 찬 하늘빛 + 흰 테 + 빛 번짐. 밤 위에서 둘 다 또렷하고 모양으로도 갈린다.
+   빛 번짐이 옆 점과 엉기지 않게 하늘빛 점은 바깥에 밤색 테를 한 줄 두른다 */
+.sb-pile i { display: block; width: 8px; height: 8px; border-radius: 50%; background: rgba(163,183,210,.26); box-shadow: inset 0 0 0 1.5px #AFC3DC; }
+.sb-pile i.on { background: #C4DCFF; box-shadow: inset 0 0 0 1px #fff, 0 0 0 1px rgba(8,20,34,.9), 0 0 10px 1px rgba(120,170,255,.9); }
+.sb-stairs .stair-col:hover .sb-pile i:not(.on) { background: rgba(171,201,241,.5); box-shadow: inset 0 0 0 1.5px #DCE8F8; }
 .stair-col.peak .sb-pile { background: radial-gradient(60% 50% at 50% 100%, rgb(var(--bloom-rgb, 84 149 253) / .16), transparent 70%); }
+/* 출발선 이름표 '01 홍도윤': 밤 위의 밝은 종이 판(이름이 무대에서 가장 또렷하게) + 왼쪽 호박빛 띠(먼저 챙길 학생 — 숫자 '출발선'과 같은 따뜻한 색).
+   크기는 StairsBrief.tsx 와 맞물린다: 높이 22 · 틈 4 · 좌우 안쪽 8 · 무리 왼쪽 6 (CHIP_H · CHIP_GAP · CHIP_PAD · START_SIDE). 너비는 가장 긴 이름을 잰 --chipw */
+.sb-names {
+  position: relative; z-index: 2; align-self: flex-start; display: grid; gap: 4px; margin-left: 6px; padding-bottom: 6px;
+  grid-template-columns: repeat(var(--cols, 1), var(--chipw, 72px)); grid-auto-rows: 22px;
+  animation: sb-rise .4s var(--ease-out, ease-out) backwards; animation-delay: 160ms;
+}
+.sb-name {
+  position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; height: 22px; margin: 0; padding: 0 8px;
+  border: 0; border-radius: 4px; cursor: pointer;
+  background: linear-gradient(180deg, #FAFCFF, #E1E9F4); color: #0F2440;
+  font: inherit; font-size: 12.5px; font-weight: 650; letter-spacing: -.02em; line-height: 1; white-space: nowrap; text-align: left;
+  box-shadow: inset 2px 0 0 var(--amber, #FFB27A), 0 0 0 1px rgba(4,10,18,.55), 0 6px 14px -8px rgba(2,8,16,.9);
+  transition: transform var(--d-1, .12s) var(--ease-out, ease-out);
+}
+.sb-name .no { flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: 0; color: #4A6283; font-variant-numeric: tabular-nums; font-feature-settings: var(--num, "tnum" 1); }
+/* 마우스·초점 고리는 미리 그려 두고 opacity 만 바꾼다 (기록 계단 이름표와 같은 고리) */
+.sb-name::after { content: ""; position: absolute; inset: -1px; border-radius: 5px; pointer-events: none; opacity: 0; transition: opacity var(--d-1, .12s); box-shadow: 0 0 0 1px rgba(214,231,255,.9), 0 0 0 4px rgb(var(--glow-rgb, 125 166 223) / .18), 0 10px 22px -10px rgb(var(--bloom-rgb, 84 149 253) / .6); }
+.sb-name:hover { transform: translateY(-1px); z-index: 1; }
+.sb-name:hover::after, .sb-name:focus-visible::after { opacity: 1; }
+.sb-name:focus-visible { outline: 2px solid var(--sky, #ACCDFF); outline-offset: 2px; }
+.sb-name:active { transform: none; }
 /* 출발선: 바닥 띠에 '출발선 N명' 한 줄 (간략 무대는 바닥이 낮다) */
 .sb-stage .stair-start .sb-startlab { position: absolute; left: 4px; top: 8px; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .sb-stage .stair-start .sb-startlab > * { position: static; flex: none; white-space: nowrap; }
@@ -127,10 +152,12 @@
 /* ── 접근성·인쇄 가드 ── */
 @media (prefers-reduced-motion: reduce) {
   .stairs-panel[data-moving] .sp-body { transition: none; }
-  .sp-sum, .sb-left, .sb-pile { animation: none; }
+  .sp-sum, .sb-left, .sb-pile, .sb-names { animation: none; }
+  .sb-name { transition: none; }
 }
 @media (forced-colors: active) {
-  .sb-pile i { forced-color-adjust: none; background: GrayText; box-shadow: none; }
+  .sb-pile i { forced-color-adjust: none; background: Canvas; box-shadow: none; border: 1.5px solid GrayText; }
+  .sb-name { border: 1px solid ButtonText; box-shadow: none; }
   .sb-pile i.on, .sb-key { forced-color-adjust: none; background: Highlight; box-shadow: none; }
   .sb-lowk { border-top-color: CanvasText; }
 }

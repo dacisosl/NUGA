@@ -221,6 +221,8 @@ export interface AiSettings {
 
 /** 폰·워치 기록 도착 처리 (Settings.arrivalMode) */
 export type ArrivalMode = "popup" | "queue" | "direct";
+/** 현황판 학생 카드 모양: plain = 흰 종이 카드(기본), strong = 강한 구분(카드마다 다른 색 테두리·바탕, 수집 카드처럼) */
+export type CardLook = "plain" | "strong";
 
 export interface Settings {
   school: { grade: number; subject: string; year: number; semester: number };
@@ -261,8 +263,9 @@ export interface Settings {
    * 화면 옵션. detail = 알림 팝업·현황판이 처음에 얼마나 자세히 보일지.
    * simple(기본) = 추천 문구와 명단만, 근거(발언 원문·앞뒤 문맥·카테고리·판단 기준)는 '자세히'로 펼침.
    * full = 처음부터 모두 펼침.
+   * cardLook = 현황판 학생 카드 모양 (PC 화면에만 쓴다).
    */
-  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean; detail?: "simple" | "full" };
+  options: { autoLaunchWatch: boolean; reelStart: "one" | "last"; showPhoneNames: boolean; showLevelBadge?: boolean; detail?: "simple" | "full"; cardLook?: CardLook };
   /** 수업 녹음 (공통 설정) */
   recording?: RecordingSettings;
   sync: SyncSettings | null;
@@ -339,7 +342,7 @@ export function defaultSettings(): Settings {
     similarityThreshold: 0.7,
     lengthOverride: false,
     draftPrompt: "",
-    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true, detail: "simple" },
+    options: { autoLaunchWatch: true, reelStart: "one", showPhoneNames: false, showLevelBadge: true, detail: "simple", cardLook: "plain" },
     sync: null,
     ai: { enabled: false, provider: "anthropic", apiKey: "", model: "claude-opus-5-5" },
     onboarded: false,
