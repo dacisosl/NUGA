@@ -113,7 +113,8 @@ export function openAiBody(req: LLMRequest, model: string, extra: Record<string,
 /* ---------------- 응답 해석 ---------------- */
 
 export class LLMError extends Error {
-  constructor(message: string, public kind: "auth" | "rate" | "network" | "refusal" | "format" | "server" | "other" = "other") { super(message); }
+  /** length = 응답 길이 한도에서 잘림 (생각하는 모델은 생각도 한도에 든다) */
+  constructor(message: string, public kind: "auth" | "rate" | "network" | "refusal" | "format" | "length" | "server" | "other" = "other") { super(message); }
 }
 
 export function geminiText(json: unknown): string {
@@ -123,7 +124,9 @@ export function geminiText(json: unknown): string {
   if (!c) throw new LLMError("응답이 비어 있음", "format");
   if (c.finishReason && ["SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST"].includes(c.finishReason)) throw new LLMError(`응답이 차단됨 (${c.finishReason})`, "refusal");
   const text = (c.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || "").join("");
-  if (!text.trim()) throw new LLMError(c.finishReason === "MAX_TOKENS" ? "응답이 길어 잘림 (MAX_TOKENS)" : "응답이 비어 있음", "format");
+  // 한도에서 잘리면 앞부분이 있어도 끝(JSON 닫는 괄호)이 없다 — 받은 척하지 않고 잘렸다고 알린다
+  if (c.finishReason === "MAX_TOKENS") throw new LLMError("응답이 길이 한도에서 잘림", "length");
+  if (!text.trim()) throw new LLMError("응답이 비어 있음", "format");
   return text;
 }
 
@@ -134,7 +137,8 @@ export function openAiText(json: unknown): string {
   if (!c) throw new LLMError("응답이 비어 있음", "format");
   if (c.message?.refusal) throw new LLMError("모델이 요청을 거절함", "refusal");
   const text = c.message?.content || "";
-  if (!text.trim()) throw new LLMError(c.finish_reason === "length" ? "응답이 길어 잘림" : "응답이 비어 있음", "format");
+  if (c.finish_reason === "length") throw new LLMError("응답이 길이 한도에서 잘림", "length");
+  if (!text.trim()) throw new LLMError("응답이 비어 있음", "format");
   return text;
 }
 

@@ -6,7 +6,7 @@ import {
 import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
-import { aiReady, generateDraft, labelDraft } from "../lib/ai";
+import { aiErrorText, aiReady, generateDraft, labelDraft } from "../lib/ai";
 import { pickFile } from "../lib/platform";
 import { extractText, hasTextLayer, loadDocument, makeExcerpt, maskedThumb, scrubNames, suggestMasks, type DocPage, type ExtractProgress, type Rect } from "../lib/docOcr";
 import { MaskEditor } from "../components/MaskEditor";
@@ -193,7 +193,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));
     } catch (e) {
-      setW((x) => ({ ...x, history: [...history, { role: "assistant", text: `실패: ${e instanceof Error ? e.message : String(e)}`, at: nowIso() }] }));
+      setW((x) => ({ ...x, history: [...history, { role: "assistant", text: `실패: ${aiErrorText(e)}`, at: nowIso() }] }));
     } finally { setBusy(false); setInput(""); }
   };
 
@@ -672,8 +672,8 @@ function Batch() {
     const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r)).filter((r) => r.status !== "skipped" && hasText(r));
     const perfs = perfsOf(doc, s.class, s.no);
     const prev = draftOf(useStore.getState().doc, s.class, s.no);
-    if (prev?.text && !overwrite) { setState((x) => ({ ...x, [s.no]: { st: "done", msg: "기존 유지" } })); return; }
-    if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return; }
+    if (prev?.text && !overwrite) { setState((x) => ({ ...x, [s.no]: { st: "done", msg: "기존 유지" } })); return true; }
+    if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return true; }
     setState((x) => ({ ...x, [s.no]: { st: "running" } }));
     try {
       const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined);
@@ -684,16 +684,21 @@ function Batch() {
       saveDraft(makeDraft(s, w, review, prev));
       workingCache.delete(keyOf(s));
       setState((x) => ({ ...x, [s.no]: { st: "done" } }));
-    } catch (e) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: e instanceof Error ? e.message : "실패" } })); }
+    } catch (e) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: aiErrorText(e) } })); return false; }
+    return true;
   };
 
-  const runAll = async () => {
-    const targets = students.filter((s) => sel.has(s.no));
+  /** 고른 학생(또는 지난번에 실패한 학생만)을 차례로. 끝나면 성공·실패 수, 실패가 있으면 [실패만 다시] */
+  const runAll = async (only?: number[]) => {
+    const targets = students.filter((s) => (only ? only.includes(s.no) : sel.has(s.no)));
     if (!targets.length) { toast({ text: "선택된 학생이 없음" }); return; }
     setRunning(true); stopRef.current = false;
-    for (const s of targets) { if (stopRef.current) break; await runOne(s); }
+    const failed: number[] = [];
+    let ok = 0;
+    for (const s of targets) { if (stopRef.current) break; if (await runOne(s)) ok++; else failed.push(s.no); }
     setRunning(false);
-    toast({ text: "일괄 생성 완료" });
+    if (!failed.length) toast({ text: `일괄 생성 완료 · ${ok}명` });
+    else toast({ text: `일괄 생성 · 성공 ${ok}명 · 실패 ${failed.length}명 (${failed.join(", ")}번)`, action: { label: "실패만 다시", onClick: () => { void runAll(failed); } } });
   };
 
   const allSel = students.length > 0 && students.every((s) => sel.has(s.no));
@@ -711,7 +716,7 @@ function Batch() {
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
         <span className="grow" />
         <button className="btn" onClick={() => setPerfPanel(true)}>PDF기록 일괄 등록</button>
-        {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={runAll} disabled={!sel.size}>일괄 생성</button>}
+        {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={() => { void runAll(); }} disabled={!sel.size}>일괄 생성</button>}
       </div>
       {running && <div className="prog" style={{ marginBottom: 12 }}><i style={{ width: `${(doneCount / Math.max(1, sel.size)) * 100}%` }} /></div>}
       {students.length === 0 ? <Empty title="명단 없음" /> : (
