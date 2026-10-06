@@ -10,6 +10,7 @@ import { MobilePage } from "./pages/MobilePage";
 import { Onboarding } from "./pages/Onboarding";
 import { InboxModal, useBacklogCount } from "./components/InboxModal";
 import { AreaSwitcher } from "./components/AreaSwitcher";
+import { BulkRecordModal } from "./components/BulkRecordModal";
 import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
 import { saveFile } from "./lib/platform";
@@ -61,7 +62,7 @@ export default function App() {
 const PAGE_TITLE: Partial<Record<Page, string>> = { draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
 
 /**
- * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · 저장▾ · 생기부 생성 · 설정.
+ * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · 일괄 기록+ · 저장▾ · 생기부 생성 · 설정.
  * 교사가 매일 보는 것은 현황판 하나. 생기부 생성은 시즌에만 들어가는 문이다.
  * PC 기록은 현황판 학생 카드 → 학생 기록 창 맨 위 입력칸에서 (그 학생의 지난 기록을 보며 바로 쓴다).
  */
@@ -71,6 +72,7 @@ function TopNav({ view }: { view: Page }) {
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
   const title = PAGE_TITLE[view];
+  const [bulk, setBulk] = useState(false);
   return (
     <header className="topnav">
       <button className="brand" onClick={() => setPage("main")} title="현황판으로">
@@ -86,8 +88,11 @@ function TopNav({ view }: { view: Page }) {
         <i className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
       </span>
       <button className={`btn ${backlog ? "warn-outline" : ""}`} onClick={() => openInbox({ backlog: true })} title="아직 처리하지 않은 추천·수동 기록">미반영 <b className="num">{backlog}</b></button>
+      {/* 관찰기록 여러 건: 붙여넣기 · 스캔본 PDF(OCR). 폰 너비에서는 '일괄+' (.opt 는 좁으면 숨는다) */}
+      <button className="btn bulk-btn" onClick={() => setBulk(true)} title="관찰기록 여러 건을 붙여넣기나 스캔본 PDF로 한꺼번에 넣기">일괄<span className="opt"> 기록</span><Icon name="plus" size={14} /></button>
       <SaveMenu />
-      <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부 생성</button>
+      <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부<span className="opt"> 생성</span></button>
+      {bulk && <BulkRecordModal onClose={() => setBulk(false)} />}
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
     </header>
   );

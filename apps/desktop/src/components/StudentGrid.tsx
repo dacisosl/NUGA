@@ -2,6 +2,7 @@ import React, { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useS
 import { fmtMD, gradeStep, lessonLabel, type NugaDoc, type NugaRecord, type Performance, type Student } from "@nuga/core";
 import { achievementOf, catLabel, fillLesson, lowRuleOf } from "../store";
 import { Empty, SearchBox, useAchPreviewValue, useAchievementPress } from "./ui";
+import { stairBuckets, type StairBuckets } from "./StairsView";
 import "./student-grid.css";
 
 /**
@@ -10,7 +11,9 @@ import "./student-grid.css";
  * 내용: 최근 기록(분류 점 · 날짜 · 내용, 최근 것부터 — 첫 줄 날짜가 곧 마지막 기록 날짜)을 칸이 허락하는 만큼,
  * 맨 아래 기록 흐름 그래프(3월부터 오늘까지 — 기록이 있는 날 오르고 없는 날 천천히 내려온다, 가장 높을 때·낮을 때에 붉은 점).
  * 같은 격자 줄의 카드는 머리선·기록이 한 높이에서 시작한다(useRowAlign).
- * 카드 모양은 설정 → 화면 → 학생 카드: 기본(흰 종이) · 강한 구분(카드마다 다른 색 테두리·바탕, 오른쪽 위에 기록 수 — 수집 카드처럼).
+ * 카드 모양은 설정 → 화면 → 학생 카드: 기본(흰 종이) · 강한 구분(수집 카드처럼 두꺼운 빛깔 테두리·바탕, 오른쪽 위에 기록 수).
+ * 강한 구분의 빛깔은 다섯 단계(회색 → 초록 → 파랑 → 보라 → 금색, 낮음 → 높음). 도구 줄 오른쪽 [기록 수 | 도달 정도]로 기준을 바꾼다
+ * (기록 수 = 기록 계단의 칸, 도달 정도 = 이름표 색과 같은 다섯 단계 · 추정 불가는 점선 회색). 고른 기준은 localStorage 'nuga.cards.color'.
  * 기록이 부족한 학생(store 의 lowRuleOf — 계단·생기부 명단과 같은 기준)은 카드 전체가 옅은 붉은빛으로 바뀌고 '기록 부족' 표시가 붙는다.
  * 카드 어디를 눌러도 학생 기록(onOpen), 오른쪽 클릭이면 도달 정도 슬라이더, 이름 줄 오른쪽 [+ 기록]은 onAdd.
  * 키보드: 이름 단추(학생 기록)와 [+ 기록]이 서로 형제인 두 단추다 (단추 안에 단추를 두지 않는다).
@@ -22,8 +25,30 @@ import "./student-grid.css";
  */
 const TREND_HALF = 6;
 const DECAY = Math.pow(0.5, 1 / TREND_HALF);
-/** 강한 구분 카드 색 수 (번호 순으로 돌아가며. 붉은 기운은 '기록 부족'에만 남기므로 넣지 않는다) */
-const TYPES = 7;
+/** 강한 구분 테두리 빛깔의 기준 (붉은 기운은 '기록 부족'에만 남기므로 빛깔에 넣지 않는다) */
+type ColorBy = "rec" | "ach";
+const COLOR_KEY = "nuga.cards.color";
+function loadColorBy(): ColorBy { try { return window.localStorage.getItem(COLOR_KEY) === "ach" ? "ach" : "rec"; } catch { return "rec"; } }
+function saveColorBy(v: ColorBy) { try { window.localStorage.setItem(COLOR_KEY, v); } catch { /* 기억은 못 해도 이번 화면에서는 바뀐다 */ } }
+const TIER_NAMES = ["회색", "초록", "파랑", "보라", "금색"];
+/**
+ * 기록 수 → 빛깔 단계: 출발선(0건) = 회색, 그 위 계단 칸을 초록~금색에 고르게 나눈다.
+ * 맨 위는 이 반에서 실제로 오른 가장 높은 칸(top) — 가장 많이 기록된 학생이 금색 (계단 맨 위 빈 칸은 세지 않는다)
+ */
+const recTier = (b: StairBuckets, top: number, n: number) => { const i = b.stepOf(n); return i === 0 ? 0 : 1 + Math.round(((i - 1) * 3) / Math.max(1, top - 1)); };
+/** 범례 글: 단계마다 기록 수 범위 (기록 계단 칸 이름과 같은 셈) */
+function recLegend(b: StairBuckets, top: number): string {
+  const out: string[] = [];
+  for (let t = 0; t <= 4; t++) {
+    const ix = Array.from({ length: top + 1 }, (_, i) => i).filter((i) => recTier(b, top, i === 0 ? 0 : b.lo(i)) === t);
+    if (!ix.length) continue;
+    const i0 = ix[0], i1 = ix[ix.length - 1];
+    const from = i0 === 0 ? 0 : i0 === 1 ? 1 : b.lo(i0);
+    out.push(`${TIER_NAMES[t]} ${i1 === 0 ? "0건 (출발선)" : i1 === top ? `${from}건 이상` : from === b.hi(i1) ? `${from}건` : `${from}–${b.hi(i1)}건`}`);
+  }
+  return out.join(" · ");
+}
+const ACH_LEGEND = "회색 0–19 · 초록 20–39 · 파랑 40–59 · 보라 60–79 · 금색 80 이상 · 점선 = 추정 불가";
 /** 카드에 올려 보는 최근 기록 수. 실제로 보이는 수는 칸 높이가 정한다 (넘치는 기록은 통째로 숨고 '외 N건'에 더해진다) */
 const LINES = 6;
 
@@ -114,7 +139,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
 
   /** 학생별 요약: 기록을 한 번만 훑어 반 학생별로 나눈 뒤 계산한다. 내용이 같은 학생은 지난 요약 객체를 그대로 쓴다 */
   const prevSums = useRef(new Map<string, Summary>());
-  const { sums, rule, trendMax } = useMemo(() => {
+  const { sums, rule, trendMax, buckets, top } = useMemo(() => {
     const want = new Set(students.map(keyOf));
     const all = new Map<string, NugaRecord[]>(); // 도달 정도 추정용 (문서 순서 그대로, 건너뜀 포함 — achievementOf 와 같은 입력)
     for (const r of doc.records) {
@@ -185,7 +210,11 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
       sums.set(k, old && old.sig === sig ? old : { ...body, sig });
     }
     prevSums.current = sums;
-    return { sums, rule, trendMax };
+    // 강한 구분의 기록 수 빛깔: 기록 계단과 같은 칸 나누기 (가장 많은 기록 수로 정한다)
+    let maxN = 0;
+    for (const m of sums.values()) maxN = Math.max(maxN, m.n);
+    const buckets = stairBuckets(maxN);
+    return { sums, rule, trendMax, buckets, top: buckets.stepOf(maxN) };
   }, [doc, students]);
 
   const counts = useMemo(() => {
@@ -213,6 +242,8 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
 
   const scale = Math.max(2, trendMax); // 반 전체가 같은 눈금 (기록 한 건이 그래프를 꽉 채우지 않게)
   const look = doc.settings.options.cardLook === "strong" ? "strong" : "plain";
+  const [colorBy, setColorBy] = useState<ColorBy>(loadColorBy);
+  const pickColor = (v: ColorBy) => { setColorBy(v); saveColorBy(v); };
   const seg = (k: Filter, label: React.ReactNode, n: number, title?: string) => (
     <button type="button" className={filter === k ? "active" : ""} aria-pressed={filter === k} title={title}
       disabled={k !== "all" && n === 0 && filter !== k} onClick={() => setFilter(filter === k && k !== "all" ? "all" : k)}>
@@ -253,7 +284,22 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
           <option value="recent">최근 기록 순</option>
         </select>
         <SearchBox value={q} onChange={setQ} placeholder="이름·번호 찾기" />
-        <span className="sg-hint">카드를 누르면 학생 기록 · 오른쪽 클릭으로 도달 정도</span>
+        {look === "strong" ? (
+          // 강한 구분: 테두리 빛깔의 기준 + 다섯 단계 범례 (도구 줄 오른쪽 끝)
+          <div className="sg-color">
+            <div className="seg sg-seg" role="radiogroup" aria-label="테두리 빛깔 기준">
+              <button type="button" role="radio" aria-checked={colorBy === "rec"} className={colorBy === "rec" ? "active" : ""} onClick={() => pickColor("rec")}
+                title="테두리 빛깔 = 기록 수 (기록 계단의 칸)">기록 수</button>
+              <button type="button" role="radio" aria-checked={colorBy === "ach"} className={colorBy === "ach" ? "active" : ""} onClick={() => pickColor("ach")}
+                title="테두리 빛깔 = 성취기준 도달 정도(성취도) — 이름 앞 작은 네모와 같은 다섯 단계">도달 정도</button>
+            </div>
+            <span className="sg-scale" title={colorBy === "rec" ? recLegend(buckets, top) : ACH_LEGEND}>
+              <small>{colorBy === "rec" ? "적음" : "낮음"}</small>
+              {[0, 1, 2, 3, 4].map((t) => <i key={t} data-t={t} aria-hidden />)}
+              <small>{colorBy === "rec" ? "많음" : "높음"}</small>
+            </span>
+          </div>
+        ) : <span className="sg-hint">카드를 누르면 학생 기록 · 오른쪽 클릭으로 도달 정도</span>}
       </div>
 
       {!students.length ? (
@@ -263,20 +309,20 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
           action={<button type="button" className="btn sm" onClick={() => { setFilter("all"); setQ(""); }}>전체 보기</button>} />
       ) : (
         <div className="sg-grid" ref={gridRef}>
-          {shown.map((s, i) => <StudentCard key={keyOf(s)} s={s} sum={sums.get(keyOf(s))!} i={i} scale={scale} onOpen={open} onAdd={add} />)}
+          {shown.map((s, i) => { const m = sums.get(keyOf(s))!; return <StudentCard key={keyOf(s)} s={s} sum={m} i={i} scale={scale} colorBy={colorBy} recT={recTier(buckets, top, m.n)} onOpen={open} onAdd={add} />; })}
         </div>
       )}
     </section>
   );
 }
 
-interface CardProps { s: Student; sum: Summary; i: number; scale: number; onOpen: (s: Student) => void; onAdd: (s: Student) => void }
+interface CardProps { s: Student; sum: Summary; i: number; scale: number; colorBy: ColorBy; recT: number; onOpen: (s: Student) => void; onAdd: (s: Student) => void }
 
 /**
  * 카드 하나. 학생 객체는 문서가 바뀔 때마다 새로 만들어지므로 비교에서 빼고, 학생 내용까지 담은 sum(서명으로 재사용)으로 판단한다.
  * 도달 정도 미리보기(슬라이더를 끄는 중)만 이 카드가 따로 구독한다.
  */
-const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd }: CardProps) {
+const StudentCard = memo(function StudentCard({ s, sum, i, scale, colorBy, recT, onOpen, onAdd }: CardProps) {
   const preview = useAchPreviewValue(s);
   const shownAch = preview ?? sum.ach;
   const step = gradeStep(shownAch);
@@ -316,7 +362,8 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
 
   return (
     <>
-      <div className={`sg-card${sum.low ? " low" : ""}`} data-t={(Math.abs(s.no - 1) % TYPES) + 1} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
+      {/* 강한 구분의 빛깔 단계: 기록 수(기록 계단 칸) 또는 도달 정도(이름표와 같은 다섯 단계, 추정 불가 = x) */}
+      <div className={`sg-card${sum.low ? " low" : ""}`} data-t={colorBy === "ach" ? (step < 0 ? "x" : step) : recT} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
         onClick={() => onOpen(s)} {...bind}>
         {/* 1. 이름 (가장 크게, 맨 위) = 이 카드의 '열기' 단추. 탭 순서: 이름 → [+ 기록].
             단추가 스스로 연다 (카드의 onClick 까지 올라가는 것에 기대지 않는다) */}
@@ -367,7 +414,7 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, onOpen, onAdd 
       {popover}
     </>
   );
-}, (a, b) => a.sum === b.sum && a.i === b.i && a.scale === b.scale && a.onOpen === b.onOpen && a.onAdd === b.onAdd);
+}, (a, b) => a.sum === b.sum && a.i === b.i && a.scale === b.scale && a.colorBy === b.colorBy && a.recT === b.recT && a.onOpen === b.onOpen && a.onAdd === b.onAdd);
 
 /**
  * 기록 흐름 그래프: 가로 = 3월부터 오늘까지 반의 수업일, 세로 = 기록이 있는 날 오르고 없는 날 천천히 내려오는 값(반 전체 같은 눈금).

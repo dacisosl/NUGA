@@ -250,20 +250,21 @@
 }
 
 /* =====================================================================
-   강한 구분 (설정 → 화면 → 학생 카드): 카드마다 다른 빛깔의 두꺼운 테두리와 바탕 — 수집 카드처럼, 그러나 차분하게.
-   번호 순으로 일곱 빛깔이 돌아간다(StudentGrid.tsx TYPES — 붉은 기운은 '기록 부족'에만 남긴다).
+   강한 구분 (설정 → 화면 → 학생 카드): 빛깔 있는 두꺼운 테두리와 바탕 — 수집 카드처럼, 그러나 차분하게.
+   빛깔은 다섯 단계 data-t 0–4 (회색 → 초록 → 파랑 → 보라 → 금색 = 낮음 → 높음, 게임의 희귀도처럼). 기준은 도구 줄 [기록 수 | 도달 정도]
+   (StudentGrid.tsx). 도달 정도를 추정할 수 없으면 data-t="x" (옅은 회색 + 점선). 붉은 기운은 '기록 부족'에만 남긴다.
    금속 테두리 · 옅은 빗금 바탕 · 은빛 기록 창 · 오른쪽 위 큰 기록 수와 빛깔 구슬 · 올리면 한 번 지나가는 빛.
    기록 부족은 기본 모양과 같은 뜻: 테두리 빛깔은 그대로, 바탕만 옅은 붉은 종이 + 기록 수가 붉게.
    ===================================================================== */
 .sg-hp { display: none; }
 .sg[data-look="strong"] { --sg-lift: -3px; }
-.sg-card[data-t="1"], .look-pv [data-t="1"] { --t-f1: #8ACFA2; --t-f2: #2F7D50; --t-b1: #F3FAF4; --t-b2: #DCEFE1; --t-ink: #1F6A3E; }   /* 풀 */
-.sg-card[data-t="2"], .look-pv [data-t="2"] { --t-f1: #8DBCF0; --t-f2: #2B63AE; --t-b1: #F2F7FE; --t-b2: #DAE8F9; --t-ink: #1F5196; }   /* 물 */
-.sg-card[data-t="3"], .look-pv [data-t="3"] { --t-f1: #F0D27A; --t-f2: #B48712; --t-b1: #FEFAEC; --t-b2: #F6EAC4; --t-ink: #745506; }   /* 번개 */
-.sg-card[data-t="4"], .look-pv [data-t="4"] { --t-f1: #BFA2E6; --t-f2: #6F45AC; --t-b1: #F7F3FD; --t-b2: #E7DDF6; --t-ink: #573293; }   /* 에스퍼 */
-.sg-card[data-t="5"], .look-pv [data-t="5"] { --t-f1: #7FD0CA; --t-f2: #1A7C77; --t-b1: #F0FAF9; --t-b2: #D5EFEC; --t-ink: #135F5B; }   /* 얼음 */
-.sg-card[data-t="6"], .look-pv [data-t="6"] { --t-f1: #D7B48F; --t-f2: #86592F; --t-b1: #FBF6F0; --t-b2: #EFE2D3; --t-ink: #6A4321; }   /* 땅 */
-.sg-card[data-t="7"], .look-pv [data-t="7"] { --t-f1: #BCC7D6; --t-f2: #5A6A82; --t-b1: #F4F6F9; --t-b2: #E0E6EE; --t-ink: #405069; }   /* 강철 */
+/* 다섯 단계 빛깔 (카드 · 설정 미리보기 · 도구 줄 범례가 함께 쓴다) */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="0"] { --t-f1: #C9D2DE; --t-f2: #66758B; --t-b1: #F6F8FA; --t-b2: #E4E9EF; --t-ink: #44536A; }   /* 회색 */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="1"] { --t-f1: #8ACFA2; --t-f2: #2F7D50; --t-b1: #F3FAF4; --t-b2: #DCEFE1; --t-ink: #1F6A3E; }   /* 초록 */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="2"] { --t-f1: #8DBCF0; --t-f2: #2B63AE; --t-b1: #F2F7FE; --t-b2: #DAE8F9; --t-ink: #1F5196; }   /* 파랑 */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="3"] { --t-f1: #BFA2E6; --t-f2: #6F45AC; --t-b1: #F7F3FD; --t-b2: #E7DDF6; --t-ink: #573293; }   /* 보라 */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="4"] { --t-f1: #F4D77E; --t-f2: #AD7C0C; --t-b1: #FEFAEB; --t-b2: #F7E9BF; --t-ink: #6B4D03; }   /* 금색 */
+:is(.sg-card, .look-pv i, .sg-scale i)[data-t="x"] { --t-f1: #E1E6ED; --t-f2: #AEB8C6; --t-b1: #FBFCFD; --t-b2: #EEF1F5; --t-ink: #5A6A80; }   /* 추정 불가 */
 .sg[data-look="strong"] .sg-card {
   padding: 10px 11px 9px;
   border: 5px solid transparent; border-radius: 14px;
@@ -286,6 +287,18 @@
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.85), 0 0 0 2px var(--accent), 0 0 0 5px var(--field-halo), 0 14px 28px -18px rgba(21,45,74,.5);
 }
 .sg[data-look="strong"] .sg-card.low { --t-b1: #FFF6F5; --t-b2: #FBE3E0; }
+/* 도달 정도를 추정할 수 없는 학생: 옅은 회색 테두리 안쪽에 점선 한 줄 (이름표의 빗금과 같은 뜻) */
+.sg[data-look="strong"] .sg-card[data-t="x"] { outline: 1px dashed #9AA6B6; outline-offset: -9px; }
+/* 금색(맨 윗단계): 테두리에 빛이 조금 더 (희귀 카드) */
+.sg[data-look="strong"] .sg-card[data-t="4"] { box-shadow: inset 0 0 0 1px rgba(255,255,255,.85), 0 0 0 1px rgba(150,110,10,.22), 0 0 18px -6px rgba(214,170,50,.55), 0 14px 28px -18px rgba(21,45,74,.5); }
+
+/* 도구 줄 오른쪽 끝: 테두리 빛깔 기준 [기록 수 | 도달 정도] + 다섯 단계 범례 (기본 모양에서는 이 자리에 안내 글) */
+.sg-color { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.sg-scale { display: inline-flex; align-items: center; gap: 3px; cursor: help; }
+.sg-scale small { font-size: 11.5px; font-weight: 500; color: var(--text2); }
+.sg-scale small:first-child { margin-right: 3px; }
+.sg-scale small:last-child { margin-left: 3px; }
+.sg-scale i { display: block; width: 12px; height: 12px; border-radius: 3px; background: linear-gradient(150deg, var(--t-f1), var(--t-f2)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.45), 0 0 0 1px rgba(21,45,74,.08); }
 
 /* 이름 줄: 이름 · 오른쪽 위 '기록 N' + 빛깔 구슬 */
 .sg[data-look="strong"] .sg-head { gap: 6px; min-height: 28px; }
