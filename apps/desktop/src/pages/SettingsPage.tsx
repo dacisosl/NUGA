@@ -940,7 +940,7 @@ function DisplaySection() {
         <div className="arrival-opts">
           {([
             ["plain", "기본 — 깔끔하게", "흰 종이 카드에 가는 테두리. 많은 학생을 차분하게 훑어보기 좋습니다."],
-            ["strong", "강한 구분 — 수집 카드처럼", "카드마다 다른 빛깔의 두꺼운 테두리와 바탕, 오른쪽 위에 기록 수를 크게 보여 줍니다. 옆 카드와 한눈에 갈립니다. 빛깔은 번호 순으로 돌아가며 정해지고 뜻은 없습니다."],
+            ["strong", "강한 구분 — 수집 카드처럼", "빛깔 있는 두꺼운 테두리와 바탕, 오른쪽 위에 기록 수를 크게 보여 줍니다. 빛깔은 다섯 단계(회색 → 초록 → 파랑 → 보라 → 금색 = 적음 → 많음)로, 현황판 카드 위 [기록 수 | 도달 정도]에서 기준을 바꿉니다."],
           ] as const).map(([k, title, desc]) => (
             <label key={k} className={`arrival-opt ${(s.options.cardLook || "plain") === k ? "on" : ""}`}>
               <input type="radio" name="cardLook" checked={(s.options.cardLook || "plain") === k} onChange={() => setSettings((x) => ({ ...x, options: { ...x.options, cardLook: k } }))} />
@@ -979,7 +979,7 @@ function DisplaySection() {
 function CardLookPreview({ look }: { look: "plain" | "strong" }) {
   return (
     <span className={`look-pv ${look}`} aria-hidden>
-      {[1, 2, 4].map((t, i) => <i key={t} data-t={t} className={i === 2 ? "low" : undefined}><b /><em /><s /></i>)}
+      {[4, 2, 0].map((t, i) => <i key={t} data-t={t} className={i === 2 ? "low" : undefined}><b /><em /><s /></i>)}
     </span>
   );
 }

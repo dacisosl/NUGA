@@ -82,12 +82,13 @@
   /* 상단 바 두 줄: 로고 · 영역 · 설정 / 미반영 · 저장 · 생기부 생성 (페이지 이름은 그 아래 한 줄) */
   .topnav { padding: 10px 12px; column-gap: 8px; row-gap: 10px; min-height: 0; }
   .topnav .mini-link { display: none; }                 /* 폰 화면 미리보기는 PC 시험용 */
+  .topnav .opt { display: none; }                       /* '일괄 기록+' → '일괄+', '생기부 생성' → '생기부' */
+  .topnav .sync-dot { display: none; }
   .topnav .brand { order: 0; gap: 7px; padding: 0; font-size: 18px; }
   .topnav .brand-en { display: none; }
   .topnav .area-list { order: 0; flex: 1 1 0; margin-left: 2px; }
   .topnav > .btn.icon { order: 1; }                     /* 설정 */
   .topnav .sep { order: 2; }
-  .topnav .sync-dot { order: 3; width: 12px; margin: 0; }
   .topnav > .split-btn { order: 3; }
   .topnav > .btn:not(.icon) { order: 3; flex: 1 1 auto; justify-content: center; padding: 0 10px; }
   .topnav .page-title { order: 4; font-size: 20px; }
@@ -106,6 +107,26 @@
   .modal-h .muted { white-space: nowrap; }
   .modal-b { padding: 4px 16px 16px; }
   .modal-f { flex-wrap: wrap; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .modal-f > .muted { flex-basis: 100%; order: -1; }      /* 안내 글은 위 한 줄, 단추는 그 아래 */
+  .modal-f > .btn.primary { margin-left: auto; }
+
+  /* 일괄 기록 확인 표: 한 줄 = 한 덩어리 (체크 · 학생 / 날짜 · 분류 / 내용) */
+  .bulk-table table, .bulk-table tbody { display: block; }
+  .bulk-table thead { display: none; }
+  .bulk-table tr {
+    display: grid; grid-template-columns: 26px minmax(0, 1fr) 96px; gap: 6px 8px; padding: 10px 8px; border-bottom: 1px solid var(--hair);
+    grid-template-areas: "chk st st" "chk date cat" "chk text text";
+  }
+  .bulk-table td { display: block; padding: 0; border: 0; }
+  .bulk-table td:nth-child(1) { grid-area: chk; padding-top: 6px; }
+  .bulk-table td:nth-child(2) { grid-area: st; }
+  .bulk-table td:nth-child(3) { grid-area: date; }
+  .bulk-table td:nth-child(4) { grid-area: cat; }
+  .bulk-table td:nth-child(5) { grid-area: text; }
+  .bulk-table tr.check, .bulk-table tr.none { box-shadow: inset 3px 0 0 var(--warn-dot); }
+  .bulk-table tr.none { box-shadow: inset 3px 0 0 #D9776C; }
+  .bulk-table tr td:first-child { box-shadow: none; }
+  .bulk-opts > .grow { display: none; }
 
   /* 학생 기록 창의 표: 기록 하나 = 한 덩어리 (날짜 · 분류 · 상태 · 삭제 / 단원 / 내용) */
   .sd-table, .sd-table tbody { display: block; }

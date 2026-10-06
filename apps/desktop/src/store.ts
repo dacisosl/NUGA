@@ -113,6 +113,8 @@ interface State {
 
   // domain actions
   addRecord(r: Omit<NugaRecord, "id" | "createdAt" | "updatedAt">): NugaRecord;
+  /** 여러 기록을 한 번에 (일괄 기록): 문서를 한 번만 고친다 */
+  addRecords(rs: Omit<NugaRecord, "id" | "createdAt" | "updatedAt">[]): NugaRecord[];
   updateRecord(id: string, patch: Partial<NugaRecord>): void;
   deleteRecord(id: string): void;
   setStudents(students: Student[]): void;
@@ -353,6 +355,12 @@ export const useStore = create<State>((set, get) => ({
     const rec: NugaRecord = { ...r, id: uuid(), createdAt: now, updatedAt: now };
     get().update((d) => { d.records.push(rec); });
     return rec;
+  },
+  addRecords(rs) {
+    const now = nowIso();
+    const recs: NugaRecord[] = rs.map((r) => ({ ...r, id: uuid(), createdAt: now, updatedAt: now }));
+    if (recs.length) get().update((d) => { d.records.push(...recs); });
+    return recs;
   },
   updateRecord(id, patch) {
     get().update((d) => {

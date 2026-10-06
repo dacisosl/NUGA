@@ -3,7 +3,7 @@ import {
   buildPairingUri, parsePairingUri, generateSyncKey, keyIdOf, encryptEnvelope, decryptEnvelope, encryptBackup, decryptBackup,
   countChars, splitSentences, isNominalEnding, suggestNominal, similarity, josa,
   reviewText, generateLocalDraft, buildDraftRequest, parseDraftResponse,
-  resolveNow, lessonFor, syncProgressSkeleton, routeRecordArea, classSortKey, classifySentence, cleanSpans, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson,
+  resolveNow, lessonFor, syncProgressSkeleton, routeRecordArea, classSortKey, classifySentence, cleanSpans, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson, parseBulkRecords,
   type NugaRecord, type SyncMessage,
 } from "../src";
 
@@ -434,5 +434,53 @@ describe("pipeline (단계형 생성)", () => {
     const out = assembleSlots(slots, slots.map(() => "가나다라마바사아자차카타파하 가나다라마바사아자차카타파하 개념을 적용하여 설명함."), req);
     expect(new TextEncoder().encode(out.text).length).toBeLessThanOrEqual(600 + 50);
     expect(out.sentences.every((x) => x.evidence.length > 0)).toBe(true);
+  });
+});
+
+describe("bulk records (일괄 기록 붙여넣기 · OCR 글)", () => {
+  const students = [
+    { no: 3, name: "김민준" }, { no: 5, name: "이서연" }, { no: 6, name: "최유나" }, { no: 7, name: "박지호" }, { no: 9, name: "정하은" }, { no: 12, name: "정하은" },
+  ];
+  const categories = [{ key: 1, label: "질문" }, { key: 2, label: "발표" }, { key: 3, label: "협동" }, { key: 4, label: "기타" }];
+  const opts = { students, categories, defaultDate: "2026-10-06", today: new Date("2026-10-06T10:00:00") };
+  const parse = (t: string) => parseBulkRecords(t, opts);
+
+  it("번호 · 이름 · 날짜 · 분류를 떼고 내용만 남긴다", () => {
+    const r = parse("3 김민준 발표에서 근거를 들어 설명함\n05번 이서연: 모둠 토의를 이끔 (9/18)\n[발표] 6 최유나 실험 결과를 그래프로 정리");
+    expect(r.map((x) => [x.no, x.text, x.status])).toEqual([
+      [3, "발표에서 근거를 들어 설명함", "ok"], [5, "모둠 토의를 이끔", "ok"], [6, "실험 결과를 그래프로 정리", "ok"],
+    ]);
+    expect(r[0]).toMatchObject({ date: "2026-10-06", dated: false, category: 0 });
+    expect(r[1]).toMatchObject({ date: "2026-09-18", dated: true });
+    expect(r[2].category).toBe(2);
+  });
+
+  it("엑셀 칸(탭) 붙여넣기: 머리 줄은 건너뛰고 날짜 칸도 읽는다", () => {
+    const r = parse("날짜\t번호\t이름\t내용\n2026-09-20\t7\t박지호\t실험 보고서 결론을 근거로 정리\n9월 22일\t5\t이서연\t질문을 많이 함");
+    expect(r.map((x) => [x.date, x.no, x.text])).toEqual([["2026-09-20", 7, "실험 보고서 결론을 근거로 정리"], ["2026-09-22", 5, "질문을 많이 함"]]);
+  });
+
+  it("번호와 이름이 다르면 이름을 따르고 확인, 없는 번호는 학생 없음", () => {
+    const r = parse("4 김민준 모둠 발표\n40 실험 도구 정리\n정하은 협동 학습 주도\n12 정하은 질문");
+    expect(r[0]).toMatchObject({ no: 3, status: "check" });
+    expect(r[1]).toMatchObject({ no: null, status: "none" });
+    expect(r[2]).toMatchObject({ status: "check" });       // 같은 이름 둘
+    expect(r[3]).toMatchObject({ no: 12, status: "ok" });  // 번호로 가려짐
+  });
+
+  it("학생 묶음: 이름만 있는 줄 아래 글머리표는 그 학생의 기록, 끊긴 줄은 이어 붙인다", () => {
+    const r = parse("이서연\n- 질문을 자주 함\n- 발표에 자원함\n3 김민준 실험 보고서에서\n근거를 들어 결론을 씀");
+    expect(r.map((x) => [x.no, x.text])).toEqual([[5, "질문을 자주 함"], [5, "발표에 자원함"], [3, "실험 보고서에서 근거를 들어 결론을 씀"]]);
+  });
+
+  it("스캔 글의 이름 오타(한 글자)는 그 학생으로 읽고 확인으로 둔다", () => {
+    const r = parse("3 김민쥰 실험 결과를 정리\n이서언 모둠 발표");
+    expect(r[0]).toMatchObject({ no: 3, status: "check", text: "실험 결과를 정리" });
+    expect(r[1]).toMatchObject({ no: 5, status: "check", text: "모둠 발표" });
+  });
+
+  it("날짜만 있는 줄은 아래 줄들의 날짜, 학번(20305)은 끝 두 자리가 번호", () => {
+    const r = parse("9/25\n3 김민준 오개념을 바로잡음\n20305 이서연 탐구 계획을 세움\n2/10 7 박지호 마무리 발표");
+    expect(r.map((x) => [x.date, x.no])).toEqual([["2026-09-25", 3], ["2026-09-25", 5], ["2027-02-10", 7]]);
   });
 });
