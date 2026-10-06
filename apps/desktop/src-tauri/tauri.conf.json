@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Nuga",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "identifier": "kr.nuga.desktop",
   "build": {
     "frontendDist": "../dist",
