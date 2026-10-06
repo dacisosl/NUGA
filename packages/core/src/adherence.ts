@@ -1,5 +1,5 @@
 import type { AdherenceReport, AdherenceRule, DraftSentence, LengthMode, TeacherGuide } from "./types";
-import { hasExplicitSubject, hasHonorific, isNominalEnding, lengthFloor, lengthIn, lengthWindow, similarity, splitSentences } from "./text";
+import { hasExplicitSubject, hasHonorific, isNominalEnding, lengthCeil, lengthFloor, lengthIn, lengthWindow, similarity, splitSentences } from "./text";
 import { FORBIDDEN_TERMS } from "./review";
 import { GRADE_STYLE, gradeOf } from "./achievement";
 import { draftSpans, spanRatio } from "./highlight";
@@ -75,12 +75,14 @@ export function checkAdherence(inp: AdherenceInput): AdherenceReport {
   // 3. 분량
   const len = lengthIn(text, inp.lengthMode);
   const { max } = lengthWindow(inp.limit, inp.band);
-  const min = lengthFloor(inp.limit, inp.lengthMode, inp.band); // 30바이트쯤 모자란 것은 괜찮다
+  // 목표에서 30바이트 안쪽은 모자라도 넘어도 괜찮다
+  const min = lengthFloor(inp.limit, inp.lengthMode, inp.band);
+  const ceil = lengthCeil(inp.limit, inp.lengthMode, inp.band);
   const u = inp.lengthMode === "bytes" ? "B" : "자";
-  add("limit", "한도 이하", len <= max, `${len.toLocaleString("ko-KR")}/${inp.limit.toLocaleString("ko-KR")}${u}`);
+  add("limit", "한도 이하", len <= ceil, `${len.toLocaleString("ko-KR")}/${inp.limit.toLocaleString("ko-KR")}${u}${len > max && len <= ceil ? ` (+${len - max}${u}, 허용 폭 안)` : ""}`);
   // 기록이 적으면(근거 4건 미만) 미달을 허용한다 (v3 18 예외)
   const fewEvidence = Object.keys(inp.evidence).length < 4;
-  const inBand = len >= min && len <= max;
+  const inBand = len >= min && len <= ceil;
   add("band", "목표 구간", inBand || (len < min && fewEvidence), `${min.toLocaleString("ko-KR")}~${max.toLocaleString("ko-KR")}${u} 중 ${len.toLocaleString("ko-KR")}${u}${!inBand && len < min && fewEvidence ? " (기록이 적어 미달 허용)" : ""}`);
 
   // 4. 근거 연결·일치도

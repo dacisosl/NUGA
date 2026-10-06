@@ -1,5 +1,5 @@
 import type { Category, CategoryDef, DraftHistory, DraftSentence, DraftSpan, LengthMode, NugaRecord, Performance, SpanKind, Standard, TeacherGuide } from "./types";
-import { approxCharsForBytes, isNominalEnding, josa, lengthFloor, lengthIn, lengthWindow, modeLabel } from "./text";
+import { approxCharsForBytes, isNominalEnding, josa, lengthFloor, lengthIn, lengthSlack, lengthWindow, modeLabel } from "./text";
 import { achievementGuide, gradeOf } from "./achievement";
 import { fmtMD } from "./ids";
 import { lessonLabel } from "./timetable";
@@ -292,27 +292,31 @@ export function growInstruction(len: number, limit: number, mode: LengthMode, un
 }
 
 /**
- * 마지막 방어: 그래도 한도를 넘으면 본문 문장을 덜어 낸다 (도입 · 마무리는 남긴다).
- * 어느 문장을 덜지는 한도 안에서 가장 길게(목표에 가깝게) 남는 쪽으로 고르고, 길이가 같으면 적게 덜어 낸다.
- * 문장 하나만 남았는데도 넘치면 마지막 이음말('~하며', '~하고,', '~하였고,') 자리에서 끊어 '~함.'으로 맺는다
+ * 마지막 방어: 그래도 받아들일 길이(한도 + slack)를 넘으면 본문 문장을 덜어 낸다 (도입 · 마무리는 남긴다).
+ * 어느 문장을 덜지는 목표에 가깝게 남는 쪽으로 고른다: 목표 구간 안(한도 이하) > 허용 폭 안으로 조금 넘침 > 모자람(길수록),
+ * 같으면 적게 덜어 낸다. 문장 하나만 남았는데도 넘치면 마지막 이음말('~하며', '~하고,', '~하였고,') 자리에서 끊어 '~함.'으로 맺는다
  */
-export function trimDraftToLimit(res: DraftResponse, limit: number, mode: LengthMode, band?: [number, number]): DraftResponse & { dropped: number } {
+export function trimDraftToLimit(res: DraftResponse, limit: number, mode: LengthMode, band?: [number, number], slack = 0): DraftResponse & { dropped: number } {
   const { max } = lengthWindow(limit, band);
+  const ceil = max + slack;
+  const floor = lengthFloor(limit, mode, band);
   const all = res.sentences.length ? [...res.sentences] : [{ text: res.text, evidence: [] as string[] }];
   const lenOf = (xs: DraftSentence[]) => lengthIn(xs.map((x) => x.text).join(" "), mode);
   let sents = all;
-  if (all.length > 1 && lenOf(all) > max) {
+  if (all.length > 1 && lenOf(all) > ceil) {
     // 문장 길이는 더해서 센다 (문장 사이 띄어쓰기 하나씩)
     const L = all.map((s) => lengthIn(s.text, mode)); const gap = lengthIn(" ", mode);
     const total = (idx: number[]) => idx.reduce((a, i) => a + L[i], 0) + gap * Math.max(0, idx.length - 1);
-    const fixed = all.length >= 3 && total([0, all.length - 1]) <= max ? [0, all.length - 1] : [0];
+    /** 목표에 가까운 정도 (클수록 좋음): 구간 안 > 허용 폭 안으로 넘침(덜 넘칠수록) > 모자람(길수록). 받아들일 길이를 넘으면 제외 */
+    const score = (l: number) => (l > ceil ? -Infinity : l <= max ? (l >= floor ? 3e6 + l : 1e6 + l) : 2e6 - l);
+    const fixed = all.length >= 3 && total([0, all.length - 1]) <= ceil ? [0, all.length - 1] : [0];
     const body = all.map((_, i) => i).filter((i) => !fixed.includes(i));
-    let best = fixed; let bestLen = total(fixed);
+    let best = fixed; let bestScore = score(total(fixed));
     if (body.length <= 14) {
       for (let m = 1; m < 1 << body.length; m++) {
         const idx = [...fixed, ...body.filter((_, b) => m & (1 << b))];
-        const l = total(idx);
-        if (l <= max && (l > bestLen || (l === bestLen && idx.length > best.length))) { best = idx; bestLen = l; }
+        const s = score(total(idx));
+        if (s > bestScore || (s === bestScore && s > -Infinity && idx.length > best.length)) { best = idx; bestScore = s; }
       }
     } else {
       // 문장이 아주 많으면 본문 끝에서부터 덜어 낸다
@@ -323,7 +327,7 @@ export function trimDraftToLimit(res: DraftResponse, limit: number, mode: Length
     sents = all.filter((_, i) => best.includes(i));
   }
   const dropped = all.length - sents.length;
-  if (lenOf(sents) > max) {
+  if (lenOf(sents) > ceil) {
     const t = sents[0].text;
     let cut = "";
     // 이음말 → 맺음 ('~주며' → '~줌', '~있으며' → '~있음')
@@ -743,8 +747,11 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
 
   const all = units.map(() => true);
   const base = mk(all, new Set(), true);
-  // '짧게' 요청이면 지금 분량의 절반쯤까지. 아니면 한도까지 채우되, 30바이트쯤 모자란 것은 괜찮다(그 아래면 더 채워 본다)
+  // 목표 안(cap)을 겨냥하되, 목표에서 30바이트 안쪽(goal ~ ceil)이면 맞은 것으로 보고 그대로 둔다.
+  // '짧게' 요청이면 지금 분량의 절반쯤까지 (여유 없이)
+  const slack = shorter ? 0 : lengthSlack(req.targetLength, req.lengthMode);
   const cap = shorter ? Math.min(max, Math.max(1, Math.round(base.len / 2))) : max;
+  const ceil = cap + slack;
   const goal = shorter ? 0 : lengthFloor(req.targetLength, req.lengthMode, req.lengthBand);
   // 짧게 줄일 수 있는 역량 표현: 문단에 나온 것만, 많이 줄어드는 것부터
   const baseText = join(base.sents);
@@ -753,22 +760,22 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
     ...FAMS.filter((f) => f.short !== f.trait && baseText.includes(f.trait)).map((f) => ({ key: `fam:${f.fam}`, save: lengthOf(f.trait, req.lengthMode) - lengthOf(f.short, req.lengthMode) })),
   ].sort((a, b) => b.save - a.save).map((x) => x.key);
 
-  /** ① 역량 표현을 하나씩 짧은 이름으로 (많이 줄어드는 것부터, 한도 안에 들 때까지만). 다 줄여도 넘치면 모두 짧게 */
-  const shorten = (p: Pick): Pick => {
+  /** ① 역량 표현을 하나씩 짧은 이름으로 (많이 줄어드는 것부터, lim 안에 들 때까지만). 다 줄여도 넘치면 모두 짧게 */
+  const shorten = (p: Pick, lim: number): Pick => {
     let cur = p;
-    for (const key of shrinkable) { if (cur.len <= cap) break; cur = mk(cur.on, new Set([...cur.short, key]), cur.close); }
-    return cur.len <= cap ? cur : mk(cur.on, ALL_SHORT, cur.close);
+    for (const key of shrinkable) { if (cur.len <= lim) break; cur = mk(cur.on, new Set([...cur.short, key]), cur.close); }
+    return cur.len <= lim ? cur : mk(cur.on, ALL_SHORT, cur.close);
   };
   /** ② 기록 고르기: 낮은 등급 · 낮은 값부터 하나씩 빼 본다 */
-  const drop = (p: Pick): Pick => {
+  const drop = (p: Pick, lim: number): Pick => {
     let cur = p;
-    for (const k of order) { if (cur.len <= cap || count(cur.on) <= 1) break; cur = mk(cur.on.map((v, i) => (i === k ? false : v)), cur.short, cur.close); }
+    for (const k of order) { if (cur.len <= lim || count(cur.on) <= 1) break; cur = mk(cur.on.map((v, i) => (i === k ? false : v)), cur.short, cur.close); }
     return cur;
   };
-  /** ③ 목표보다 30바이트 넘게 모자라면 채우기: 뺀 기록 다시 넣기 > 줄인 역량 표현 되살리기 > 같은 등급끼리 맞바꾸기 (한도 안에서 가장 길게) */
-  const fill = (p: Pick): Pick => {
+  /** ③ 목표보다 30바이트 넘게 모자라면 채우기: 뺀 기록 다시 넣기 > 줄인 역량 표현 되살리기 > 같은 등급끼리 맞바꾸기 (lim 안에서 가장 길게) */
+  const fill = (p: Pick, lim: number): Pick => {
     let cur = p;
-    for (let step = 0; step < 8 && cur.len <= cap && cur.len < goal; step++) {
+    for (let step = 0; step < 8 && cur.len <= lim && cur.len < goal; step++) {
       const offs = cur.on.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
       const ons = cur.on.map((v, i) => (v ? i : -1)).filter((i) => i >= 0);
       const text = join(cur.sents);
@@ -779,7 +786,7 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
       ];
       let best: Pick | null = null;
       for (const group of moves) {
-        for (const move of group) { const m = move(); if (m.len <= cap && m.len > (best ? best.len : cur.len)) best = m; }
+        for (const move of group) { const m = move(); if (m.len <= lim && m.len > (best ? best.len : cur.len)) best = m; }
         if (best) break;
       }
       if (!best) break;
@@ -787,29 +794,41 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
     }
     return cur;
   };
+  /**
+   * lim 안에서 더 나은 짜임: (가) 역량 표현을 줄이고 그래도 넘칠 때만 기록을 고른 것, (나) 역량 표현은 그대로 두고 기록을 고른 것을 견준다.
+   * lim 안 > 목표에 닿음 > (닿았으면) 기록을 더 많이 남김 > 더 김 / (못 닿았으면) 더 김 > 기록을 더 많이 남김
+   */
+  const search = (lim: number, close: boolean): Pick => {
+    const rank = (x: Pick) => (x.len >= goal ? [x.len <= lim ? 1 : 0, 1, count(x.on), x.len] : [x.len <= lim ? 1 : 0, 0, x.len, count(x.on)]);
+    const better = (a: Pick, b: Pick) => { const ra = rank(a), rb = rank(b); for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i]; return false; };
+    const start = close ? base : mk(all, new Set(), false);
+    const [a, b] = [fill(drop(shorten(start, lim), lim), lim), fill(drop(start, lim), lim)];
+    return better(b, a) ? b : a;
+  };
+  /** 먼저 목표 안(cap)에서 고르고, 그러면 목표보다 30바이트 넘게 모자랄 때만 허용 폭(ceil)까지 넓혀 더 가까운 쪽을 고른다 */
+  const fit = (close: boolean): Pick => {
+    let p = search(cap, close);
+    if (p.len < goal && ceil > cap) { const q = search(ceil, close); if (q.len <= ceil && q.len > p.len) p = q; }
+    return p;
+  };
 
   let pick = base;
-  if (base.len > cap) {
-    // 넘치면: (가) 역량 표현을 줄이고 그래도 넘칠 때만 기록을 고른 것, (나) 역량 표현은 그대로 두고 기록을 고른 것을 견준다.
-    // 둘 다 목표에 못 닿으면(목표가 아주 작을 때) 마무리 문장 없이 기록을 하나 더 남기는 것도 견준다.
-    // 한도 안 > 목표에 닿음 > (닿았으면) 마무리 있음 > 기록을 더 많이 남김 > 더 김 / (못 닿았으면) 더 김 > 마무리 있음
-    const rank = (x: Pick) => (x.len >= goal ? [x.len <= cap ? 1 : 0, 1, x.close ? 1 : 0, count(x.on), x.len] : [x.len <= cap ? 1 : 0, 0, x.len, x.close ? 1 : 0, count(x.on)]);
-    const better = (a: Pick, b: Pick) => { const ra = rank(a), rb = rank(b); for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i]; return false; };
-    const tryClose = (close: boolean) => {
-      const start = close ? base : mk(all, new Set(), false);
-      for (const c of [fill(drop(shorten(start))), fill(drop(start))]) if (pick === base || better(c, pick)) pick = c;
-    };
-    tryClose(true);
-    if (pick.len < goal) tryClose(false);
+  if (base.len > ceil) {
+    pick = fit(true);
+    // 마무리 문장(교사의 종합 평가)은 남기는 것이 먼저. 그래도 목표에 못 닿을 때만(목표가 아주 작을 때) 마무리 없이 기록을 하나 더 남겨 본다
+    if (pick.len < goal) { const open = fit(false); if (open.len <= ceil && open.len > pick.len) pick = open; }
   }
   const sents = pick.sents;
   let kept = [...sents];
-  while (kept.length > 1 && lenOf(kept) > cap) {
-    const minPrio = Math.min(...kept.map((s) => s.prio));
-    kept.splice(kept.findIndex((s) => s.prio === minPrio), 1);
+  // 그래도 허용 폭을 넘으면(기록 하나가 아주 길 때) 문장을 덜고, 마지막엔 글자 단위로 끊는다 — 이때는 목표 안으로
+  if (lenOf(kept) > ceil) {
+    while (kept.length > 1 && lenOf(kept) > cap) {
+      const minPrio = Math.min(...kept.map((s) => s.prio));
+      kept.splice(kept.findIndex((s) => s.prio === minPrio), 1);
+    }
   }
   let text = join(kept);
-  if (lengthOf(text, req.lengthMode) > cap && kept.length === 1) {
+  if (lengthOf(text, req.lengthMode) > ceil && kept.length === 1) {
     const tail = " 등을 수행함.";
     let chars = Array.from(text);
     while (chars.length > 1 && lengthOf(chars.join("").replace(/[,\s]+$/, "") + tail, req.lengthMode) > cap) chars = chars.slice(0, -1);
@@ -823,9 +842,10 @@ export function generateLocalDraft(req: DraftRequest): DraftResponse {
   if (left.length) checks.push(`분량에 맞추려고 기록 ${left.reduce((a, u) => a + u.n, 0)}건을 빼고 썼습니다: ${left.slice(0, 6).map((u) => u.label).join(", ")}${left.length > 6 ? " 등" : ""}`);
   if (!pick.close) checks.push("분량이 작아 마무리 문장 없이 썼습니다.");
   if (sents.length > kept.length) checks.push(`분량 때문에 ${sents.length - kept.length}개 문장을 뺐습니다.`);
+  if (len > cap) checks.push(`한도보다 ${len - cap}${unit} 길지만 허용 폭(${slack}${unit}) 안이라 그대로 두었습니다.`);
   if (len < goal) {
     checks.push(pick !== base || sents.length > kept.length
-      ? `한도를 넘지 않게 분량을 맞추다 보니 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}가 되었습니다.`
+      ? `분량에 맞게 고르다 보니 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}가 되었습니다.`
       : `근거가 되는 기록이 적어 목표 구간(${min}~${max}${unit})보다 짧은 ${len}${unit}로 작성했습니다.`);
   }
   return { text, sentences: kept.map(({ text, evidence, spans }) => (spans && spans.map((x) => x.text).join("") === text ? { text, evidence, spans } : { text, evidence })), checks };
