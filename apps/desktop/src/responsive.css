@@ -70,9 +70,6 @@
   /* 두 칸 입력 → 한 칸 */
   .grid2 { grid-template-columns: minmax(0, 1fr); }
 
-  /* 모바일 확인: 폰 화면 + 설명을 위아래로 */
-  .mp-stage { gap: 20px; justify-content: center; }
-  .mp-side { min-width: 0; max-width: none; flex-basis: 100%; }
 }
 
 /* ---------- ≤ 560: 폰 ---------- */
@@ -81,7 +78,7 @@
 
   /* 상단 바 두 줄: 로고 · 영역 · 설정 / 미반영 · 저장 · 생기부 생성 (페이지 이름은 그 아래 한 줄) */
   .topnav { padding: 10px 12px; column-gap: 8px; row-gap: 10px; min-height: 0; }
-  .topnav .mini-link { display: none; }                 /* 폰 화면 미리보기는 PC 시험용 */
+  .topnav .mini-link { order: 1; height: 34px; padding: 0 10px; font-size: 13px; }  /* 폰에서 바로 기록하는 문: 크게 */
   .topnav .opt { display: none; }                       /* '일괄 기록+' → '일괄+', '생기부 생성' → '생기부' */
   .topnav .sync-dot { display: none; }
   .topnav .brand { order: 0; gap: 7px; padding: 0; font-size: 18px; }
@@ -92,7 +89,6 @@
   .topnav > .split-btn { order: 3; }
   .topnav > .btn:not(.icon) { order: 3; flex: 1 1 auto; justify-content: center; padding: 0 10px; }
   .topnav .page-title { order: 4; font-size: 20px; }
-  .topnav .page-chip { order: 4; }
 
   /* 내용 여백 */
   .content.board { gap: 22px; padding-top: 14px; }
@@ -149,9 +145,9 @@
   .toasts { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
   .toast { min-width: 0; max-width: none; }
 
-  /* 모바일 확인: 폰 화면을 창 너비에 맞춰 줄인다 (392px 틀) */
-  .mp-phone { zoom: .86; }
+  /* 모바일 화면: 폰 틀(392px)을 창 너비에 맞춰 줄인다. 터치 폰에서는 틀 없이 화면 가득(.full) */
+  .mp-phone:not(.full) { zoom: .86; }
 }
 @media (max-width: 380px) {
-  .mp-phone { zoom: .8; }
+  .mp-phone:not(.full) { zoom: .8; }
 }

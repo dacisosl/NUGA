@@ -7,7 +7,7 @@ import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
 
-/** 화면: 현황판(main) · 생기부 생성(draft, 검토 포함) · 설정 · 모바일 확인. today·records·review 는 옛 이름(→ main / draft) */
+/** 화면: 현황판(main) · 생기부 생성(draft, 검토 포함) · 설정 · 모바일 화면(기록). today·records·review 는 옛 이름(→ main / draft) */
 export type Page = "main" | "today" | "records" | "draft" | "review" | "settings" | "mobile";
 export interface Toast { id: number; text: string; kind?: "notice" | "dark"; action?: { label: string; onClick: () => void }; onClick?: () => void; ttl?: number }
 

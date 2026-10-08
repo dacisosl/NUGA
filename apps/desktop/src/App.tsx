@@ -40,7 +40,7 @@ export default function App() {
   if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
   if (!onboarded) return <><Onboarding /><Toasts /></>;
 
-  // 화면은 넷: 현황판(기본) · 생기부 생성(초안 + 검토) · 설정 · 모바일 확인(테스트용). 옛 이름은 현황판/생성으로 보낸다
+  // 화면은 넷: 현황판(기본) · 생기부 생성(초안 + 검토) · 설정 · 모바일 화면(기록). 옛 이름은 현황판/생성으로 보낸다
   const view: Page = page === "today" || page === "records" ? "main" : page === "review" ? "draft" : page;
   return (
     <div className="app">
@@ -59,10 +59,10 @@ export default function App() {
 
 /** 상단 바에서 영역 옆에 크게 놓이는 지금 페이지 이름 (두 번째 줄에는 제목을 두지 않는다) */
 /** 상단 바 영역 칸 옆 제목. 현황판(메인)은 제목 없이 영역 칸만 둔다 */
-const PAGE_TITLE: Partial<Record<Page, string>> = { draft: "생기부 생성", settings: "설정", mobile: "모바일 확인" };
+const PAGE_TITLE: Partial<Record<Page, string>> = { draft: "생기부 생성", settings: "설정", mobile: "모바일 화면" };
 
 /**
- * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 확인') · 영역 | 페이지 이름 · ──── · 미반영 · 일괄 기록+ · 저장▾ · 생기부 생성 · 설정.
+ * 상단 바 (사이드바 대신): 누가 로고(아래 작은 '모바일 화면') · 영역 | 페이지 이름 · ──── · 미반영 · 일괄 기록+ · 저장▾ · 생기부 생성 · 설정.
  * 교사가 매일 보는 것은 현황판 하나. 생기부 생성은 시즌에만 들어가는 문이다.
  * PC 기록은 현황판 학생 카드 → 학생 기록 창 맨 위 입력칸에서 (그 학생의 지난 기록을 보며 바로 쓴다).
  */
@@ -79,10 +79,9 @@ function TopNav({ view }: { view: Page }) {
         <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9" /><circle cx="29" cy="10" r="1.8" fill="#DCEBFF" /></svg>
         <span className="brand-txt">누가<span className="brand-en">NUGA</span></span>
       </button>
-      <button className={`mini-link ${view === "mobile" ? "on" : ""}`} aria-current={view === "mobile" ? "page" : undefined} onClick={() => setPage(view === "mobile" ? "main" : "mobile")} title="폰 앱 화면을 PC에서 확인 (테스트용)"><Icon name="phone" size={11} />모바일 확인</button>
+      <button className={`mini-link ${view === "mobile" ? "on" : ""}`} aria-current={view === "mobile" ? "page" : undefined} onClick={() => setPage(view === "mobile" ? "main" : "mobile")} title="번호를 골라 바로 기록하는 모바일 기록 화면"><Icon name="phone" size={11} />모바일 화면</button>
       <AreaSwitcher />
       {title && <h1 className="page-title">{title}</h1>}
-      {view === "mobile" && <span className="chip outline page-chip">테스트용</span>}
       <span className="sep" />
       <span className="sync-dot" title={sync.state === "error" ? `동기화 오류 · ${sync.message}` : `${sync.message}${sync.lastAt ? ` · 마지막 ${sync.lastAt.slice(11, 16)}` : ""}`}>
         <i className={`led ${sync.state === "idle" ? "on" : sync.state === "busy" ? "busy" : sync.state === "error" ? "err" : ""}`} />
