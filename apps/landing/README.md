@@ -3,11 +3,18 @@
 GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 그 아래 `app/`(https://dacisosl.github.io/NUGA/app/)에 있다.
 
 ## 구성
-- index.html: 8개 화면의 내용과 구조
+- index.html: 10개 화면의 내용과 구조
 - site.css: 반응형 레이아웃, 색상, 글꼴, 모션 스타일
 - site.js: 숫자 릴, 화면 이동, FAQ, 영상 및 마우스 반응, 앱으로 넘어가기
 - assets/growth-poster.png: 계단 메인 이미지
 - assets/growth-motion.mp4: 계단 빛 모션 영상
+- assets/record-manual.mp4 · record-auto.mp4 (+ 포스터): '기록 방법' 두 화면의 영상. 실제 앱 화면으로 만들며, 만드는 법은 [video/README.md](video/README.md)
+
+## 기록 방법 화면 (6 · 7번째)
+- 영상 옆 단계 01~04 가 재생 위치(`data-at` 초)에 맞춰 밝아지고, 단계를 누르면 그 장면으로 간다.
+- 그 화면에 0.4초 이상 머물면 소리 없이 재생하고, 벗어나면 멈춘다. 다음 화면이 기록 방법이면 미리 받아 둔다(데이터 절약 모드에서는 받지 않는다).
+- 영상 오른쪽 아래 [영상 재생 | 영상 일시정지] 버튼으로 언제든 멈추고 다시 볼 수 있다. 멈추면 그 화면에 있는 동안은 다시 재생하지 않는다.
+- 움직임 줄이기 설정이거나 첫 화면의 '모션 일시정지'를 눌렀으면 자동 재생하지 않고 내려받지도 않는다. [영상 재생]이나 단계를 누르면 그때 재생한다.
 
 ## 앱으로 넘어가기
 - `data-app-link` 가 붙은 링크(머리글 '앱 열기', 첫 화면 '바로 시작하기', 마지막 화면 '누가 시작하기')는 모두 앱의 전체 주소(https://dacisosl.github.io/NUGA/app/)로 간다. 상대 경로가 아니라서 index.html 을 파일로 열어도 앱으로 이어진다.

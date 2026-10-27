@@ -3,10 +3,43 @@ const motionButton=document.querySelector('#motion-control');
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
 let motionAllowed=!reduced.matches;
 let heroVisible=true;
+// Recording-method films play only on their own screen (and only with motion allowed, unless the visitor asks), lighting the step under the playhead.
+const methods=[...document.querySelectorAll('.method')].map(screen=>({screen,player:screen.querySelector('video'),toggle:screen.querySelector('.method-play'),items:[...screen.querySelectorAll('.method-steps li')],chosen:false,userPaused:false}));
+let methodTimer=0;
+function syncMethods(){
+  clearTimeout(methodTimer);
+  for(const m of methods)if(!m.screen.classList.contains('is-active')){m.player.pause();m.chosen=false;m.userPaused=false}
+  // Wait until the visitor settles on a screen, so scrolling past does not start downloads.
+  methodTimer=window.setTimeout(()=>{
+    for(const m of methods){
+      const here=m.screen.classList.contains('is-active'),next=m.screen.previousElementSibling?.classList.contains('is-active');
+      if((here||next)&&(motionAllowed||m.chosen)&&!navigator.connection?.saveData)m.player.preload='auto';
+      if(here&&!document.hidden&&!m.userPaused&&(motionAllowed||m.chosen))m.player.play().catch(()=>{});
+      else if(here)m.player.pause();
+    }
+  },400);
+}
+methods.forEach(m=>{
+  const at=m.items.map(li=>Number(li.dataset.at));
+  const mark=()=>{
+    const t=m.player.currentTime;let i=0;at.forEach((a,k)=>{if(t>=a)i=k});
+    const end=at[i+1]??(m.player.duration||at[i]+1);
+    m.items.forEach((li,k)=>{const on=k===i,button=li.querySelector('button');li.classList.toggle('is-current',on);if(on)button.setAttribute('aria-current','step');else button.removeAttribute('aria-current');li.querySelector('i').style.transform=`scaleX(${on?Math.min(1,Math.max(0,(t-at[i])/(end-at[i]))):0})`});
+  };
+  const label=()=>{const paused=m.player.paused;m.toggle.textContent=paused?'영상 재생':'영상 일시정지';m.toggle.classList.toggle('is-paused',paused)};
+  const start=time=>{m.chosen=true;m.userPaused=false;m.player.preload='auto';if(time!==undefined)m.player.currentTime=time;m.player.play().catch(()=>{});mark()};
+  m.player.addEventListener('timeupdate',mark);
+  m.player.addEventListener('play',label);
+  m.player.addEventListener('pause',label);
+  m.items.forEach((li,k)=>li.querySelector('button').addEventListener('click',()=>start(at[k]+.05)));
+  m.toggle.addEventListener('click',()=>{if(m.player.paused)start();else{m.userPaused=true;m.player.pause()}});
+  label();mark();
+});
 function syncMotion(){
   if(motionAllowed && heroVisible && !document.hidden) video.play().catch(error=>{if(error.name==='AbortError')return;motionAllowed=false;updateMotionButton()});
   else video.pause();
   updateMotionButton();
+  syncMethods();
 }
 function updateMotionButton(){motionButton.textContent=motionAllowed?'모션 일시정지':'모션 재생';motionButton.setAttribute('aria-pressed',String(motionAllowed))}
 motionButton.addEventListener('click',()=>{motionAllowed=!motionAllowed;syncMotion()});

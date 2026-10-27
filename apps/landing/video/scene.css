@@ -1,0 +1,57 @@
+/* 소개 영상 공통 무대: 1920×1080. 소개 페이지와 같은 밤 남색 · Pretendard · 하늘빛 강조.
+   글(설명)은 소개 페이지가 맡고, 영상은 실제 앱 화면이 놓인 '세계'를 카메라가 따라간다. */
+@font-face { font-family: "Pretendard Variable"; src: url("../../desktop/public/fonts/PretendardVariable.woff2") format("woff2"); font-weight: 45 920; }
+:root { --navy: #081422; --ink: #eaf2ff; --muted: #a3b7d2; --accent: #accdff; --rec: #ff6b6b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--navy); }
+body { font-family: "Pretendard Variable", Pretendard, system-ui, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; font-synthesis: none; }
+
+.stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: radial-gradient(ellipse 80% 90% at 60% 40%, #16304f 0%, #0b1a2c 50%, var(--navy) 80%); }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.world > * { position: absolute; }
+.hud { position: absolute; inset: 0; pointer-events: none; }
+.hud > * { position: absolute; }
+.fade { position: absolute; inset: 0; background: var(--navy); z-index: 100; }
+
+/* 실제 앱 화면 */
+img.shot { display: block; }
+.phone-shot { filter: drop-shadow(0 40px 80px rgba(0, 0, 0, .55)) drop-shadow(0 0 60px rgba(120, 170, 255, .14)); }
+.monitor { border-radius: 26px; background: linear-gradient(180deg, #223047, #0e1828); box-shadow: 0 0 0 1px rgba(172, 205, 255, .25), 0 70px 160px rgba(0, 0, 0, .55), 0 0 120px rgba(120, 170, 255, .1); }
+.monitor-screen { overflow: hidden; border-radius: 6px; background: #0b1626; isolation: isolate; }
+.phone-box { isolation: isolate; }
+.monitor-screen img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.neck { background: linear-gradient(180deg, #121d2d, #1d2b40); clip-path: polygon(20% 0, 80% 0, 100% 100%, 0 100%); }
+.foot { border-radius: 12px 12px 5px 5px; background: linear-gradient(180deg, #2b3b54, #131e2f); box-shadow: 0 24px 50px rgba(0, 0, 0, .5); }
+
+/* 세계 위에 얹는 표시 (앱 화면 크기에 맞춰 함께 커진다) */
+.tap { width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: rgba(255, 255, 255, .32); box-shadow: 0 0 0 2px rgba(255, 255, 255, .7), 0 0 30px rgba(172, 205, 255, .6); }
+.finger { width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 255, 255, .55), rgba(255, 255, 255, .18) 60%, transparent 72%); box-shadow: 0 0 0 2px rgba(255, 255, 255, .55); }
+.cursor { width: 22px; height: 30px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .5)); }
+.ring { border-radius: 10px; border: 3px solid var(--accent); box-shadow: 0 0 0 6px rgba(172, 205, 255, .18), 0 0 40px rgba(172, 205, 255, .55); }
+.mark { border-radius: 10px; border: 3px solid #ffd76a; box-shadow: 0 0 0 5px rgba(255, 215, 106, .18), 0 0 30px rgba(255, 215, 106, .35); }
+.trail { overflow: visible; }
+.trail path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 8px rgba(172, 205, 255, .8)); }
+.badge { padding: 8px 14px; border-radius: 10px; background: #0d2340; border: 1.5px solid var(--accent); color: var(--ink); font-size: 18px; font-weight: 700; white-space: nowrap; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.badge em { font-style: normal; color: var(--accent); }
+
+/* 안드로이드 앱의 녹음 알림 (실제 앱 문구, 그림으로만 만든 유일한 장면) */
+.notif { width: 352px; padding: 14px 16px 12px; border-radius: 22px; background: rgba(24, 37, 58, .97); border: 1px solid rgba(172, 205, 255, .28); box-shadow: 0 18px 40px rgba(0, 0, 0, .55); color: var(--ink); font-size: 13px; }
+.notif .app { display: flex; align-items: center; gap: 7px; color: #9fb3cf; font-size: 12px; font-weight: 600; }
+.notif .app svg { width: 15px; height: 15px; fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.notif .app time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.notif b { display: block; margin-top: 8px; font-size: 15px; font-weight: 750; letter-spacing: -.02em; }
+.notif b i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rec); margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 10px var(--rec); }
+.notif p { margin: 5px 0 0; color: #b8c8de; line-height: 1.45; }
+.notif .acts { display: flex; gap: 22px; margin-top: 10px; color: var(--accent); font-weight: 700; font-size: 13px; }
+
+/* 화면 위 고정 표시: 단계 칩 · 초시계 · 키 */
+.chip { left: 64px; top: 56px; display: flex; align-items: center; gap: 16px; padding: 16px 26px 16px 18px; border-radius: 18px; background: rgba(8, 20, 34, .84); border: 1px solid rgba(172, 205, 255, .3); box-shadow: 0 16px 40px rgba(0, 0, 0, .4); }
+.chip span { display: grid; place-items: center; width: 50px; height: 50px; border-radius: 13px; background: var(--accent); color: #0b1d33; font-size: 23px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chip b { font-size: 36px; font-weight: 750; letter-spacing: -.04em; white-space: nowrap; }
+.timer { right: 64px; top: 56px; display: flex; align-items: center; gap: 16px; padding: 16px 26px; border-radius: 18px; background: rgba(8, 20, 34, .84); border: 1px solid rgba(172, 205, 255, .3); font-variant-numeric: tabular-nums; }
+.timer svg { width: 40px; height: 40px; fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linecap: round; }
+.timer b { font-size: 46px; font-weight: 780; letter-spacing: -.03em; min-width: 92px; text-align: right; }
+.timer small { font-size: 22px; color: var(--muted); font-weight: 600; }
+.key { left: 50%; bottom: 70px; transform: translateX(-50%); padding: 14px 30px; border-radius: 14px; background: #eaf2ff; color: #0b1d33; font-size: 34px; font-weight: 780; box-shadow: 0 8px 0 #9fb3cf, 0 20px 40px rgba(0, 0, 0, .45); }
+
+.scrub { position: fixed; left: 0; right: 0; bottom: 0; width: 100%; z-index: 999; }

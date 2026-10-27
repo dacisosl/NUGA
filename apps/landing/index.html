@@ -17,7 +17,7 @@
   <a class="skip" href="#main">본문으로</a>
   <header class="header">
     <a class="brand" href="#hero" aria-label="누가 처음으로"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9"/></svg>누가<span>NUGA</span></a>
-    <nav aria-label="주요 메뉴"><a href="#flow">기록의 흐름</a><a href="#privacy">보호 원칙</a><a class="header-cta" href="https://dacisosl.github.io/NUGA/app/" data-app-link>앱 열기 <span aria-hidden="true">→</span></a></nav>
+    <nav aria-label="주요 메뉴"><a href="#method-manual">기록 방법</a><a href="#privacy">보호 원칙</a><a class="header-cta" href="https://dacisosl.github.io/NUGA/app/" data-app-link>앱 열기 <span aria-hidden="true">→</span></a></nav>
   </header>
   <main id="main">
     <section class="screen hero" id="hero" aria-labelledby="hero-title" data-name="좋은 기록">
@@ -68,11 +68,39 @@
       <div class="content">
         <div class="section-heading"><div><p class="eyebrow">누가가 잇는 기록의 흐름</p><h2 id="flow-title">기록은 짧게.<br><em>근거는 분명하게.</em></h2></div><span class="target-label">설계 목표 시간</span></div>
         <div class="time-grid">
-          <article class="time-card"><span class="time-step">01 · 수업 중</span><div class="time-value" aria-label="10초"><span class="reel-number" data-value="10" aria-hidden="true">10</span><span class="time-unit" aria-hidden="true">초</span></div><h3>순간 기록</h3><div class="category-buttons" aria-label="기록 카테고리 예시"><span>질문</span><span>발표</span><span>협력</span><span>기타</span></div></article>
+          <article class="time-card"><span class="time-step">01 · 수업 중</span><div class="time-value" aria-label="10초"><span class="reel-number" data-value="10" aria-hidden="true">10</span><span class="time-unit" aria-hidden="true">초</span></div><h3>순간 기록</h3><div class="category-buttons" aria-label="수업 중 기록 순서 예시: 반, 번호, 저장"><span>2-3</span><span>14번</span><span>저장</span></div></article>
           <article class="time-card"><span class="time-step">02 · AI 추천</span><div class="time-value" aria-label="추가 입력 목표 0초"><span class="reel-number" data-value="0" aria-hidden="true">0</span><span class="time-unit" aria-hidden="true">초</span></div><h3>추가 입력</h3><p class="time-caption">놓친 발언은 자동 추천</p></article>
           <article class="time-card"><span class="time-step">03 · 교무실</span><div class="time-value" aria-label="30초"><span class="reel-number" data-value="30" aria-hidden="true">30</span><span class="time-unit" aria-hidden="true">초</span></div><h3>확인 · 보완</h3><div class="save-preview"><span class="save-line" aria-hidden="true"></span>교사가 확인하고 저장</div></article>
         </div>
         <p class="context-note">실측 성능이 아닌 설계 목표 · AI 추천 후 교사가 확인</p>
+      </div>
+    </section>
+
+    <section class="screen method" id="method-manual" aria-labelledby="method-manual-title" data-name="기록 방법 1">
+      <div class="content method-layout">
+        <div class="method-head"><p class="eyebrow">기록 방법 1 · 수동 기록</p><h2 id="method-manual-title">수업 중엔 번호만.<br><em>근거는 한 줄로.</em></h2></div>
+        <figure class="method-video"><video muted loop playsinline preload="none" poster="assets/record-manual-poster.jpg" aria-label="수동 기록 과정: 폰에서 번호를 누르면 PC의 기록 계단이 한 칸 오르고, 쉬는 시간 기록 창에 한 줄을 쓰면 학생 카드에 근거로 남는 실제 앱 화면"><source src="assets/record-manual.mp4" type="video/mp4"></video><button class="method-play" type="button">영상 재생</button></figure>
+        <ol class="method-steps">
+          <li data-at="0"><button type="button"><span>01</span><b>수업 중, 번호만 누르기</b><small>모바일 화면에서 반 → 번호 → 저장</small><i aria-hidden="true"></i></button></li>
+          <li data-at="5.4"><button type="button"><span>02</span><b>그 순간 PC 계단 한 칸 위로</b><small>폰 기록이 PC에 도착하면 바로 반영</small><i aria-hidden="true"></i></button></li>
+          <li data-at="11"><button type="button"><span>03</span><b>쉬는 시간, 한 줄 쓰고 Enter</b><small>'쉬는 시간 기록' 창에서 무엇을 했는지</small><i aria-hidden="true"></i></button></li>
+          <li data-at="20.6"><button type="button"><span>04</span><b>그 한 줄이 성장의 근거로</b><small>학생 카드에 근거가 쌓임</small><i aria-hidden="true"></i></button></li>
+        </ol>
+        <p class="context-note method-note">실제 앱 화면 · 합성 데모 데이터</p>
+      </div>
+    </section>
+
+    <section class="screen method reverse" id="method-auto" aria-labelledby="method-auto-title" data-name="기록 방법 2">
+      <div class="content method-layout">
+        <div class="method-head"><p class="eyebrow">기록 방법 2 · 자동 기록</p><h2 id="method-auto-title">녹음은 시간표대로.<br><em>발언은 PC가 추천.</em></h2></div>
+        <figure class="method-video"><video muted loop playsinline preload="none" poster="assets/record-auto-poster.jpg" aria-label="자동 기록 과정: 녹음을 켜고, 화자만 구분된 스크립트에서 PC가 추천한 발언을 교사가 학생에게 지정하면 기록 계단이 한 칸 오르는 실제 앱 화면"><source src="assets/record-auto.mp4" type="video/mp4"></video><button class="method-play" type="button">영상 재생</button></figure>
+        <ol class="method-steps">
+          <li data-at="0"><button type="button"><span>01</span><b>아침 1탭, 시간표대로 녹음</b><small>폰에서 [오늘 녹음 대기]를 누르면 수업 시간마다</small><i aria-hidden="true"></i></button></li>
+          <li data-at="10.5"><button type="button"><span>02</span><b>이름 없이 화자만 구분</b><small>음성은 폰에만 저장, 24시간 후 삭제</small><i aria-hidden="true"></i></button></li>
+          <li data-at="15.3"><button type="button"><span>03</span><b>놓친 발언을 PC가 추천</b><small>발언 원문과 앞뒤 문맥까지</small><i aria-hidden="true"></i></button></li>
+          <li data-at="18.4"><button type="button"><span>04</span><b>교사가 학생 지정 → 계단 한 칸 위로</b><small>누구의 발언인지는 교사가 판단</small><i aria-hidden="true"></i></button></li>
+        </ol>
+        <p class="context-note method-note">녹음은 기본 꺼짐 · 학교 승인·안내·동의 후 사용 · 합성 데모 데이터</p>
       </div>
     </section>
 
@@ -109,8 +137,8 @@
       <div class="content closing-copy"><p class="eyebrow">모든 학생이 기록되는 교실</p><h2 id="closing-title">다음 한 걸음도,<br><em>좋은 기록으로.</em></h2><div class="closing-actions"><a class="button" href="https://dacisosl.github.io/NUGA/app/" data-app-link>누가 시작하기 <span aria-hidden="true">→</span></a><a class="button secondary" href="#flow">기록 과정 보기</a></div><p class="resource-status">이 브라우저에서 앱을 처음 열면 나오는 ‘데모로 둘러보기’로 합성 데이터의 모든 흐름을 볼 수 있습니다.<span><a href="https://github.com/dacisosl/NUGA/releases/latest">Windows 설치 파일</a> · <a href="privacy.html"><b>개인정보 처리방침</b></a></span></p><p class="closing-signature">교사가 기록하고, 학생이 성장합니다.<span>누가</span></p></div>
     </section>
   </main>
-  <nav class="screen-nav" aria-label="화면 이동"><a href="#hero" aria-label="1. 좋은 기록" aria-current="location"></a><a href="#evidence" aria-label="2. 기억과 근거"></a><a href="#growth" aria-label="3. 다음 시도"></a><a href="#barriers" aria-label="4. 기록의 장벽"></a><a href="#flow" aria-label="5. 10·0·30"></a><a href="#privacy" aria-label="6. 학생 보호"></a><a href="#faq" aria-label="7. 분명한 역할"></a><a href="#closing" aria-label="8. 좋은 기록으로"></a></nav>
-  <div class="screen-counter" aria-hidden="true"><span id="current-screen">01</span><span class="counter-line"></span><span>08</span></div>
+  <nav class="screen-nav" aria-label="화면 이동"><a href="#hero" aria-label="1. 좋은 기록" aria-current="location"></a><a href="#evidence" aria-label="2. 기억과 근거"></a><a href="#growth" aria-label="3. 다음 시도"></a><a href="#barriers" aria-label="4. 기록의 장벽"></a><a href="#flow" aria-label="5. 10·0·30"></a><a href="#method-manual" aria-label="6. 기록 방법 1"></a><a href="#method-auto" aria-label="7. 기록 방법 2"></a><a href="#privacy" aria-label="8. 학생 보호"></a><a href="#faq" aria-label="9. 분명한 역할"></a><a href="#closing" aria-label="10. 좋은 기록으로"></a></nav>
+  <div class="screen-counter" aria-hidden="true"><span id="current-screen">01</span><span class="counter-line"></span><span>10</span></div>
   <div class="page-progress" aria-hidden="true"><span id="page-progress"></span></div>
 </body>
 </html>
