@@ -12,7 +12,7 @@
 | 구성 | 하는 일 | 설치 |
 | --- | --- | --- |
 | PC 앱 (Windows) | 명단·시간표·진도, 오늘·누가기록·초안·검토, AI 제공자, 녹음 설정 | `Nuga_<버전>_x64-setup.exe` |
-| 웹 데모 | PC 앱과 같은 화면 (브라우저 저장소) | https://dacisosl.github.io/NUGA/ |
+| 웹 데모 | PC 앱과 같은 화면 (브라우저 저장소). 소개 페이지 https://dacisosl.github.io/NUGA/ 에서 '앱 열기' | https://dacisosl.github.io/NUGA/app/ |
 | 폰 앱 (Android 8 이상) | 위젯·알림 1차 기록, 수업 녹음, 동기화 | `mobile-debug.apk` |
 | 워치 앱 (Wear OS, 선택) | 손목에서 [기록] → 번호 | `wear-debug.apk` |
 | 릴레이 서버 | 종단간 암호문만 24시간 중계 | `npm run relay` 또는 Docker |

@@ -1,6 +1,6 @@
 # 누가 — 생기부 누가기록 앱
 
-**웹 데모(GitHub Pages):** https://dacisosl.github.io/NUGA/ · **저장소:** https://github.com/dacisosl/NUGA · 설치 파일·APK는 `v*` 태그를 푸시하면 Actions가 빌드해 Releases에 올린다.
+**웹(GitHub Pages):** 소개 https://dacisosl.github.io/NUGA/ → 앱 https://dacisosl.github.io/NUGA/app/ · **저장소:** https://github.com/dacisosl/NUGA · 설치 파일·APK는 `v*` 태그를 푸시하면 Actions가 빌드해 Releases에 올린다.
 
 수업 중 워치·위젯으로 학생 행동을 10초 안에 기록하고, 수업 후 PC에서 1~2분 안에 보완하며, 학기 말에 그 기록을 근거로 세특 초안을 만들고 검토하는 앱.
 **구동안내서: [docs/GUIDE.md](docs/GUIDE.md)** · 기획서: [누가_앱_제작_기획서.md](누가_앱_제작_기획서.md) · 프로토콜: [docs/PROTOCOL.md](docs/PROTOCOL.md) · 디자인 토큰: [docs/DESIGN.md](docs/DESIGN.md) · 기획서 대비 개선점: [docs/UPGRADES.md](docs/UPGRADES.md)
@@ -12,6 +12,7 @@
 | `packages/core` | 공통 로직: 데이터 모델, AES-GCM 동기화 암호화, 시간표 판별, 검토 규칙(금지어·유사도·어체·글자수), 규칙 기반 초안 생성기, AI 요청 익명화, 엑셀 행 파서, 샘플 데이터 | TypeScript, vitest |
 | `apps/desktop` | PC 앱: 설정 마법사 · 1p 누가기록 · 보완 모달 · 2p 초안(개별 대화형/일괄) · 3p 검토 · 동기화 · 백업 · 엑셀/JSON | React + Vite, Tauri 2 (브라우저에서도 그대로 동작) |
 | `apps/relay` | E2E 릴레이 서버: 암호문만 24시간 보관, 롱폴링, 속도 제한, SQLite 옵션 | Node 24, 의존성 없음 |
+| `apps/landing` | 소개(랜딩) 페이지: GitHub Pages 첫 화면. '앱 열기'·'바로 시작하기'로 `/NUGA/app/` 에 들어간다 | HTML/CSS/JS, 빌드 없음 |
 | `android/mobile` | 폰 앱: 홈·번호 입력 시트·기록·설정, 4×2 위젯, QR 페어링, 워치 브리지, 수업 시작 알림 | Kotlin, Compose, Glance, Room, WorkManager |
 | `android/wear` | 워치 앱: 카테고리 2×2 → 번호 릴(베젤) → 저장 완료(취소 5초·음성 메모), 자동 실행 | Compose for Wear OS, Data Layer |
 | `tools/phone-sim.mjs` | 폰 없이 동기화 프로토콜을 검증하는 시뮬레이터 | Node |

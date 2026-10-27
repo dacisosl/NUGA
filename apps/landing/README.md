@@ -1,0 +1,31 @@
+# 누가 — 소개(랜딩) 페이지
+
+GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 그 아래 `app/`(https://dacisosl.github.io/NUGA/app/)에 있다.
+
+## 구성
+- index.html: 8개 화면의 내용과 구조
+- site.css: 반응형 레이아웃, 색상, 글꼴, 모션 스타일
+- site.js: 숫자 릴, 화면 이동, FAQ, 영상 및 마우스 반응, 앱으로 넘어가기
+- assets/growth-poster.png: 계단 메인 이미지
+- assets/growth-motion.mp4: 계단 빛 모션 영상
+
+## 앱으로 넘어가기
+- `data-app-link` 가 붙은 링크(머리글 '앱 열기', 첫 화면 '바로 시작하기', 마지막 화면 '누가 시작하기')는 모두 앱의 전체 주소(https://dacisosl.github.io/NUGA/app/)로 간다. 상대 경로가 아니라서 index.html 을 파일로 열어도 앱으로 이어진다.
+- 누르면 앱과 같은 남색(#081422)으로 0.38초 덮은 뒤 넘어간다. 앱도 같은 남색에서 시작하므로 흰 화면이 번쩍이지 않는다. 움직임 줄이기 설정이면 바로 넘어간다.
+- 링크에 마우스를 올리거나 초점이 가면 앱의 JS·CSS 를 미리 받아 둔다(데이터 절약 모드에서는 받지 않는다).
+- 뒤로 가기로 돌아오면 덮개를 걷는다.
+
+## 실행
+빌드나 npm 설치가 필요 없다. 이 폴더에서 정적 서버를 띄운다.
+
+    python -m http.server 8000
+
+그다음 http://localhost:8000 에 접속한다. index.html 을 파일로 바로 열어도 된다.
+앱으로 가는 버튼은 언제나 배포된 앱으로 간다.
+
+## 배포
+`.github/workflows/pages.yml` 이 main 에 푸시할 때마다 이 폴더의 index.html·site.css·site.js·assets 를 사이트 맨 위에, 데스크톱 웹 빌드(`VITE_BASE=/NUGA/app/`)를 `app/` 에 올린다.
+
+- 문구는 index.html, 디자인은 site.css, 동작은 site.js 에서 고친다.
+- 다른 주소로 배포할 때는 index.html 의 canonical 주소와 `data-app-link` 링크 세 곳의 앱 주소를 함께 바꾼다.
+- Pretendard 글꼴은 외부 CDN 에서 불러온다. 연결이 없으면 기본 시스템 글꼴로 보인다.

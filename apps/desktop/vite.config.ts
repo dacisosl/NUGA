@@ -5,7 +5,7 @@ import path from "node:path";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  // GitHub Pages 배포 시 VITE_BASE=/NUGA/ ; Tauri·로컬은 "/"
+  // GitHub Pages 배포 시 VITE_BASE=/NUGA/app/ (첫 화면 /NUGA/ 는 apps/landing) ; Tauri·로컬은 "/"
   base: process.env.VITE_BASE || "/",
   plugins: [react()],
   resolve: {
