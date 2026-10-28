@@ -77,12 +77,13 @@ function MIcon({ name, size = 24 }: { name: keyof typeof MI; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d={MI[name]} /></svg>;
 }
 
-export function MobilePage() {
+/** forcePhone: 웨일 사이드바 창. 터치가 아니어도 폰처럼 화면 가득, 알림 팝업 없이 큰 창의 미반영으로 보낸다 */
+export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
   const doc = useStore((s) => s.doc);
   const addRecord = useStore((s) => s.addRecord);
   const deleteRecord = useStore((s) => s.deleteRecord);
   const openInbox = useStore((s) => s.openInbox);
-  const phone = useIsPhone();
+  const phone = useIsPhone() || forcePhone;
   const [tick, setTick] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 15_000); return () => clearInterval(t); }, []);
   const now = useMemo(() => new Date(tick), [tick]);

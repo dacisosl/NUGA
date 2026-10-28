@@ -43,6 +43,16 @@ export async function startDemo(): Promise<DemoInfo> {
   if (arrivalModeOf(st.doc.settings) === "direct") st.update((d) => { d.settings.arrivalMode = "popup"; d.settings.supplementEnabled = true; });
   useStore.getState().loadSample();
   useStore.getState().setPage("today");
+  // 이전 데모 스크립트 정리
+  const prev = demoInfo();
+  if (prev) await useTranscripts.getState().remove(prev.transcriptId).catch(() => {});
+  const info = await addDemoTranscript();
+  setDemoInfo(info);
+  return info;
+}
+
+/** 지금 영역에 합성 모의 수업 스크립트를 넣고 추천 카드를 만든다 (데모 · 웨일 모드가 같이 쓴다) */
+export async function addDemoTranscript(): Promise<DemoInfo> {
   const { start, period } = demoSlot();
   const dur = demoLesson.durationSec;
   const id = uuid();
@@ -52,14 +62,9 @@ export async function startDemo(): Promise<DemoInfo> {
   });
   const ts = useTranscripts.getState();
   if (!ts.loaded) await ts.load();
-  // 이전 데모 스크립트 정리
-  const prev = demoInfo();
-  if (prev) await ts.remove(prev.transcriptId).catch(() => {});
   await ts.save(tr, useStore.getState().areaId);
   await runSuggestions(id);
-  const info = { transcriptId: id, class: tr.class, period, startedAt: tr.startedAt, durationSec: dur };
-  setDemoInfo(info);
-  return info;
+  return { transcriptId: id, class: tr.class, period, startedAt: tr.startedAt, durationSec: dur };
 }
 
 /** 데모 끝내기 (설정 → 데이터): 합성 모의 수업 스크립트를 지운다. 샘플 명단·기록은 그대로 */

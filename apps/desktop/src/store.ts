@@ -1,11 +1,12 @@
 import { create } from "zustand";
 import {
-  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc, migrateDoc, estimateAchievement, migrateStudent, clampScore, LEGACY_LEVEL_SCORE, lengthIn, presetLimitIn, schoolStyle, defaultGuideFor, checkAdherence,
+  emptyDoc, nowIso, uuid, classSortKey, lessonFor, makeSampleDoc, mergeRecords, migrateDoc, estimateAchievement, migrateStudent, clampScore, LEGACY_LEVEL_SCORE, lengthIn, presetLimitIn, schoolStyle, defaultGuideFor, checkAdherence,
   type Achievement, type Category, type Standard, type Draft, type NugaDoc, type NugaRecord, type Performance, type Settings, type Student, type SyncMessage, type Tombstone,
 } from "@nuga/core";
 import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
+import { PANEL, startParams } from "./lib/windows";
 
 /** 화면: 현황판(main) · 생기부 생성(draft, 검토 포함) · 설정 · 모바일 화면(기록). today·records·review 는 옛 이름(→ main / draft) */
 export type Page = "main" | "today" | "records" | "draft" | "review" | "settings" | "mobile";
@@ -135,6 +136,16 @@ interface State {
   resetAll(): void;
 }
 
+/**
+ * 같은 앱을 연 다른 창(웨일 사이드바 · 듀얼탭 · 다른 탭)과 저장을 맞춘다. 문서를 통째로 쓰므로,
+ * 저장할 때마다 알리고, 알림을 받은 창은 저장본을 다시 읽는다 (아직 안 쓴 변경이 있으면 기록을 합쳐 쓴다).
+ */
+const windowId = uuid();
+const docChannel: BroadcastChannel | null = typeof BroadcastChannel === "function" ? new BroadcastChannel("nuga-doc") : null;
+interface SavedMsg { type: "saved"; from: string; areaId: string; added: string[]; panel: boolean }
+/** 지난 저장 뒤 이 창에서 새로 만든 기록 (사이드바 기록이 큰 창의 미반영에 들어오게) */
+let addedSinceSave: string[] = [];
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSave: (() => Promise<void>) | null = null;
 function scheduleSave(doc: NugaDoc, outbox: Outbox) {
@@ -143,8 +154,10 @@ function scheduleSave(doc: NugaDoc, outbox: Outbox) {
   const g = pickGlobal(doc, lastGlobal); lastGlobal = g;
   pendingSave = async () => {
     pendingSave = null;
+    const added = addedSinceSave; addedSinceSave = [];
     const p = await getPersist();
     await writeAreaDoc(areaId, doc);
+    docChannel?.postMessage({ type: "saved", from: windowId, areaId, added, panel: PANEL } satisfies SavedMsg);
     await p.saveAux("outbox", outbox);
     await p.saveAux("global", g);
     // 영역 이름 = 영역 문서의 school.subject
@@ -159,6 +172,7 @@ function scheduleSave(doc: NugaDoc, outbox: Outbox) {
 }
 
 let toastSeq = 1;
+let initStarted = false;
 
 export const useStore = create<State>((set, get) => ({
   doc: emptyDoc(),
@@ -178,6 +192,8 @@ export const useStore = create<State>((set, get) => ({
   deviceId: "",
 
   async init() {
+    // 한 번만 (개발 모드의 StrictMode 는 effect 를 두 번 부른다: 두 번째가 듀얼탭 화면·웨일 모드 진입을 덮어쓰지 않게)
+    if (initStarted) return; initStarted = true;
     const p = await getPersist();
     let areas = (await p.loadAux<AreaMeta[]>("areas")) || [];
     let areaId = (await p.loadAux<string>("currentArea")) || DEFAULT_AREA;
@@ -206,7 +222,12 @@ export const useStore = create<State>((set, get) => ({
     let deviceId = (await p.loadAux<string>("deviceId")) || "";
     if (!deviceId) { deviceId = uuid(); await p.saveAux("deviceId", deviceId); }
     const classes = [...doc.settings.classes].sort((a, b) => classSortKey(a.class) - classSortKey(b.class));
-    set({ doc, loaded: true, outbox, deviceId, cls: classes[0]?.class || "", page: doc.settings.onboarded ? "main" : "settings" });
+    // 웨일 듀얼탭(?page=draft&cls=&no=)은 그 학생의 생기부 생성 화면으로 연다
+    const q = startParams(); const dual = q.get("page") === "draft" && doc.settings.onboarded;
+    const qCls = q.get("cls") || ""; const qNo = Number(q.get("no"));
+    const cls = dual && classes.some((c) => c.class === qCls) ? qCls : classes[0]?.class || "";
+    set({ doc, loaded: true, outbox, deviceId, cls, page: doc.settings.onboarded ? (dual ? "draft" : "main") : "settings",
+      ...(dual ? { mode2p: "individual" as const, selected: qNo ? { class: cls, no: qNo } : null } : {}) });
     if (movedKey) get().setSettings((x) => ({ ...x, ai: { ...x.ai, apiKey: "" } }));
   },
 
@@ -353,12 +374,14 @@ export const useStore = create<State>((set, get) => ({
   addRecord(r) {
     const now = nowIso();
     const rec: NugaRecord = { ...r, id: uuid(), createdAt: now, updatedAt: now };
+    addedSinceSave.push(rec.id);
     get().update((d) => { d.records.push(rec); });
     return rec;
   },
   addRecords(rs) {
     const now = nowIso();
     const recs: NugaRecord[] = rs.map((r) => ({ ...r, id: uuid(), createdAt: now, updatedAt: now }));
+    addedSinceSave.push(...recs.map((r) => r.id));
     if (recs.length) get().update((d) => { d.records.push(...recs); });
     return recs;
   },
@@ -467,6 +490,25 @@ export const useStore = create<State>((set, get) => ({
     scheduleSave(d, { messages: [], tombstones: [] });
   },
 }));
+
+docChannel?.addEventListener("message", (e: MessageEvent<SavedMsg>) => { void onOtherWindowSaved(e.data); });
+async function onOtherWindowSaved(m: SavedMsg) {
+  if (m?.type !== "saved" || m.from === windowId) return;
+  const st = useStore.getState();
+  if (!st.loaded || m.areaId !== (st.areaId || DEFAULT_AREA)) return;
+  const stored = await readAreaDoc(m.areaId);
+  if (!stored) return;
+  // 이 창에 아직 쓰지 않은 변경이 있으면 저쪽 기록을 합친 뒤 이 창이 쓴다. 없으면 저장본으로 바꾼다
+  if (pendingSave) st.update((d) => { d.records = mergeRecords(d.records, stored.records).records; });
+  else useStore.setState({ doc: stored });
+  // 사이드바(수업 중 번호만)에서 온 기록은 큰 창의 미반영에 쌓고 알린다. 정리는 쉬는 시간에
+  if (!m.panel || PANEL) return;
+  const doc = useStore.getState().doc;
+  const pending = m.added.filter((id) => doc.records.some((r) => r.id === id && r.status === "pending"));
+  if (!pending.length) return;
+  const names = pending.slice(0, 3).map((id) => { const r = doc.records.find((x) => x.id === id)!; return `${r.class} · ${r.no}번`; }).join(", ");
+  st.toast({ text: `사이드바 기록 ${pending.length}건 — ${names} · 미반영에 추가`, kind: "notice", ttl: 8000, action: { label: "처리하기", onClick: () => useStore.getState().openInbox({ records: pending }) } });
+}
 
 /* ---------- selectors / helpers ---------- */
 

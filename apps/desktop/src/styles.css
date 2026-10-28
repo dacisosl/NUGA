@@ -762,66 +762,66 @@ button.stag-name:hover { text-decoration-color: currentColor; }
    이 뒤에 더 센 .btn 규칙을 덧붙이거나 여기 속성을 다시 선언하지 말 것.
    밤 위에 열린 밝은 모달(.overlay, 예: 띠 안의 '새 영역')은 빼고, 알림 모달의 머리는 넣는다.
    ===================================================================== */
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .btn { height: 32px; background: transparent; border: 1px solid var(--btn2-line); color: var(--btn2-ink); box-shadow: none; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn:not(:where(.overlay *)):hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn:not(:where(.overlay *)):hover,
 :where(.modal.inbox .modal-h) .btn:hover { background: rgba(172,205,255,.08); border-color: var(--btn2-line-hover); color: var(--ink); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn:not(:where(.overlay *)) svg,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn:not(:where(.overlay *)) svg,
 :where(.modal.inbox .modal-h) .btn svg { color: currentColor; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.primary:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.primary:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .btn.primary { background: var(--btn-lt); border-color: var(--btn-lt); color: var(--btn-lt-ink); box-shadow: inset 0 1px 0 #fff, 0 8px 20px -10px rgb(var(--glow-rgb) / .55); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.primary:not(:where(.overlay *)):hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.primary:not(:where(.overlay *)):hover,
 :where(.modal.inbox .modal-h) .btn.primary:hover { background: var(--btn-lt-hover); }
 /* 기본 .btn.primary svg(흰색)가 더 세므로 밝은 주 버튼의 아이콘은 여기서 글자색으로 되돌린다 */
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.primary:not(:where(.overlay *)) svg,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.primary:not(:where(.overlay *)) svg,
 :where(.modal.inbox .modal-h) .btn.primary svg { color: currentColor; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.ghost:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.ghost:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .btn.ghost { border-color: transparent; background: transparent; color: var(--ink2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.ghost:not(:where(.overlay *)):hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.ghost:not(:where(.overlay *)):hover,
 :where(.modal.inbox .modal-h) .btn.ghost:hover { background: rgba(172,205,255,.08); color: var(--ink); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.warn-outline:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.warn-outline:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .btn.warn-outline { background: rgb(var(--warm-rgb) / .10); border-color: rgb(var(--warm-rgb) / .5); color: var(--amber-ink); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.warn-outline:not(:where(.overlay *)):hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.warn-outline:not(:where(.overlay *)):hover,
 :where(.modal.inbox .modal-h) .btn.warn-outline:hover { background: rgb(var(--warm-rgb) / .18); border-color: rgb(var(--warm-rgb) / .65); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .btn.warn-outline:not(:where(.overlay *)) b,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .btn.warn-outline:not(:where(.overlay *)) b,
 :where(.modal.inbox .modal-h) .btn.warn-outline b { color: var(--ink); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .muted:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .muted:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .muted { color: var(--ink2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .warn:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .warn:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .warn { color: var(--amber-ink); }
 /* 갈래 고르기 (개별|일괄|검토): 켜진 칸 = 랜딩의 밝은 주 버튼 */
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .seg:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .seg:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .seg { gap: 2px; padding: 2px; border: 0; border-radius: 7px; background: rgba(172,205,255,.05); box-shadow: inset 0 0 0 1px var(--dline-2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .seg:not(:where(.overlay *)) button,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .seg:not(:where(.overlay *)) button,
 :where(.modal.inbox .modal-h) .seg button { height: 28px; padding: 0 11px; border: 0; border-radius: 5px; background: transparent; color: var(--ink2); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: none; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .seg:not(:where(.overlay *)) button:hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .seg:not(:where(.overlay *)) button:hover,
 :where(.modal.inbox .modal-h) .seg button:hover { color: var(--ink); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .seg:not(:where(.overlay *)) button.active,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .seg:not(:where(.overlay *)) button.active,
 :where(.modal.inbox .modal-h) .seg button.active { background: var(--btn-lt); color: var(--btn-lt-ink); box-shadow: inset 0 1px 0 #fff; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .seg.seg-title:not(:where(.overlay *)) button,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .seg.seg-title:not(:where(.overlay *)) button,
 :where(.modal.inbox .modal-h) .seg.seg-title button { height: 32px; padding: 0 15px; font-size: 15px; font-weight: 650; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .switch:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .switch:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .switch { background: rgba(171,201,241,.22); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .switch.on:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .switch.on:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .switch.on { background: var(--sky); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .switch.on:not(:where(.overlay *))::after,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .switch.on:not(:where(.overlay *))::after,
 :where(.modal.inbox .modal-h) .switch.on::after { background: var(--navy-2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .chip.outline:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .chip.outline:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .chip.outline { background: transparent; border: 0; box-shadow: inset 0 0 0 1px var(--dline-3); color: var(--ink2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) :is(input:not([type=checkbox], [type=radio], [type=range]), select):not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) :is(input:not([type=checkbox], [type=radio], [type=range]), select):not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) :is(input:not([type=checkbox], [type=radio], [type=range]), select) { background-color: rgba(172,205,255,.06); border-color: var(--btn2-line); color: var(--ink); box-shadow: none; }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) :is(input, select):not(:where(.overlay *)):focus,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) :is(input, select):not(:where(.overlay *)):focus,
 :where(.modal.inbox .modal-h) :is(input, select):focus { border-color: var(--sky); box-shadow: 0 0 0 3px rgba(172,205,255,.18); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) :not(:where(.overlay *))::placeholder,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) :not(:where(.overlay *))::placeholder,
 :where(.modal.inbox .modal-h) ::placeholder { color: var(--ink3); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) :is(input[type=checkbox], input[type=radio]):not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) :is(input[type=checkbox], input[type=radio]):not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) :is(input[type=checkbox], input[type=radio]) { accent-color: var(--sky); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .x:not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .x:not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .x { color: var(--ink2); }
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .x:not(:where(.overlay *)):hover,
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .x:not(:where(.overlay *)):hover,
 :where(.modal.inbox .modal-h) .x:hover { background: rgba(172,205,255,.08); color: var(--ink); }
 /* 어두운 이름표가 밤에 가라앉지 않게 (방어) */
-:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark) .stag:is(.g3, .g4):not(:where(.overlay *)),
+:where(.topnav, .topbar, .sidebar, .ttbar, .ach-pop, .stairs-stage, .onb.hero-dark, .wt-dark) .stag:is(.g3, .g4):not(:where(.overlay *)),
 :where(.modal.inbox .modal-h) .stag:is(.g3, .g4) { box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 0 0 1px var(--g4-ring); }
 
 /* ---------- 전체 마감: 초점 · 스크롤바 · 선택 · 숫자 · 글자 ---------- */
@@ -986,6 +986,10 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 .topnav .btn { height: 34px; }
 .topnav .btn.active { background: rgba(172,205,255,.16); border-color: rgba(172,205,255,.45); color: #fff; box-shadow: inset 0 1px 0 rgba(234,242,255,.12); }
 .topnav .btn.active svg { color: var(--sky); }
+/* [웨일 연계]: 웨일 버전으로 가는 문. 점 셋은 웨일 버전의 로고 */
+.topnav .whale-btn .whale-dots { display: inline-flex; gap: 2px; margin-right: 2px; }
+.topnav .whale-btn .whale-dots b { width: 4px; height: 4px; border-radius: 50%; background: var(--sky); }
+.topnav .whale-btn .whale-dots b:nth-child(2) { opacity: .7; } .topnav .whale-btn .whale-dots b:nth-child(3) { opacity: .45; }
 
 /* 영역 알약: 밤 위의 유리. 켜진 영역 = 밝은 하늘빛 판 + 아래 빛줄 (띠에서 유일하게 빛나는 것).
    목록은 옆으로 넘치면 스크롤되므로(overflow) 빛·빛줄·초점 고리가 잘리지 않게 안쪽 여백을 두고 같은 만큼 바깥 여백을 당긴다 */

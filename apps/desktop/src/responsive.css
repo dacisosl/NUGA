@@ -88,6 +88,7 @@
   .topnav .sep { order: 2; }
   .topnav > .split-btn { order: 3; }
   .topnav > .btn:not(.icon) { order: 3; flex: 1 1 auto; justify-content: center; padding: 0 10px; }
+  .topnav > .btn.whale-btn { order: 1; flex: none; }   /* '웨일'은 첫 줄 모바일 화면 · 설정 옆에 작게 */
   .topnav .page-title { order: 4; font-size: 20px; }
 
   /* 내용 여백 */

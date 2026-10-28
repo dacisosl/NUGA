@@ -14,6 +14,9 @@ import { BulkRecordModal } from "./components/BulkRecordModal";
 import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
 import { saveFile } from "./lib/platform";
+import { PANEL, SUB_WINDOW, startParams } from "./lib/windows";
+import { enterWhale, useWhale } from "./lib/whale";
+import { WhaleTour } from "./components/WhaleTour";
 // 반응형은 맨 마지막: 화면별 스타일(계단·카드·폰 미리보기)을 좁은 화면에서 덮어쓴다
 import "./responsive.css";
 
@@ -26,7 +29,17 @@ export default function App() {
   const inbox = useStore((s) => s.inbox);
 
   useEffect(() => { init(); }, [init]);
-  useEffect(() => { if (loaded) { syncEngine.start(); return () => syncEngine.stop(); } }, [loaded]);
+  // 동기화(폰·워치)는 큰 창 하나만 돌린다. 웨일 사이드바 · 듀얼탭 창은 저장 알림으로 따라온다 (store.ts)
+  useEffect(() => { if (loaded && !SUB_WINDOW) { syncEngine.start(); return () => syncEngine.stop(); } }, [loaded]);
+  // 소개 페이지의 [웨일 연계](?whale=1)로 들어오면 바로 웨일 모드. 듀얼탭(?page=draft)은 store.init 이 연다
+  useEffect(() => {
+    if (!loaded) return;
+    const q = startParams();
+    if (q.get("whale") === "1" && !SUB_WINDOW) {
+      history.replaceState(null, "", location.pathname + location.hash);
+      void enterWhale(q.get("from") === "landing" ? "landing" : "app");
+    }
+  }, [loaded]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -38,6 +51,8 @@ export default function App() {
 
   // 불러오는 동안도 밤 장면: html 바탕(남색) → 밝은 종이 → 남색 틀로 번쩍이지 않게
   if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
+  // 웨일 사이드바(?panel=sidebar): 모바일 화면(번호 릴) 하나만, 폰처럼 화면 가득
+  if (PANEL) return <div className="app panel"><main className="main one" data-page="mobile"><MobilePage forcePhone /></main><Toasts /></div>;
   if (!onboarded) return <><Onboarding /><Toasts /></>;
 
   // 화면은 넷: 현황판(기본) · 생기부 생성(초안 + 검토) · 설정 · 모바일 화면(기록). 옛 이름은 현황판/생성으로 보낸다
@@ -51,6 +66,7 @@ export default function App() {
         {view === "settings" && <SettingsPage />}
         {view === "mobile" && <MobilePage />}
       </main>
+      <WhaleTour />
       <Toasts />
       {inbox && <InboxModal />}
     </div>
@@ -73,6 +89,15 @@ function TopNav({ view }: { view: Page }) {
   const openInbox = useStore((s) => s.openInbox);
   const title = PAGE_TITLE[view];
   const [bulk, setBulk] = useState(false);
+  const whale = useWhale((s) => s.on);
+  const whaleBusy = useWhale((s) => s.busy);
+  const toast = useStore((s) => s.toast);
+  // [웨일 연계]: 누르기 전까지는 이 앱 그대로. 누르면 데모 영역에서 웨일 모드 둘러보기 (선생님 영역은 그대로)
+  const openWhale = () => {
+    if (whale) { useWhale.setState({ min: false }); return; }
+    toast({ text: "웨일 모드를 준비하는 중 · 데모 영역을 따로 만들어요 (선생님 기록은 그대로)", ttl: 3000 });
+    void enterWhale("app");
+  };
   return (
     <header className="topnav">
       <button className="brand" onClick={() => setPage("main")} title="현황판으로">
@@ -92,6 +117,7 @@ function TopNav({ view }: { view: Page }) {
       <SaveMenu />
       <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부<span className="opt"> 생성</span></button>
       {bulk && <BulkRecordModal onClose={() => setBulk(false)} />}
+      <button className={`btn whale-btn ${whale ? "active" : ""}`} onClick={openWhale} disabled={whaleBusy} aria-pressed={whale} title="웨일 모드: 웨일 스페이스·웨일북·웨일 클래스와 이어 쓰는 하루를 데모로 둘러봅니다"><i className="whale-dots" aria-hidden="true"><b /><b /><b /></i>웨일<span className="opt"> 연계</span></button>
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
     </header>
   );
