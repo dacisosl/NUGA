@@ -187,10 +187,10 @@ export function StatusChip({ result }: { result: ReviewResult }) {
   return <span className={`chip ${result}`}><span aria-hidden>{icon}</span>{RESULT_LABEL[result]}</span>;
 }
 
-export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
+export function Switch({ on, onChange, label, disabled, title }: { on: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean; title?: string }) {
   return (
-    <label className="flex" style={{ cursor: "pointer" }}>
-      <button type="button" className={`switch ${on ? "on" : ""}`} onClick={() => onChange(!on)} aria-pressed={on} />
+    <label className="flex" style={{ cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : undefined }} title={title}>
+      <button type="button" className={`switch ${on ? "on" : ""}`} onClick={() => onChange(!on)} aria-pressed={on} disabled={disabled} />
       {label && <span>{label}</span>}
     </label>
   );

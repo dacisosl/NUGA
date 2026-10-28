@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ISSUE_LABEL, buildDraftRequest, countChars, schoolStyle, regenerationInstruction, fmtMD, lessonLabel, nowIso, reviewText, uuid, splitSentences, truncate,
-  type Draft, type DraftHistory, type DraftSentence, type NugaRecord, type Performance, type Student,
+  type Draft, type DraftHistory, type DraftMode, type DraftSentence, type NugaRecord, type Performance, type Student,
   growInstruction, lengthCeil, lengthFloor, lengthIn, lengthWindow, shrinkInstruction, trimDraftToLimit,
 } from "@nuga/core";
 import { ClassTabs, Sheet, TopBar, useClassStudents } from "../App";
 import { adherenceOf, standardsFor, achievementOf, catCounts, guideOf, draftOf, fillLesson, isLowRecord, lengthOfText, limitOf, perfsOf, recordsOf, reviewCtxOf, studentsOf, unitOf, useStore } from "../store";
 import { CatChip, Chip, Confirm, EditableCell, Empty, Icon, LenBar, Modal, StatusChip, StudentTag, Switch } from "../components/ui";
-import { aiErrorText, aiReady, generateDraft, labelDraft, type DraftProviderResult } from "../lib/ai";
+import { aiErrorText, aiReady, draftModeOf, generateDraft, labelDraft, type DraftProviderResult } from "../lib/ai";
 import { pickFile } from "../lib/platform";
 import { extractText, hasTextLayer, loadDocument, makeExcerpt, maskedThumb, scrubNames, suggestMasks, type DocPage, type ExtractProgress, type Rect } from "../lib/docOcr";
 import { MaskEditor } from "../components/MaskEditor";
@@ -18,7 +18,13 @@ import { ReviewPage } from "./ReviewPage";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
 
-interface Working { text: string; sentences: DraftSentence[]; history: DraftHistory[]; dirty: boolean; target?: number; /** 이 작업본의 학생 키 */ owner?: string }
+interface Working {
+  text: string; sentences: DraftSentence[]; history: DraftHistory[]; dirty: boolean; target?: number; /** 이 작업본의 학생 키 */ owner?: string;
+  /** 지금 보이는 초안의 생성 방식 (없으면 설정 기본값) */
+  mode?: DraftMode;
+  /** 'AI 생성' 스위치로 비교할 때 방식별로 보관해 둔 초안 (고친 내용 포함) */
+  alt?: Partial<Record<DraftMode, { text: string; sentences: DraftSentence[] }>>;
+}
 const workingCache = new Map<string, Working>();
 /** 내용이 있는 기록만 초안 근거로 쓴다 (보완 전 빈 기록 제외) */
 const hasText = (r: NugaRecord) => !!(r.note || r.memo || r.voiceMemo?.transcript || "").trim();
@@ -33,7 +39,7 @@ function useDraftReview(student: Student | null, text: string, sentences: DraftS
   }, [doc, student?.class, student?.no, text, sentences, targetOverride]);
 }
 
-async function runGenerate(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined) {
+async function runGenerate(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined, mode: DraftMode) {
   const { doc } = useStore.getState();
   const req = buildDraftRequest({
     achievement: achievementOf(doc, student).value, targetLength: w.target || limitOf(doc), lengthMode: doc.settings.lengthMode, lengthBand: doc.settings.lengthBand,
@@ -43,16 +49,16 @@ async function runGenerate(student: Student, records: NugaRecord[], perfs: Perfo
     records, performances: perfs, categories: doc.settings.categories,
     draft: w.text || undefined, history: w.history, instruction,
   });
-  return generateDraft(req, doc.settings.ai, { guide: guideOf(doc) });
+  return generateDraft(req, doc.settings.ai, { guide: guideOf(doc), mode });
 }
 
 /**
  * 생성 + 반영도 점검. AI 로 만들었고 반영도가 95% 미만이면 어긴 문장만 다시 쓰게 한다(최대 2회, 가장 좋은 결과).
  */
-async function generateChecked(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined) {
+async function generateChecked(student: Student, records: NugaRecord[], perfs: Performance[], w: Working, instruction: string | undefined, mode: DraftMode) {
   const { doc } = useStore.getState();
   const limit = w.target || limitOf(doc);
-  let res = await runGenerate(student, records, perfs, w, instruction);
+  let res = await runGenerate(student, records, perfs, w, instruction, mode);
   let rep = adherenceOf(doc, student, res.text, res.sentences, limit);
   const first = rep.score;
   let tries = 0;
@@ -61,7 +67,7 @@ async function generateChecked(student: Student, records: NugaRecord[], perfs: P
     if (!ask) break;
     tries++;
     try {
-      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, ask);
+      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, ask, mode);
       const nrep = adherenceOf(doc, student, next.text, next.sentences, limit);
       if (nrep.score >= rep.score) { res = next; rep = nrep; }
     } catch { break; }
@@ -95,7 +101,7 @@ async function fitLength(student: Student, records: NugaRecord[], perfs: Perform
   let why = "";
   for (let i = 0; i < 2 && lenOf(res.text) > ceil; i++) {
     try {
-      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, shrinkInstruction(lenOf(res.text), limit, mode, band));
+      const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, shrinkInstruction(lenOf(res.text), limit, mode, band), "ai");
       if (lenOf(next.text) < lenOf(res.text)) { res = next; steps.push("줄이기"); }
     } catch { break; }
   }
@@ -108,7 +114,7 @@ async function fitLength(student: Student, records: NugaRecord[], perfs: Perform
     if (!unused.length) why = "근거로 쓸 기록을 다 써서 목표보다 짧게 둠";
     else {
       try {
-        const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, growInstruction(lenOf(res.text), limit, mode, unused, band));
+        const next = await runGenerate(student, records, perfs, { ...w, text: res.text, history: [] }, growInstruction(lenOf(res.text), limit, mode, unused, band), "ai");
         const nl = lenOf(next.text);
         if (nl > lenOf(res.text) && nl <= ceil) { res = next; steps.push("늘리기"); }
         else if (nl > ceil) { const t = trimDraftToLimit(next, limit, mode, band, slack); if (lenOf(t.text) > lenOf(res.text)) { res = { ...next, ...t }; steps.push("늘리기"); } }
@@ -231,25 +237,45 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
   const len = lengthOfText(doc, w.text);
   const chars = countChars(w.text).withSpaces;
   const toggle = (id: string) => setChecked((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const aiOn = aiReady(doc.settings.ai);
+  /** 지금 방식: AI 가 준비되지 않았으면 언제나 로직 */
+  const mode: DraftMode = aiOn ? (w.mode ?? draftModeOf(doc.settings.ai)) : "rules";
 
-  const generate = async (instruction?: string) => {
+  /** as = 만들 방식, fresh = 지금 초안을 고치지 않고 같은 기록으로 처음부터 (스위치 비교용) */
+  const generate = async (instruction?: string, as: DraftMode = mode, fresh = false) => {
     if (!student || busy) return;
     const useRecs = recs.filter((r) => checked.has(r.id) && hasText(r));
     const usePerfs = perfs.filter((p) => checked.has(p.id));
     if (!useRecs.length && !usePerfs.length) { toast({ text: "체크된 기록이 없음" }); return; }
     setBusy(true); opts?.onGenerateStart?.();
-    const msg = instruction || (w.text ? "초안을 다시 만들어줘" : "체크한 기록으로 세특 만들어줘");
+    const msg = fresh ? `${as === "ai" ? "AI로" : "로직으로"} 같은 기록 초안 만들기 (비교)` :instruction || (w.text ? "초안을 다시 만들어줘" : "체크한 기록으로 세특 만들어줘");
     const history: DraftHistory[] = [...w.history, { role: "user", text: msg, at: nowIso() }];
     setW((x) => ({ ...x, history }));
     try {
-      const { res, rep, first, tries, fit } = await generateChecked(student, useRecs, usePerfs, { ...w, history: history.slice(0, -1) }, instruction);
+      const from: Working = fresh ? { ...w, text: "", sentences: [], history: [] } : { ...w, history: history.slice(0, -1) };
+      const { res, rep, first, tries, fit } = await generateChecked(student, useRecs, usePerfs, from, fresh ? undefined : instruction, as);
       const adh = `반영도 ${Math.round(rep.score * 100)}% (${rep.passed}/${rep.total})${tries ? ` · 어긴 문장 다시 쓰기 ${tries}회 (처음 ${Math.round(first * 100)}%)` : ""}${fit ? ` · ${fit}` : ""}`;
-      const base = res.provider === "rules" ? `규칙 기반으로 초안을 갱신함 (AI 꺼짐) · ${adh}` : `초안을 갱신함 (${res.model}) · ${adh}`;
+      const base = res.provider === "rules" ? `로직으로 초안을 갱신함 (AI 없이) · ${adh}` : `초안을 갱신함 (${res.model}) · ${adh}`;
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
-      setW((x) => ({ text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, target: x.target, owner: x.owner }));
+      setW((x) => ({ ...x, text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, mode: as }));
     } catch (e) {
       setW((x) => ({ ...x, history: [...history, { role: "assistant", text: `실패: ${aiErrorText(e)}`, at: nowIso() }] }));
     } finally { setBusy(false); setInput(""); }
+  };
+
+  /**
+   * 'AI 생성' 스위치: 지금 초안(고친 내용 포함)은 지금 방식 칸에 넣어 두고,
+   * 다른 방식 초안이 있으면 꺼내 보이고, 없으면 같은 체크 기록으로 새로 만든다. 두 초안을 오가며 비교한다
+   */
+  const switchMode = (m: DraftMode) => {
+    if (busy || m === mode || (m === "ai" && !aiOn)) return;
+    const alt: NonNullable<Working["alt"]> = { ...w.alt };
+    if (w.text) alt[mode] = { text: w.text, sentences: w.sentences };
+    const got = alt[m];
+    if (got) { setW((x) => ({ ...x, mode: m, alt, text: got.text, sentences: got.sentences, dirty: got.text !== (saved?.text || "") })); return; }
+    if (!w.text) { setW((x) => ({ ...x, mode: m, alt })); return; }
+    setW((x) => ({ ...x, mode: m, alt, text: "", sentences: [], dirty: false }));
+    generate(undefined, m, true);
   };
 
   const doSave = () => {
@@ -282,7 +308,13 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     finally { setLabeling(false); }
   };
 
-  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling };
+  return { doc, recs, perfs, saved, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode };
+}
+
+/** 생성 창의 'AI 생성' 스위치: 켜면 AI 초안, 끄면 로직(AI 없이) 초안 */
+function DraftModeSwitch({ mode, aiOn, busy, onChange }: { mode: DraftMode; aiOn: boolean; busy: boolean; onChange: (m: DraftMode) => void }) {
+  return <Switch on={mode === "ai"} onChange={(v) => onChange(v ? "ai" : "rules")} label="AI 생성" disabled={busy || !aiOn}
+    title={aiOn ? "켜면 AI 초안, 끄면 로직(AI 없이) 초안. 두 초안을 오가며 비교할 수 있습니다" : "AI가 꺼져 있거나 키가 없어 로직으로만 만듭니다 (설정 → AI)"} />;
 }
 
 const SUGGESTIONS = ["체크한 기록으로 세특 만들어줘", "협동 부분 줄이고 질문 쪽을 강조해줘", "더 간결하게 줄여줘", "마지막 문장 다시 써줘"];
@@ -303,10 +335,9 @@ function Individual() {
   const [addPerf, setAddPerf] = useState(false);
   const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
-  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
+  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
-  const aiOn = aiReady(doc.settings.ai);
 
   // 명단에서 ↑↓ 키로 학생 이동 (입력란에 포커스가 있을 때는 제외)
   useEffect(() => {
@@ -391,6 +422,7 @@ function Individual() {
               {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
               {w.dirty && <span className="muted small">저장 안 됨</span>}
               <span className="grow" />
+              <DraftModeSwitch mode={mode} aiOn={aiOn} busy={busy} onChange={switchMode} />
               {busy && <span className="spin" />}
               <button className="btn sm" disabled={!w.text} onClick={() => navigator.clipboard.writeText(w.text).then(() => toast({ text: "복사됨" }))}>복사</button>
               {/* 주 버튼은 한 화면에 하나: 초안이 없으면 '생성', 고친 뒤에는 '저장' */}
@@ -402,7 +434,7 @@ function Individual() {
                   {(view.split || view.highlight) && w.text && !editView
                     ? <DraftView className="draft dv-box" style={{ height: Math.max(90, dockH * 0.42) }} text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
                     : <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />}
-                  {busy && <DraftLoading n={usedN} again={!!w.text} ai={aiOn} />}
+                  {busy && <DraftLoading n={usedN} again={!!w.text} ai={mode === "ai"} />}
                 </div>
                 <div className="chatlog" ref={logRef}>
                   {w.history.length === 0 && <span className="muted small">아래 입력창에 요청을 쓰면 초안이 만들어집니다.</span>}
@@ -441,10 +473,9 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
   const student = students.find((s) => s.no === no) || null;
   const idx = students.findIndex((s) => s.no === no);
   const ws = useDraftWorkspace(student);
-  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling } = ws;
+  const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode } = ws;
   const view = useStore((s) => s.view);
   const [editView, setEditView] = useState(false);
-  const aiOn = aiReady(doc.settings.ai);
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, no]);
 
@@ -502,6 +533,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             {adherence && <AdherenceChip rep={adherence} />}
             {view.highlight && w.text && <SpanRatioBar text={w.text} sentences={w.sentences} />}
             <span className="grow" />
+            <DraftModeSwitch mode={mode} aiOn={aiOn} busy={busy} onChange={switchMode} />
             {view.highlight && w.text && <SpanLegend />}
             {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
             {busy && <span className="flex small muted"><span className="spin" />생성 중</span>}
@@ -510,7 +542,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             {(view.split || view.highlight) && w.text && !editView
               ? <DraftView className="dm-draft dv-box" text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
               : <textarea className="dm-draft" value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />}
-            {busy && <DraftLoading n={usedCount} again={!!w.text} ai={aiOn} />}
+            {busy && <DraftLoading n={usedCount} again={!!w.text} ai={mode === "ai"} />}
           </div>
           {issues.length > 0 && (
             <div className="dm-issues">
@@ -527,7 +559,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             <div className="suggest">{SUGGESTIONS.map((x) => <button key={x} className="chip outline clickable" onClick={() => generate(x)} disabled={busy}>{x}</button>)}</div>
             <div className="inputbar">
               <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={w.text ? "예: 두 번째 문장을 더 구체적으로" : "예: 체크한 기록으로 세특 만들어줘"} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && input.trim()) generate(input.trim()); }} disabled={busy} />
-              <button className={w.text ? "btn" : "btn primary"} disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "AI 수정" : "AI 생성"}</button>
+              <button className={w.text ? "btn" : "btn primary"} disabled={busy} onClick={() => generate(input.trim() || undefined)}>{`${mode === "ai" ? "AI" : "로직"} ${w.text ? "수정" : "생성"}`}</button>
             </div>
           </div>
         </div>
@@ -731,8 +763,8 @@ function Batch() {
     if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return true; }
     setState((x) => ({ ...x, [s.no]: { st: "running" } }));
     try {
-      const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined);
-      const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "규칙 기반 생성" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
+      const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined, draftModeOf(doc.settings.ai));
+      const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "로직 생성 (AI 없이)" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
       const others = d.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
       const review = reviewText(w.text, w.sentences, reviewCtxOf(d, s, target, recs.length, others));

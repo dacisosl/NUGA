@@ -217,7 +217,11 @@ export interface AiSettings {
   localUrl?: string;
   /** 단계형 생성: auto = 로컬 LLM 일 때만, on = 항상, off = 한 번에 생성 */
   pipeline?: "auto" | "on" | "off";
+  /** 초안 기본 생성 방식: ai(기본) = AI, rules = AI 없이 로직(규칙 기반). 생성 창 스위치로 바꿔 비교할 수 있다 */
+  draftMode?: DraftMode;
 }
+/** 초안 생성 방식: AI 또는 로직(규칙 기반, AI 없이) */
+export type DraftMode = "ai" | "rules";
 
 /** 폰·워치 기록 도착 처리 (Settings.arrivalMode) */
 export type ArrivalMode = "popup" | "queue" | "direct";

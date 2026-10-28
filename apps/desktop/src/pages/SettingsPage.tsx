@@ -806,6 +806,12 @@ function AiSection() {
                 </span>
                 <span className="muted small">단계형: 기록을 문장 슬롯에 나눠 한 문장씩 쓰고 이어 붙입니다. 작은 로컬 모델의 지시 준수가 좋아지지만 요청 횟수가 늘어납니다.</span>
               </div>
+              <div className="field"><label>초안 기본 생성 방식</label>
+                <span className="seg">
+                  {([["ai", "AI"], ["rules", "로직 (AI 없이)"]] as const).map(([k, l]) => <button key={k} className={(ai.draftMode ?? "ai") === k ? "active" : ""} onClick={() => up({ draftMode: k })}>{l}</button>)}
+                </span>
+                <span className="muted small">생성 창의 'AI 생성' 스위치로 AI 초안과 로직 초안을 오가며 비교할 수 있습니다. 일괄 생성은 이 방식을 따릅니다.</span>
+              </div>
               <div className="muted small">데이터가 가는 곳: {info.where}</div>
             </>
           )}

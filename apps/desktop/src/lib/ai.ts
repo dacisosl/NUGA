@@ -5,16 +5,16 @@ import {
   SUGGEST_JSON_SCHEMA, SUGGEST_SYSTEM_PROMPT, parseSuggestResponse, ruleSuggestions, scrubTranscriptNames, suggestUserPrompt, topicKeywords,
   type CategoryDef, type Suggestion, type Transcript,
   DRAFT_JSON_SCHEMA, DRAFT_JSON_SCHEMA_LITE, DraftFormatError, LLMError, LABEL_JSON_SCHEMA, LABEL_SYSTEM_PROMPT, PROVIDER_INFO, generateLocalDraft, labelUserPrompt, parseDraftResponse, parseLabelResponse, systemPrompt, userPrompt,
-  type AiProvider, type AiSettings, type DraftRequest, type DraftResponse, type DraftSpan,
+  type AiProvider, type AiSettings, type DraftMode, type DraftRequest, type DraftResponse, type DraftSpan,
 } from "@nuga/core";
 import { generateJson, providerFor } from "./providers";
 
 /** provider "rules" = AI 없이 규칙 기반 생성기 */
 export interface DraftProviderResult extends DraftResponse { provider: AiProvider | "rules"; model?: string }
 
-/** 초안 생성. AI 가 꺼져 있거나 키가 없으면 규칙 기반 생성기로 동작. 요청 본문에는 반·번호·이름이 없다. */
-export async function generateDraft(req: DraftRequest, ai: AiSettings, opts?: { guide?: string; signal?: AbortSignal }): Promise<DraftProviderResult> {
-  const prov = providerFor(ai);
+/** 초안 생성. AI 가 꺼져 있거나 키가 없거나 mode 가 rules 면 규칙 기반 생성기(로직)로 동작. 요청 본문에는 반·번호·이름이 없다. */
+export async function generateDraft(req: DraftRequest, ai: AiSettings, opts?: { guide?: string; signal?: AbortSignal; mode?: DraftMode }): Promise<DraftProviderResult> {
+  const prov = opts?.mode === "rules" ? null : providerFor(ai);
   if (!prov) return { ...generateLocalDraft(req), provider: "rules" };
   const staged = ai.pipeline === "on" || ((ai.pipeline ?? "auto") === "auto" && prov.id === "local");
   // 수정 요청(대화)은 한 번에 처리하고, 새로 만들 때만 단계형으로 쓴다
@@ -103,6 +103,8 @@ export function previewPayload(req: DraftRequest, guide?: string): string {
 }
 
 export function aiReady(ai: AiSettings): boolean { return !!providerFor(ai); }
+/** 초안 기본 생성 방식. AI 가 준비되지 않았으면 언제나 로직 */
+export function draftModeOf(ai: AiSettings): DraftMode { return aiReady(ai) && ai.draftMode !== "rules" ? "ai" : "rules"; }
 
 /** 지금 쓰는 제공자 이름 (화면 표시용) */
 export function aiLabel(ai: AiSettings): string {
