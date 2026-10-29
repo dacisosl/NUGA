@@ -4,7 +4,7 @@ const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
 let motionAllowed=!reduced.matches;
 let heroVisible=true;
 // Recording-method films play only on their own screen (and only with motion allowed, unless the visitor asks), lighting the step under the playhead.
-const methods=[...document.querySelectorAll('.method')].map(screen=>({screen,player:screen.querySelector('video'),toggle:screen.querySelector('.method-play'),items:[...screen.querySelectorAll('.method-steps li')],chosen:false,userPaused:false}));
+const methods=[...document.querySelectorAll('.method:not(.whale)')].map(screen=>({screen,player:screen.querySelector('video'),toggle:screen.querySelector('.method-play'),items:[...screen.querySelectorAll('.method-steps li')],chosen:false,userPaused:false}));
 let methodTimer=0;
 function syncMethods(){
   clearTimeout(methodTimer);
@@ -35,11 +35,46 @@ methods.forEach(m=>{
   m.toggle.addEventListener('click',()=>{if(m.player.paused)start();else{m.userPaused=true;m.player.pause()}});
   label();mark();
 });
+// Whale screen: real app stills step through the day like the method films, on a timer only while the screen is in view.
+// Hovering or focusing the stills or steps holds the current one (each separately); the button stops or starts the timer for this visit.
+const whale=document.querySelector('#whale');
+const whaleShow=whale&&(()=>{
+  const shots=[...whale.querySelectorAll('.whale-shots img')],items=[...whale.querySelectorAll('.method-steps li')],toggle=whale.querySelector('.whale-play'),DWELL=5200;
+  const s={cur:0,timer:0,chosen:false,userPaused:false,hover:false,focus:false};
+  const held=()=>s.hover||s.focus;
+  const allowed=()=>motionAllowed||s.chosen;
+  const running=()=>whale.classList.contains('is-active')&&allowed()&&!s.userPaused&&!held()&&!document.hidden;
+  // 'On' = advancing, or only held for a moment by hover/focus. The button and its label share this one rule.
+  const on=()=>running()||(held()&&!s.userPaused&&allowed());
+  const label=()=>{toggle.textContent=on()?'자동 넘김 멈춤':'자동 넘김';toggle.classList.toggle('is-paused',!on())};
+  const bar=(i,fill,ms=0)=>{const el=items[i].querySelector('i');el.style.transition=ms?`transform ${ms}ms linear`:'none';el.style.transform=`scaleX(${fill})`};
+  function schedule(){
+    clearTimeout(s.timer);bar(s.cur,0);
+    if(running()){void items[s.cur].offsetWidth;bar(s.cur,1,DWELL);s.timer=setTimeout(()=>show(s.cur+1),DWELL)}
+    label();
+  }
+  function show(i){
+    s.cur=(i+shots.length)%shots.length;
+    shots.forEach((img,k)=>img.classList.toggle('is-on',k===s.cur));
+    items.forEach((li,k)=>{const now=k===s.cur,b=li.querySelector('button');li.classList.toggle('is-current',now);if(now)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');bar(k,0)});
+    schedule();
+  }
+  // Choosing a step only shows it; with motion off, only the button opts into auto-advance.
+  items.forEach((li,k)=>li.querySelector('button').addEventListener('click',()=>show(k)));
+  toggle.addEventListener('click',()=>{if(on())s.userPaused=true;else{s.userPaused=false;s.chosen=true}schedule()});
+  for(const area of [whale.querySelector('.whale-shots'),whale.querySelector('.method-steps')]){
+    area.addEventListener('pointerenter',()=>{s.hover=true;schedule()});area.addEventListener('pointerleave',()=>{s.hover=false;schedule()});
+    area.addEventListener('focusin',()=>{s.focus=true;schedule()});area.addEventListener('focusout',e=>{if(!area.contains(e.relatedTarget)){s.focus=false;schedule()}});
+  }
+  // Leaving the screen resets the visit: the next visit starts playing again (unless motion is off).
+  return ()=>{if(!whale.classList.contains('is-active')){s.userPaused=false;s.chosen=false;s.hover=false;s.focus=false}schedule()};
+})();
 function syncMotion(){
   if(motionAllowed && heroVisible && !document.hidden) video.play().catch(error=>{if(error.name==='AbortError')return;motionAllowed=false;updateMotionButton()});
   else video.pause();
   updateMotionButton();
   syncMethods();
+  whaleShow?.();
 }
 function updateMotionButton(){motionButton.textContent=motionAllowed?'모션 일시정지':'모션 재생';motionButton.setAttribute('aria-pressed',String(motionAllowed))}
 motionButton.addEventListener('click',()=>{motionAllowed=!motionAllowed;syncMotion()});

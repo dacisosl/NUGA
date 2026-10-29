@@ -26,10 +26,12 @@ interface WhaleState {
   picked: Record<number, string>;
   /** 장면 3: 웨일 클래스 응답 → 보낸 기록 id 또는 넘김 */
   quiz: Record<number, string>;
-  /** 장면 4: 피드백 고리 */
-  phone: Phone; acceptedAt: string | null; detailOpen: boolean;
+  /** 장면 4: 피드백 고리. card = 보낸 순간의 카드 (그 뒤 기록이 늘어도 학생이 받은 카드는 그대로) */
+  phone: Phone; acceptedAt: string | null; detailOpen: boolean; card: FeedbackCard | null;
 }
-const fresh = { step: 0, min: false, picked: {}, quiz: {}, phone: "idle" as Phone, acceptedAt: null, detailOpen: false };
+const fresh = { step: 0, min: false, picked: {}, quiz: {}, phone: "idle" as Phone, acceptedAt: null, detailOpen: false, card: null };
+/** 장면 4·5의 카드: 보냈으면 보낸 카드, 아니면 지금 기록으로 */
+export function currentCard(doc: NugaDoc, cls: string): FeedbackCard | null { return useWhale.getState().card || feedbackCard(doc, cls); }
 export const useWhale = create<WhaleState>(() => ({ on: false, busy: false, ...fresh }));
 
 /** 웨일 모드 켜기: 데모 영역(화학Ⅰ 2개 반 합성 기록 + 합성 모의 수업 추천)을 새로 만들어 연다 */
@@ -85,7 +87,7 @@ const hasNote = (r: NugaRecord) => !!(r.note || "").trim();
 /** 학생용 문장: "~함" → "~한 점이 좋았어요." */
 export function toStudentSentence(note: string): string {
   const t = note.trim().replace(/[.。\s]+$/, ""); if (!t) return "";
-  const rules: [RegExp, string][] = [[/찾음$/, "찾아낸"], [/도움$/, "도운"], [/보임$/, "보여 준"], [/냄$/, "낸"], [/줌$/, "준"], [/씀$/, "쓴"], [/맡음$/, "맡은"], [/챙김$/, "챙긴"], [/고침$/, "고친"], [/함$/, "한"]];
+  const rules: [RegExp, string][] = [[/찾음$/, "찾아낸"], [/도움$/, "도운"], [/보임$/, "보여 준"], [/냄$/, "낸"], [/줌$/, "준"], [/씀$/, "쓴"], [/맡음$/, "맡은"], [/챙김$/, "챙긴"], [/고침$/, "고친"], [/옴$/, "온"], [/함$/, "한"], [/(질문|설명|발표|담당|조율|주도|정리|공유|수행)$/, "$1한"]];
   for (const [re, rep] of rules) if (re.test(t)) return `${t.replace(re, rep)} 점이 좋았어요.`;
   return `${t} 장면이 좋았어요.`;
 }

@@ -3,7 +3,8 @@ import { CATEGORY_NONE, lessonFor, nowIso, resolveNow } from "@nuga/core";
 import { studentName, studentsOf, useStore } from "../store";
 import { StudentDetail } from "../pages/RecordsPage";
 import { IS_WHALE, SUB_WINDOW, draftTabUrl, openWhaleSidebar } from "../lib/windows";
-import { WHALE_AREA, exitWhale, feedbackCard, useWhale, whaleFrom } from "../lib/whale";
+import { WHALE_AREA, currentCard, exitWhale, feedbackCard, useWhale, whaleFrom } from "../lib/whale";
+import whaleLogo from "../assets/whale-logo.png";
 import "./whale.css";
 
 /**
@@ -148,20 +149,21 @@ function SceneClass() {
 function SceneFeedback() {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
-  const { phone, acceptedAt } = useWhale();
-  const card = useMemo(() => feedbackCard(doc, cls), [doc.records, cls]);
+  const { phone, acceptedAt, card: sent } = useWhale();
+  const live = useMemo(() => feedbackCard(doc, cls), [doc.records, cls]);
+  const card = sent || live;
   if (!card) return <div className="wt-sub">이 반에 피드백 카드를 만들 기록이 없어요.</div>;
-  const name = studentName(doc, cls, card.no);
-  const closed = !!acceptedAt && doc.records.some((r) => r.class === cls && r.no === card.no && r.createdAt >= acceptedAt && r.status === "confirmed");
+  const name = studentName(doc, card.cls, card.no);
+  const closed = !!acceptedAt && doc.records.some((r) => r.class === card.cls && r.no === card.no && r.createdAt >= acceptedAt && r.status === "confirmed");
   const stage = phone === "idle" ? 0 : phone === "sent" ? 1 : closed ? 3 : 2;
   const body = <><div className="good">{card.good}</div><div className="next"><b>다음 도전</b> {card.next}</div></>;
   return (
     <>
       <ol className="wt-loop" aria-label="피드백 고리">{["피드백", "도전", "관찰", "기록"].map((t, i) => <li key={t} className={i <= stage ? "on" : ""}>{t}</li>)}</ol>
       {phone === "idle" ? (
-        <Frame title={`${cls} · ${card.no}번 ${name} 피드백 카드`}>
+        <Frame title={`${card.cls} · ${card.no}번 ${name} 피드백 카드`}>
           <div className="wt-card">{body}</div>
-          <button className="btn primary" onClick={() => useWhale.setState({ phone: "sent" })}>학생 웨일로 보내기</button>
+          <button className="btn primary" onClick={() => useWhale.setState({ phone: "sent", card })}>학생 웨일로 보내기</button>
         </Frame>
       ) : (
         <Frame title="학생의 웨일 (폰)">
@@ -198,8 +200,8 @@ function SceneDraft() {
         </div>
       </Frame>
       {IS_WHALE && sel
-        ? <Real text="생기부 생성 화면을 지금 탭 옆 듀얼탭으로 열어요."><a className="btn sm" href={draftTabUrl(sel.class, sel.no)} rel="whale-dualtab">듀얼탭으로 열기</a></Real>
-        : <Real text="웨일 브라우저에서는 이 화면을 업무포털 탭 옆 듀얼탭으로 바로 열 수 있어요." />}
+        ? <Real text="생기부 생성 화면을 듀얼탭으로 열어요. 옆 칸에 업무포털(나이스)을 띄워 나란히 써요."><a className="btn sm" href={draftTabUrl(sel.class, sel.no)} rel="whale-dualtab">듀얼탭으로 열기</a></Real>
+        : <Real text="웨일 브라우저에서는 이 화면을 듀얼탭으로 열어, 옆 칸에 업무포털(나이스)을 띄워 나란히 쓸 수 있어요." />}
     </>
   );
 }
@@ -214,7 +216,7 @@ function SceneScale() {
       </div>
       <div className="wt-honest">
         <div><b>지금 실제로 되는 것</b><ul><li>누가의 모든 기능 (데모 · 실사용)</li><li>웨일 사이드바 · 듀얼탭으로 열기</li></ul></div>
-        <div><b>연계에 필요한 것</b><ul><li>웨일 스페이스 로그인 연동 승인 (App Console)</li><li>웨일북 수업관리 · 웨일 클래스 연동 (웨일 측 협의)</li></ul></div>
+        <div><b>연계에 필요한 것</b><ul><li>웨일 스페이스 로그인 연동 승인 (App Console)</li><li>웨일북 수업관리 · 웨일 클래스 연동 (웨일 측 협의)</li><li>학생 웨일로 피드백 카드 보내기 (웨일 측 협의)</li></ul></div>
       </div>
     </>
   );
@@ -239,11 +241,11 @@ const SCENES: Scene[] = [
     why: "피드백이 전달로 끝나지 않고 다음 관찰을 불러요. 피드백 → 도전 → 관찰 → 기록이 한 바퀴 돌아요.",
     enter() { st().setPage("main"); } },
   { when: "학기 말", title: "생기부는 나이스 옆 듀얼탭에서", Body: SceneDraft,
-    lead: "업무포털 나이스 탭 옆 듀얼탭에 누가 생기부 생성 화면을 띄워요. 한 학기 동안 쌓인 근거로 초안을 만들고 검토한 뒤 복사해 붙여 넣어요.",
+    lead: "누가 생기부 생성 화면을 듀얼탭으로 열고 옆 칸에 업무포털 나이스를 띄워요. 한 학기 동안 쌓인 근거로 초안을 만들고 검토한 뒤 복사해 붙여 넣어요.",
     why: "학기 말 몰아 쓰기가 아니라 쌓인 근거를 옆에 두고 써요. 최종 작성은 선생님이 해요.",
     enter() {
-      const s = st(); const card = feedbackCard(s.doc, s.cls);
-      if (card) s.select({ class: card.cls, no: card.no });
+      const s = st(); const card = currentCard(s.doc, s.cls);
+      if (card) { s.setClass(card.cls); s.select({ class: card.cls, no: card.no }); }
       s.setMode2p("individual"); s.setPage("draft");
     } },
   { when: "학교 전체", title: "관리자 정책 한 번, AI는 교사 인증으로", Body: SceneScale,
@@ -267,16 +269,16 @@ export function WhaleTour() {
   if (!on || SUB_WINDOW) return null;
   const sc = SCENES[step];
   const go = (i: number) => { const n = Math.max(0, Math.min(SCENES.length - 1, i)); useWhale.setState({ step: n }); SCENES[n].enter(); };
-  const card = step === 3 ? feedbackCard(doc, useStore.getState().cls) : null;
+  const card = step === 3 ? currentCard(doc, useStore.getState().cls) : null;
   const detailStudent = card ? doc.students.find((s) => s.class === card.cls && s.no === card.no) : undefined;
   const back = FROM[whaleFrom() || ""];
-  if (min) return <button className="wt-pill" onClick={() => useWhale.setState({ min: false })}><i className="wt-dots" aria-hidden><b /><b /><b /></i>웨일 연계 {step + 1}/{SCENES.length} · {sc.title}</button>;
+  if (min) return <button className="wt-pill" onClick={() => useWhale.setState({ min: false })}><img className="wt-logo" src={whaleLogo} alt="" />웨일 연계 {step + 1}/{SCENES.length} · {sc.title}</button>;
   // 학생 기록 창(모달)은 칸 밖에 그린다: 칸의 흐림(backdrop-filter)이 모달 덮개를 칸 안에 가두지 않게
   return (
     <>
     <aside className="whale-tour" aria-label="웨일 연계 둘러보기">
       <div className="wt-h wt-dark">
-        <i className="wt-dots" aria-hidden><b /><b /><b /></i>
+        <img className="wt-logo" src={whaleLogo} alt="" />
         <b className="grow">웨일 스페이스와 함께 쓰는 하루</b>
         {back && <a className="btn ghost sm" href={back.href}>← {back.label}</a>}
         <button className="btn ghost sm icon" onClick={() => useWhale.setState({ min: true })} aria-label="접기" title="접기">–</button>

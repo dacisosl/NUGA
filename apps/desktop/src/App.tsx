@@ -17,6 +17,7 @@ import { saveFile } from "./lib/platform";
 import { PANEL, SUB_WINDOW, startParams } from "./lib/windows";
 import { enterWhale, useWhale } from "./lib/whale";
 import { WhaleTour } from "./components/WhaleTour";
+import whaleLogo from "./assets/whale-logo.png";
 // 반응형은 맨 마지막: 화면별 스타일(계단·카드·폰 미리보기)을 좁은 화면에서 덮어쓴다
 import "./responsive.css";
 
@@ -117,7 +118,7 @@ function TopNav({ view }: { view: Page }) {
       <SaveMenu />
       <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부<span className="opt"> 생성</span></button>
       {bulk && <BulkRecordModal onClose={() => setBulk(false)} />}
-      <button className={`btn whale-btn ${whale ? "active" : ""}`} onClick={openWhale} disabled={whaleBusy} aria-pressed={whale} title="웨일 모드: 웨일 스페이스·웨일북·웨일 클래스와 이어 쓰는 하루를 데모로 둘러봅니다"><i className="whale-dots" aria-hidden="true"><b /><b /><b /></i>웨일<span className="opt"> 연계</span></button>
+      <button className={`btn whale-btn ${whale ? "active" : ""}`} onClick={openWhale} disabled={whaleBusy} aria-pressed={whale} title="웨일 모드: 웨일 스페이스·웨일북·웨일 클래스와 이어 쓰는 하루를 데모로 둘러봅니다"><img src={whaleLogo} alt="" /><span>웨일 연계</span></button>
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
     </header>
   );
