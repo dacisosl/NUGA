@@ -28,6 +28,8 @@ interface Working {
 const workingCache = new Map<string, Working>();
 /** 내용이 있는 기록만 초안 근거로 쓴다 (보완 전 빈 기록 제외) */
 const hasText = (r: NugaRecord) => !!(r.note || r.memo || r.voiceMemo?.transcript || "").trim();
+/** 근거로 쓸 기록: 건너뜀이 아니고 내용이 있다. 추천(녹음 발언 · 웨일 클래스 응답 · 팀보드 노트)은 학생 말을 옮긴 것이라 선생님 한 줄이 있어야 근거 */
+const usable = (r: NugaRecord) => r.status !== "skipped" && hasText(r) && !(r.source === "suggestion" && !(r.note || "").trim());
 const keyOf = (s: Student) => `${s.class}-${s.no}`;
 
 function useDraftReview(student: Student | null, text: string, sentences: DraftSentence[] | null, targetOverride?: number) {
@@ -225,7 +227,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
     const cached = workingCache.get(k);
     setW(cached ? { ...cached, owner: k } : { text: saved?.text || "", sentences: saved?.sentences || [], history: saved?.history || [], dirty: false, target: saved?.targetLength, owner: k });
     const evid = new Set(saved?.evidence || []);
-    setChecked(new Set([...recs.filter((r) => r.status !== "skipped" && hasText(r) && (evid.size ? evid.has(r.id) : true)).map((r) => r.id), ...perfs.filter((p) => (evid.size ? evid.has(p.id) : true)).map((p) => p.id)]));
+    setChecked(new Set([...recs.filter((r) => usable(r) && (evid.size ? evid.has(r.id) : true)).map((r) => r.id), ...perfs.filter((p) => (evid.size ? evid.has(p.id) : true)).map((p) => p.id)]));
     setInput("");
   }, [student?.class, student?.no]);
   // 학생이 바뀌는 렌더에서는 w 가 아직 이전 학생 것이므로 주인이 같을 때만 기록한다
@@ -756,7 +758,7 @@ function Batch() {
   useEffect(() => { setSel(new Set()); setState({}); }, [cls]);
 
   const runOne = async (s: Student) => {
-    const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r)).filter((r) => r.status !== "skipped" && hasText(r));
+    const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r)).filter(usable);
     const perfs = perfsOf(doc, s.class, s.no);
     const prev = draftOf(useStore.getState().doc, s.class, s.no);
     if (prev?.text && !overwrite) { setState((x) => ({ ...x, [s.no]: { st: "done", msg: "기존 유지" } })); return true; }

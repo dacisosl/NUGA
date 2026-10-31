@@ -16,5 +16,10 @@ export function startParams(): URLSearchParams { return q; }
 export function appBase(): string { return location.href.split("#")[0].split("?")[0]; }
 /** 웨일 사이드바에 모바일 화면을 띄운다 (웨일 2.0 이상: window.open 의 'whale-sidebar') */
 export function openWhaleSidebar(): void { window.open(`${appBase()}?panel=sidebar`, "_blank", "whale-sidebar"); }
+/** 웨일이 아닌 브라우저: 같은 사이드바 화면을 사이드바 폭(408px)의 작은 창으로 열어 본다 (데스크톱 앱은 새 창을 열지 않으므로 쓰지 않는다) */
+let sidePreview: Window | null = null;
+export function openSidePreview(): void { sidePreview = window.open(`${appBase()}?panel=sidebar`, "nuga-side", "popup,width=408,height=760"); }
+/** 웨일 모드를 끝내면 작은 창도 닫는다: 지운 데모 영역에 저장하지 않게 */
+export function closeSidePreview(): void { if (sidePreview && !sidePreview.closed) sidePreview.close(); sidePreview = null; }
 /** 듀얼탭으로 열 생기부 생성 화면 주소 (a rel="whale-dualtab") */
 export function draftTabUrl(cls: string, no: number): string { return `${appBase()}?page=draft&cls=${encodeURIComponent(cls)}&no=${no}`; }

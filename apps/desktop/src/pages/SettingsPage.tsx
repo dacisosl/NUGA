@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, toB64, toExportJson,
+  WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, isSchoolRoster, toB64, toExportJson,
   LEGACY_LEVEL_SCORE, LENGTH_PRESET, lengthSlack, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
   type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
 } from "@nuga/core";
@@ -135,18 +135,33 @@ export function RosterSection() {
   const editStudent = useStore((s) => s.editStudent);
   const setSettings = useStore((s) => s.setSettings);
   const toast = useStore((s) => s.toast);
+  const appCls = useStore((s) => s.cls);
   const classes = classList(doc);
-  const [cls, setCls] = useState(classes[0] || "");
+  const [cls, setCls] = useState(classes.includes(appCls) ? appCls : classes[0] || "");
   const [paste, setPaste] = useState(false);
   const [newClass, setNewClass] = useState("");
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   useEffect(() => { if (!classes.includes(cls)) setCls(classes[0] || ""); }, [classes.join(",")]);
+  // 앱에서 반을 일부러 바꾸면(웨일 둘러보기가 가져온 반을 열 때 등) 명단도 그 반을 연다.
+  // 반이 없던 상태에서 첫 반으로 저절로 잡히는 것은 따르지 않는다 (방금 추가한 반을 보고 있을 수 있다)
+  const prevAppCls = useRef(appCls);
+  useEffect(() => {
+    const prev = prevAppCls.current; prevAppCls.current = appCls;
+    if (prev && prev !== appCls && classes.includes(appCls)) setCls(appCls);
+  }, [appCls]);
   const list = doc.students.filter((s) => s.class === cls).sort((a, b) => a.no - b.no);
 
   const importExcel = async () => {
     const [f] = await pickFile(".xlsx,.xls,.csv"); if (!f) return;
     const rows = await readSheetRows(f, true);
-    const st = studentsFromRows(rows, cls);
+    let st = studentsFromRows(rows, cls);
+    // 학교 전체 명단(웨일 스페이스 관리자 파일 등)은 고른 반만: 다른 반 학생 이름은 이 PC에 두지 않는다
+    if (isSchoolRoster(rows)) {
+      st = st.filter((s) => s.class === cls);
+      if (!st.length) { toast({ text: `이 파일에 ${cls} 학생이 없음 (학교 전체 명단은 고른 반만 가져와요)` }); return; }
+      const dup = st.find((s, i) => st.findIndex((x) => x.no === s.no) !== i);
+      if (dup) { toast({ text: `${cls} ${dup.no}번이 여러 명이라 가져오지 않음 (파일의 번호 · 조직 경로를 확인해 주세요)` }); return; }
+    }
     if (!st.length) { toast({ text: "학생을 찾지 못함 (열: 반·번호·이름 또는 학번·이름)" }); return; }
     const others = doc.students.filter((s) => !st.some((n) => n.class === s.class && n.no === s.no));
     setStudents([...others, ...st].sort((a, b) => classSortKey(a.class) - classSortKey(b.class) || a.no - b.no));

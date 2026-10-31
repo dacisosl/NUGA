@@ -1,37 +1,37 @@
 import React, { useEffect, useMemo } from "react";
-import { CATEGORY_NONE, lessonFor, nowIso, resolveNow } from "@nuga/core";
+import { CATEGORY_NONE, lessonFor, nowIso, type Category, type NugaDoc } from "@nuga/core";
 import { studentName, studentsOf, useStore } from "../store";
 import { StudentDetail } from "../pages/RecordsPage";
-import { IS_WHALE, SUB_WINDOW, draftTabUrl, openWhaleSidebar } from "../lib/windows";
-import { WHALE_AREA, currentCard, exitWhale, feedbackCard, useWhale, whaleFrom } from "../lib/whale";
+import { IS_WHALE, SUB_WINDOW, draftTabUrl, openSidePreview, openWhaleSidebar } from "../lib/windows";
+import { isTauri } from "../lib/platform";
+import { ROSTER_CLASS, WHALE_AREA, currentCard, exampleRoster, exitWhale, fewestNos, importWhaleRoster, mainClass, useWhale, whaleFrom, whaleKey } from "../lib/whale";
 import whaleLogo from "../assets/whale-logo.png";
 import "./whale.css";
 
 /**
- * 웨일 모드 둘러보기: '웨일 스페이스와 함께 쓰는 하루' 6장면. 왼쪽은 언제나 진짜 앱 화면(데모 영역)이고,
- * 오른쪽 밤의 칸이 장면을 설명한다. 웨일 쪽 화면은 누가 디자인으로 그린 '연계 예시'이며 누른 결과는 데모 영역에 그대로 남는다.
- * 웨일 브라우저의 실제 기능은 사이드바(모바일 화면) · 듀얼탭(생기부 생성)으로 여는 것 두 가지다.
+ * 웨일 모드 둘러보기: 누가와 딱 맞는 웨일 서비스 네 곳을 서비스별로 — 연결(무엇이 어디로) → 가치(전 · 후) → 해 보기.
+ * 왼쪽은 언제나 진짜 앱 화면(데모 영역)이고, 오른쪽 밤의 칸이 설명한다. 웨일 쪽 화면은 누가 디자인으로 그린 '연계 예시'이며
+ * 누른 결과는 데모 영역에 그대로 남는다. 상태는 연결마다 셋 가운데 하나: 웨일에서 실제 동작(사이드바 · 듀얼탭) · 지금 가능(명단 파일) · 연계 예시(승인·협의 전).
+ * 틀의 태그(그림 · 데모)는 상태가 아니라 '그린 화면'이라는 표시다.
  */
 
-/** 웨일 클래스 퀴즈 응답 (합성). 번호는 반 명단에 있는 학생으로 맞춘다 */
-const QUIZ = [
-  { no: 8, kind: "1차 오답 → 2차 정답", text: "다시 보니 반응물과 생성물의 양이 같은 게 아니라 정반응과 역반응의 속도가 같은 거였어요.", criteria: "스스로 고침" },
-  { no: 17, kind: "질문 남김", text: "그럼 촉매를 넣으면 평형 위치도 바뀌나요?", criteria: "깊이 있는 질문" },
-  { no: 22, kind: "서술형", text: "지난 단원에서 배운 증발과 응축처럼 포화 소금물도 녹는 것과 석출이 같은 속도로 일어나는 동적 평형이에요.", criteria: "개념 연결" },
-];
+type St = "real" | "now" | "plan";
+const ST: Record<St, string> = { real: "웨일에서 실제 동작", now: "지금 가능", plan: "연계 예시 · 승인·협의 전" };
 const FROM: Record<string, { href: string; label: string }> = {
   landing: { href: "https://dacisosl.github.io/NUGA/", label: "소개 페이지로" },
 };
-
+const pad = (n: number) => String(n).padStart(2, "0");
 /** 받침이 있으면 '이', 없으면 '가' */
 const josaIGa = (word: string) => { const c = word.charCodeAt(word.length - 1) - 0xAC00; return c >= 0 && c < 11172 && c % 28 ? "이" : "가"; };
+const st = () => useStore.getState();
+/** 기록(건너뜀 제외)이 하나도 없는 학생 수 = 계단의 출발선 */
+const zeroCount = (doc: NugaDoc, cls: string) => studentsOf(doc, cls).filter((s) => !doc.records.some((r) => r.class === cls && r.no === s.no && r.status !== "skipped")).length;
 
-interface Scene { when: string; title: string; lead: string; why: string; enter(): void; Body: () => React.ReactElement }
-
-function Frame({ title, children }: { title: string; children: React.ReactNode }) {
+function Chip({ st: s, text }: { st: St; text?: string }) { return <span className={`wt-st ${s}`}>{text || ST[s]}</span>; }
+function Frame({ title, tag = "웨일 화면 그림 · 데모 데이터", children }: { title: string; tag?: string; children: React.ReactNode }) {
   return (
     <div className="wt-ex">
-      <div className="wt-ex-h"><span>{title}</span><span className="wt-tag">연계 예시 · 데모 데이터</span></div>
+      <div className="wt-ex-h"><span>{title}</span><span className="wt-tag">{tag}</span></div>
       <div className="wt-ex-b">{children}</div>
     </div>
   );
@@ -40,150 +40,287 @@ function Real({ text, children }: { text: string; children?: React.ReactNode }) 
   return <div className="wt-real wt-dark"><span className="wt-real-chip">웨일에서 실제 동작</span><span className="grow">{text}</span>{children}</div>;
 }
 
-/* ---------- 장면 ---------- */
+/* ---------- 00 한눈에 ---------- */
 
-function SceneLogin() {
-  const doc = useStore((s) => s.doc);
-  const cur = resolveNow(doc.settings, new Date()).current;
-  const classes = doc.settings.classes.map((c) => c.class).join(" · ");
-  const rows: [string, string][] = [
-    ["교사 계정 확인", "학생 계정은 들어올 수 없어요"],
-    ["학교 · 해밀고등학교", "학교 코드만 받아요"],
-    ["나이스 시간표 · 학사일정", `${classes}반 주 ${doc.settings.timetable.length}시간 · 공휴일은 저절로 쉬어요`],
-  ];
+const MAP: { step: number; name: string; arrow: string; links: [string, St][]; value: string }[] = [
+  { step: 1, name: "웨일 스페이스", arrow: "→", links: [["명단 파일 → 반·명단", "now"], ["교사 계정 로그인 → 처음 설정", "plan"]], value: "명단을 옮겨 적지 않아요" },
+  { step: 2, name: "웨일 클래스", arrow: "⇄", links: [["퀴즈 응답 → 근거 후보", "plan"], ["피드백 쪽지 → 성적 노트", "plan"]], value: "말이 적은 학생도 근거와 피드백을" },
+  { step: 3, name: "팀보드", arrow: "→", links: [["작성자별 노트 → 협동 근거 후보", "plan"], ["보드 옆 사이드바에서 기록", "real"]], value: "모둠 결과물이 아닌 그 학생의 몫만" },
+  { step: 4, name: "웨일 브라우저", arrow: "⊃", links: [["사이드바에 번호 릴 (수업 중)", "real"], ["듀얼탭에 생기부 (나이스 옆)", "real"]], value: "보던 화면을 떠나지 않아요" },
+];
+
+function SceneMap({ go }: { go: (i: number) => void }) {
   return (
     <>
-      <Frame title="웨일 스페이스 로그인">
-        <div className="wt-login"><span className="wt-avatar" aria-hidden>교</span><div><b>교사 계정으로 로그인</b><div className="wt-sub">학교에서 받은 웨일 스페이스 계정</div></div></div>
-        <ul className="wt-checks">
-          {rows.map(([a, b], i) => <li key={a} style={{ ["--i" as string]: i }}><span className="ok">✓</span><span><b>{a}</b><span className="wt-sub">{b}</span></span></li>)}
-          <li className="go" style={{ ["--i" as string]: 3 }}><span className="ok">→</span><span>{cur ? `종이 치자 ${cur.class} · ${cur.period}교시 현황판이 열렸어요` : "종이 치면 그 반 현황판이 저절로 열려요"}</span></li>
-        </ul>
-      </Frame>
-      <div className="wt-two">
-        <div className="wt-box"><span className="wt-sub">누가가 받는 것</span><b>교사인지 · 학교 코드</b></div>
-        <div className="wt-box"><span className="wt-sub">받지 않는 것</span><b>이름 · 반·번호 · 학생 명단</b></div>
-      </div>
-    </>
-  );
-}
-
-function SceneMonitor() {
-  const doc = useStore((s) => s.doc);
-  const cls = useStore((s) => s.cls);
-  const addRecord = useStore((s) => s.addRecord);
-  const deleteRecord = useStore((s) => s.deleteRecord);
-  const toast = useStore((s) => s.toast);
-  const picked = useWhale((s) => s.picked);
-  const students = studentsOf(doc, cls);
-  const tap = (no: number) => {
-    if (picked[no]) return;
-    const t = nowIso(); const supp = doc.settings.supplementEnabled;
-    // 수업 중엔 번호만: 카테고리(0 = 미정)와 한 줄은 쉬는 시간 기록 창에서
-    const rec = addRecord({ class: cls, no, category: CATEGORY_NONE, time: t, lesson: lessonFor(doc.settings.progress, cls, t), memo: "", voiceMemo: null, note: "", status: supp ? "pending" : "confirmed", source: "pc" });
-    useWhale.setState((s) => ({ picked: { ...s.picked, [no]: rec.id } }));
-    toast({ text: `수업관리에서 기록 · ${cls} · ${no}번 ${studentName(doc, cls, no)}`, action: { label: "취소", onClick: () => { deleteRecord(rec.id); useWhale.setState((s) => { const p = { ...s.picked }; delete p[no]; return { picked: p }; }); } } });
-  };
-  return (
-    <>
-      <Frame title={`웨일북 수업관리 · ${cls}반 ${students.length}명 화면`}>
-        <div className="wt-tiles">
-          {students.map((s) => (
-            <button key={s.no} className={`wt-tile ${picked[s.no] ? "on" : ""}`} onClick={() => tap(s.no)} aria-label={`${s.no}번 ${s.name} 화면 · 눌러서 기록`}>
-              <span className="scr" aria-hidden><i /><i /><i /></span>
-              <span className="who"><b className="num">{s.no}</b>{s.name}</span>
-              {picked[s.no] && <span className="tick" aria-hidden>✓</span>}
+      <ul className="wt-map">
+        {MAP.map((m) => (
+          <li key={m.step}>
+            <button onClick={() => go(m.step)}>
+              <span className="wt-map-h"><b>{m.name}</b><span className="arrow" aria-hidden>{m.arrow}</span><b>누가</b><span className="grow" /><span className="go" aria-hidden>›</span></span>
+              {m.links.map(([t, s], i) => <span key={t} className="wt-map-r"><i>{i ? "" : "연결"}</i><span className="grow">{t}</span><Chip st={s} text={s === "plan" ? "연계 예시" : undefined} /></span>)}
+              <span className="wt-map-r"><i>가치</i>{m.value}</span>
             </button>
-          ))}
-        </div>
-        <div className="wt-note">누가로 넘어가는 건 번호뿐이에요. 분류와 한 줄은 쉬는 시간에 PC에서 채워요. 학생 화면 내용은 넘어가지 않아요.</div>
-      </Frame>
-      {IS_WHALE
-        ? <Real text="누가 모바일 화면(번호 릴)을 웨일 사이드바에 띄워 두면 수업 화면 옆에서 바로 기록돼요."><button className="btn sm" onClick={openWhaleSidebar}>사이드바로 열기</button></Real>
-        : <Real text="웨일 브라우저에서는 누가 모바일 화면(번호 릴)을 사이드바에 띄워 수업 화면과 나란히 쓸 수 있어요." />}
+          </li>
+        ))}
+      </ul>
+      <div className="wt-box"><b>지키는 것</b><span className="wt-sub">학생 이름은 선생님 PC에만 (명단 파일도 PC에서만 읽어요) · 웨일 쪽으로 보내는 건 번호와 내용뿐 · 학생 응답·노트는 선생님이 한 줄로 남겨야 생기부 근거</span></div>
+      <div className="wt-honest">
+        <div><b>지금 되는 것</b><ul><li>사이드바 · 듀얼탭으로 열기 (웨일)</li><li>웨일 스페이스 명단 파일 가져오기 (예시 양식 기준)</li></ul></div>
+        <div><b>승인·협의 전 (연계 예시)</b><ul><li>웨일 스페이스로 로그인 (App Console 승인)</li><li>클래스 응답 · 팀보드 노트 받기, 성적 노트로 쪽지 보내기 (웨일 측 협의)</li><li>관리자 정책으로 학교 배포</li></ul></div>
+      </div>
+      <div className="wt-sub">웨일온 · 웨일 UBT는 잇지 않았어요. 누가가 쌓는 '한 학생의 한 장면'과 단위가 달라요. 수업관리는 그 화면 옆 사이드바로 함께 써요.</div>
     </>
   );
 }
 
-function SceneClass() {
+/* ---------- 01 웨일 스페이스 ---------- */
+
+function SceneSpace() {
+  const doc = useStore((s) => s.doc);
+  const { roster, login } = useWhale();
+  const rows = useMemo(exampleRoster, []);
+  const n = doc.students.filter((s) => s.class === ROSTER_CLASS).length;
+  const shown = [rows[0], rows[1], rows[2], rows[3], rows[rows.length - 1]];
+  const take = () => { const k = importWhaleRoster(); st().toast({ text: `웨일 스페이스 명단 · ${ROSTER_CLASS} ${k}명 가져옴 (선생님 · 다른 반 · 이메일은 읽지 않음)` }); };
+  return (
+    <>
+      <Frame title="관리자 · 사용자 다운로드 (엑셀)" tag="예시 양식 · 합성 데이터">
+        <table className="wt-file">
+          <thead><tr><th>유형</th><th>성</th><th>이름</th><th>조직 경로</th><th>번호</th><th className="off">이메일</th></tr></thead>
+          <tbody>
+            {shown.map((r, i) => {
+              const skip = r["사용자 유형"] !== "학생" || !r["조직 경로"].endsWith("7반");
+              return (
+                <tr key={i} className={skip ? "off" : ""}>
+                  <td>{r["사용자 유형"]}</td><td>{r.성}</td><td>{r.이름}</td><td>…{r["조직 경로"].replace(/^\/[^/]+/, "")}</td><td>{r["고유 번호"]}</td><td className="off">user…</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="wt-note">학교 전체가 든 파일이에요. 진한 칸만 읽어요: 학생 행 · 고른 반({ROSTER_CLASS}) · 성·이름 · 번호. 선생님 행 · 다른 반 · 이메일은 읽지 않아요. 실제 파일은 열 이름이 다를 수 있어 처음 한 번 확인해요.</div>
+        {roster
+          ? <div className="wt-okline">✓ {ROSTER_CLASS} 학생 {n}명이 왼쪽 반·명단에 들어왔어요</div>
+          : <button className="btn primary" onClick={take}>누가로 가져오기 · {ROSTER_CLASS}만</button>}
+      </Frame>
+      <Frame title="웨일 스페이스로 로그인 (승인 뒤 모습)">
+        {login ? (
+          <ul className="wt-checks">
+            {[["선생님 계정", "학교에서 받은 웨일 스페이스 계정 그대로"], ["소속 학교 · 고등학교", "학교급에 맞는 분류 · 생기부 분량으로 처음 설정 시작"], ["학생 명단은 받지 않아요", "명단은 위 파일로 · 이름은 선생님 PC에만"]].map(([a, b], i) => (
+              <li key={a} style={{ ["--i" as string]: i }}><span className="ok">✓</span><span><b>{a}</b><span className="wt-sub">{b}</span></span></li>
+            ))}
+          </ul>
+        ) : <button className="btn" onClick={() => useWhale.setState({ login: true })}>교사 계정으로 로그인 (예시)</button>}
+      </Frame>
+      <div className="wt-box"><b>학교 전체로 · 관리자 정책</b><span className="wt-sub">학교 관리자가 [정책 → 앱 및 확장앱]으로 선생님들의 웨일에 누가를 한 번에 설치해요. 다음 단계예요.</span></div>
+    </>
+  );
+}
+
+/* ---------- 02 웨일 클래스 ---------- */
+
+/** 웨일 클래스 퀴즈 응답 (합성). 기록이 가장 적은 학생 차례로 붙인다. 칩은 응답 종류만 (누가는 응답을 평가하지 않는다) */
+const QUIZ = [
+  { kind: "고쳐 쓴 답", text: "다시 보니 반응물과 생성물의 양이 같은 게 아니라 정반응과 역반응의 속도가 같은 거였어요." },
+  { kind: "질문", text: "그럼 촉매를 넣으면 평형 위치도 바뀌나요?" },
+  { kind: "서술형", text: "지난 단원에서 배운 증발과 응축처럼 포화 소금물도 녹는 것과 석출이 같은 속도로 일어나는 동적 평형이에요." },
+];
+
+function ClassIn() {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
   const addRecord = useStore((s) => s.addRecord);
   const openInbox = useStore((s) => s.openInbox);
-  const quiz = useWhale((s) => s.quiz);
-  const picked = useWhale((s) => s.picked);
-  const roster = studentsOf(doc, cls).map((s) => s.no);
-  const items = QUIZ.map((q, i) => ({ ...q, no: roster.includes(q.no) ? q.no : roster[i * 7] ?? roster[0] }));
+  const { quiz, quizNos } = useWhale();
+  // 반마다 처음 연 순간의 '기록이 가장 적은 학생'을 고정한다 (보내도 순서가 흔들리지 않게)
+  const nos = quizNos[cls] || fewestNos(doc, cls, QUIZ.length);
+  useEffect(() => { if (cls && !quizNos[cls]) useWhale.setState((x) => ({ quizNos: { ...x.quizNos, [cls]: nos } })); }, [cls]);
+  const items = QUIZ.map((q, i) => ({ ...q, no: nos[i] })).filter((q) => q.no);
+  const count = (no: number) => doc.records.filter((r) => r.class === cls && r.no === no && r.status !== "skipped").length;
   const send = (q: typeof items[number]) => {
     const t = nowIso();
-    const rec = addRecord({ class: cls, no: q.no, category: CATEGORY_NONE, time: t, lesson: lessonFor(doc.settings.progress, cls, t), memo: `웨일 클래스 퀴즈 · ${q.kind}: “${q.text}”`, voiceMemo: null, note: "", status: "pending", source: "pc" });
-    useWhale.setState((s) => ({ quiz: { ...s.quiz, [q.no]: rec.id } }));
+    const rec = addRecord({ class: cls, no: q.no, category: CATEGORY_NONE, time: t, lesson: lessonFor(doc.settings.progress, cls, t), memo: `웨일 클래스 퀴즈 · ${q.kind}: “${q.text}”`, voiceMemo: null, note: "", status: "pending", source: "suggestion" });
+    useWhale.setState((s) => ({ quiz: { ...s.quiz, [whaleKey(cls, q.no)]: rec.id } }));
   };
-  const sent = Object.values(quiz).filter((v) => v !== "no");
-  const open = () => openInbox({ records: [...sent, ...Object.values(picked)] });
+  const sent = Object.entries(quiz).filter(([k, v]) => v !== "no" && k.startsWith(`${cls}|`)).map(([, v]) => v);
   return (
     <>
-      <Frame title="웨일 클래스 · 오늘 수업 확인 퀴즈">
-        <div className="wt-sub">{cls}반 제출 · 누가가 눈여겨볼 응답 {items.length}개를 골랐어요</div>
+      <Frame title="웨일 클래스 · 오늘 확인 퀴즈 응답">
+        <div className="wt-sub">{cls} 제출 가운데 누가 기록이 가장 적은 학생의 응답부터 보여요 · 지금 기록 0건 {zeroCount(doc, cls)}명</div>
         {items.map((q) => {
-          const st = quiz[q.no];
+          const s = quiz[whaleKey(cls, q.no)];
           return (
-            <div key={q.no} className={`wt-quiz ${st ? "done" : ""}`}>
-              <div className="flex wrap"><b className="num">{q.no}</b><b>{studentName(doc, cls, q.no)}</b><span className="wt-sub">{q.kind}</span><span className="grow" /><span className="chip outline">{q.criteria}</span></div>
+            <div key={q.no} className={`wt-quiz ${s ? "done" : ""}`}>
+              <div className="flex wrap"><b className="num">{q.no}</b><b>{studentName(doc, cls, q.no)}</b><span className="wt-sub">누가 기록 {count(q.no)}건</span><span className="grow" /><span className="chip outline">{q.kind}</span></div>
               <div className="wt-quote">“{q.text}”</div>
-              {st === "no" ? <div className="wt-sub">넘겼어요. 기록으로 남지 않아요.</div>
-                : st ? <div className="wt-okline">쉬는 시간 기록으로 보냈어요</div>
-                : <div className="flex"><button className="btn sm primary" onClick={() => send(q)}>근거 후보로 보내기</button><button className="btn sm ghost" onClick={() => useWhale.setState((s) => ({ quiz: { ...s.quiz, [q.no]: "no" } }))}>넘기기</button></div>}
+              {s === "no" ? <div className="wt-sub">넘겼어요. 기록으로 남지 않아요.</div>
+                : s ? <div className="wt-okline">근거 후보로 보냈어요 · 쉬는 시간 기록에서 한 줄로</div>
+                : <div className="flex"><button className="btn sm primary" onClick={() => send(q)}>근거 후보로 보내기</button><button className="btn sm ghost" onClick={() => useWhale.setState((x) => ({ quiz: { ...x.quiz, [whaleKey(cls, q.no)]: "no" } }))}>넘기기</button></div>}
             </div>
           );
         })}
       </Frame>
       <div className="wt-act wt-dark">
-        <button className="btn primary" disabled={!sent.length && !Object.keys(picked).length} onClick={open}>쉬는 시간 기록 열기</button>
-        <span className="wt-sub">보낸 응답{Object.keys(picked).length ? "과 수업 중 번호 기록" : ""}을 선생님이 확인해 한 줄로 남겨요.</span>
+        <button className="btn primary" disabled={!sent.length} onClick={() => openInbox({ records: sent })}>쉬는 시간 기록 열기</button>
+        <span className="wt-sub">근거 후보는 '보완 대기'로 들어와요. 선생님이 분류와 한 줄로 남겨야 생기부 근거가 돼요 (학생 글을 그대로 쓰지 않아요).</span>
       </div>
+      <Real text="자동 연결 전에도: 웨일 클래스 화면 옆 사이드바 누가에서 번호를 누르고 응답을 메모에 붙여 넣으면 같은 쉬는 시간 기록으로 와요." />
     </>
   );
 }
 
-function SceneFeedback() {
+function ClassOut() {
   const doc = useStore((s) => s.doc);
   const cls = useStore((s) => s.cls);
-  const { phone, acceptedAt, card: sent } = useWhale();
-  const live = useMemo(() => feedbackCard(doc, cls), [doc.records, cls]);
-  const card = sent || live;
-  if (!card) return <div className="wt-sub">이 반에 피드백 카드를 만들 기록이 없어요.</div>;
+  const toast = useStore((s) => s.toast);
+  const { fb, watchAt, quiz } = useWhale();
+  const card = useMemo(() => currentCard(doc, cls), [doc.records, cls, fb, quiz]);
+  if (!card) return <div className="wt-sub">이 반에 피드백 쪽지를 만들 기록이 없어요.</div>;
+  const sentKey = quiz[whaleKey(card.cls, card.no)];
+  const fromQuiz = !!sentKey && sentKey !== "no";
   const name = studentName(doc, card.cls, card.no);
-  const closed = !!acceptedAt && doc.records.some((r) => r.class === card.cls && r.no === card.no && r.createdAt >= acceptedAt && r.status === "confirmed");
-  const stage = phone === "idle" ? 0 : phone === "sent" ? 1 : closed ? 3 : 2;
+  const text = `${card.good}\n다음 도전: ${card.next}`;
+  const closed = !!watchAt && doc.records.some((r) => r.class === card.cls && r.no === card.no && r.createdAt >= watchAt && r.status === "confirmed");
+  const stage = fb === "idle" ? 0 : fb === "pasted" ? 1 : closed ? 3 : 2;
+  const paste = () => {
+    navigator.clipboard?.writeText(text).catch(() => {});
+    useWhale.setState({ fb: "pasted", card });
+    toast({ text: "쪽지를 복사했어요 · 웨일 클래스 성적 노트의 텍스트 칸에 붙여 넣어요" });
+  };
   const body = <><div className="good">{card.good}</div><div className="next"><b>다음 도전</b> {card.next}</div></>;
+  // 성적 노트 표: 그 학생 칸과 앞뒤 번호 한 칸씩 (다른 학생 칸은 비워 둔다)
+  const roster = studentsOf(doc, card.cls);
+  const at = roster.findIndex((s) => s.no === card.no);
+  const rows = roster.slice(Math.max(0, at - 1), at + 2);
   return (
     <>
-      <ol className="wt-loop" aria-label="피드백 고리">{["피드백", "도전", "관찰", "기록"].map((t, i) => <li key={t} className={i <= stage ? "on" : ""}>{t}</li>)}</ol>
-      {phone === "idle" ? (
-        <Frame title={`${card.cls} · ${card.no}번 ${name} 피드백 카드`}>
-          <div className="wt-card">{body}</div>
-          <button className="btn primary" onClick={() => useWhale.setState({ phone: "sent", card })}>학생 웨일로 보내기</button>
-        </Frame>
-      ) : (
-        <Frame title="학생의 웨일 (폰)">
-          <div className="wt-phone">
-            <div className="wt-noti"><b>새 피드백이 왔어요</b><span>{doc.settings.school.subject.replace(/ · 웨일 데모$/, "")} 선생님</span></div>
-            <div className="wt-card">{body}</div>
-            {phone === "sent"
-              ? <button className="btn primary" onClick={() => useWhale.setState({ phone: "accepted", acceptedAt: nowIso() })}>도전해 볼게요</button>
-              : <div className="wt-okline center">✓ 선생님께 전했어요</div>}
-          </div>
-          <div className="wt-sub">학생 화면에는 반·번호·이름이 없어요. 카드 내용만 가요.</div>
-        </Frame>
+      <ol className="wt-loop" aria-label="피드백 고리">{["근거", "피드백", "다음 관찰", "기록"].map((t, i) => <li key={t} className={i <= stage ? "on" : ""}>{t}</li>)}</ol>
+      <Frame title={`누가 · ${card.no}번 ${name} 피드백 쪽지`} tag="웨일 모드 데모 · 데모 기록">
+        <div className="wt-card">{body}</div>
+        <div className="wt-note">{fromQuiz ? "들어옴에서 보낸 응답에 선생님이 남긴 한 줄로 만들었어요. " : `선생님 기록 ${card.evidence.length}건으로 만들었어요. 들어옴에서 보낸 응답을 쉬는 시간 기록에서 한 줄로 남기면 그 학생 쪽지가 돼요. `}쪽지에는 반 · 번호 · 이름이 없어요.</div>
+        {fb === "idle" && <button className="btn primary" onClick={paste}>복사해서 성적 노트에 붙여 넣기</button>}
+      </Frame>
+      {fb !== "idle" && (
+        <>
+          <Frame title={`웨일 클래스 · 교무수첩 성적 노트 · ${card.cls}`}>
+            <table className="wt-file note">
+              <thead><tr><th>번호</th><th>이름</th><th>선생님 한마디 <small>텍스트 · 학생 공개 · 점수 아님</small></th></tr></thead>
+              <tbody>
+                {rows.map((s) => s.no === card.no
+                  ? <tr key={s.no} className="hit"><td>{s.no}</td><td>{name}</td><td>{card.good.slice(0, 34)}…</td></tr>
+                  : <tr key={s.no} className="off"><td>{s.no}</td><td>{s.name}</td><td /></tr>)}
+              </tbody>
+            </table>
+          </Frame>
+          <Frame title="학생이 보는 웨일 클래스">
+            <div className="wt-phone">
+              <div className="wt-noti"><b>성적 노트 · 선생님 한마디</b><span>{doc.settings.school.subject.replace(/ · 웨일 데모$/, "")}</span></div>
+              <div className="wt-card">{body}</div>
+            </div>
+            <div className="wt-sub">학생은 성적 노트에서 자기 칸만 봐요.</div>
+          </Frame>
+        </>
       )}
-      {phone === "accepted" && (
-        <div className="wt-call wt-dark">
-          <b>{card.no}번 {name}{josaIGa(name)} 다음 도전을 받았어요</b>
-          {closed ? <span>✓ 다음 관찰을 기록했어요 · 피드백 고리가 한 바퀴 돌았어요</span>
-            : <><span>다음 수업에서 이 학생을 눈여겨보고, 기록 창에 한 줄 남기면 고리가 닫혀요.</span><button className="btn sm primary" onClick={() => useWhale.setState({ detailOpen: true })}>{card.no}번 기록 창 열기</button></>}
+      {fb === "pasted" && (
+        <div className="wt-act wt-dark">
+          <button className="btn primary" onClick={() => useWhale.setState({ fb: "watch", watchAt: nowIso(), detailOpen: true })}>다음 수업에 {card.no}번 눈여겨보기</button>
+          <span className="wt-sub">'다음 도전'을 했는지 보고 기록 창에 한 줄 남기면 고리가 닫혀요.</span>
         </div>
       )}
+      {fb === "watch" && (
+        <div className="wt-call wt-dark">
+          <b>{card.no}번 {name}{josaIGa(name)} '{card.next}'에 도전해요</b>
+          {closed ? <span>✓ 다음 관찰을 기록했어요 · 근거 → 피드백 → 관찰 → 기록이 한 바퀴 돌았어요</span>
+            : <><span>도전한 장면을 기록 창에 한 줄 남기면 고리가 닫혀요.</span><button className="btn sm primary" onClick={() => useWhale.setState({ detailOpen: true })}>{card.no}번 기록 창 열기</button></>}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ---------- 03 팀보드 ---------- */
+
+/** 클래스 전용 팀보드의 한 모둠 보드 (합성). a = 작성자 자리(반 명단에서 고른 학생) */
+const BOARD = [
+  { a: 0, c: "y", text: "농도 바꾸는 실험은 우리 모둠, 온도는 3모둠이 맡기로 나눠요" },
+  { a: 1, c: "p", text: "색 변화가 잘 보이게 0초 · 30초 · 1분에 사진 찍기" },
+  { a: 2, c: "g", text: "30초 간격이면 평형이 다시 맞춰지는 것도 보일 것 같아요 (사진 순서에 이어서)" },
+  { a: 0, c: "y", text: "결과 표는 제가 정리할게요" },
+  { a: 3, c: "b", text: "촉매를 넣으면 색이 바로 변해야 하나요?" },
+];
+const AUTHOR_AT = [3, 8, 14, 20];
+
+function SceneBoard() {
+  const doc = useStore((s) => s.doc);
+  const cls = useStore((s) => s.cls);
+  const addRecord = useStore((s) => s.addRecord);
+  const openInbox = useStore((s) => s.openInbox);
+  const { byAuthor, board } = useWhale();
+  const roster = studentsOf(doc, cls);
+  const authors = AUTHOR_AT.map((i) => roster[i] || roster[i % Math.max(1, roster.length)]).filter(Boolean);
+  const coop = (doc.settings.categories.find((c) => /협동|협력|협업/.test(c.label))?.key ?? 3) as Category;
+  const send = (a: number) => {
+    const s = authors[a]; const notes = BOARD.filter((n) => n.a === a).map((n) => `“${n.text}”`);
+    const t = nowIso();
+    const rec = addRecord({ class: cls, no: s.no, category: coop, time: t, lesson: lessonFor(doc.settings.progress, cls, t), memo: `팀보드 · 3모둠 노트: ${notes.join(" ")}`, voiceMemo: null, note: "", status: "pending", source: "suggestion" });
+    useWhale.setState((x) => ({ board: { ...x.board, [whaleKey(cls, s.no)]: rec.id } }));
+  };
+  const sent = Object.entries(board).filter(([k]) => k.startsWith(`${cls}|`)).map(([, v]) => v);
+  if (!authors.length) return <div className="wt-sub">이 반에 명단이 없어요.</div>;
+  return (
+    <>
+      <Frame title="팀보드 · 3모둠 · 평형 이동 실험 설계">
+        <div className="seg wt-seg" role="radiogroup" aria-label="보드 보기">
+          <button role="radio" aria-checked={!byAuthor} className={!byAuthor ? "active" : ""} onClick={() => useWhale.setState({ byAuthor: false })}>보드</button>
+          <button role="radio" aria-checked={byAuthor} className={byAuthor ? "active" : ""} onClick={() => useWhale.setState({ byAuthor: true })}>작성자별로 분류</button>
+        </div>
+        {!byAuthor ? (
+          <div className="wt-board">
+            {BOARD.map((n, i) => <div key={i} className={`wt-sticky ${n.c}`}><span>{n.text}</span><small>{authors[n.a]?.name}</small></div>)}
+            <div className="wt-sticky group"><span>모둠 결과: 실험 설계안 완성</span><small>모둠 결과물 · 개인 근거로 보내지 않아요</small></div>
+          </div>
+        ) : (
+          <div className="col" style={{ gap: 8 }}>
+            {authors.map((s, a) => {
+              const mine = BOARD.filter((n) => n.a === a);
+              return (
+                <div key={s.no} className={`wt-quiz ${board[whaleKey(cls, s.no)] ? "done" : ""}`}>
+                  <div className="flex wrap"><b className="num">{s.no}</b><b>{s.name}</b><span className="wt-sub">노트 {mine.length}개</span><span className="grow" /><span className="chip outline">협동</span></div>
+                  {mine.map((n, i) => <div key={i} className="wt-quote">“{n.text}”</div>)}
+                  {board[whaleKey(cls, s.no)] ? <div className="wt-okline">협동 근거 후보로 보냈어요</div>
+                    : <div className="flex"><button className="btn sm primary" onClick={() => send(a)}>협동 근거 후보로</button></div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="wt-note">스티키 노트에는 작성자 이름이 붙어요. 누가로 오는 건 노트 글과 그 학생 번호뿐이에요.</div>
+      </Frame>
+      <div className="wt-act wt-dark">
+        <button className="btn primary" disabled={!sent.length} onClick={() => openInbox({ records: sent })}>쉬는 시간 기록 열기</button>
+        <span className="wt-sub">노트를 보고 그 학생이 한 일을 선생님이 한 줄로 남겨야 생기부 근거가 돼요.</span>
+      </div>
+      <Real text="자동 연결 전에도: 팀보드를 띄운 채 사이드바 누가에서 번호를 누르고 한 줄 남겨요." />
+    </>
+  );
+}
+
+/* ---------- 04 웨일 브라우저 ---------- */
+
+function SceneSide() {
+  const cls = useStore((s) => s.cls);
+  return (
+    <>
+      <Frame title="웨일 화면 · 메인 탭 + 사이드바" tag="그림 · 실제로 열기는 아래">
+        <div className="wt-dual">
+          <div className="pane neis"><span className="wt-sub">메인 탭 · 보던 그대로</span><b>수업관리</b><b>웨일 클래스</b><b>팀보드</b><i /><i className="short" /></div>
+          <div className="pane nuga"><span className="who">사이드바 · 누가</span><span>{cls} · 지금 수업</span><span className="wt-reel" aria-hidden><i>13</i><i className="on">14</i><i>15</i></span><span className="chip pass">저장 · 14번</span></div>
+        </div>
+      </Frame>
+      {IS_WHALE
+        ? <Real text="누가 모바일 화면(번호 릴)을 웨일 사이드바에 띄워요. 저장하면 왼쪽 큰 창에 '사이드바 기록 · 미반영에 추가' 알림이 떠요."><button className="btn sm" onClick={openWhaleSidebar}>사이드바로 열기</button></Real>
+        : isTauri ? <Real text="웨일 브라우저에서 누가 웹을 열면 이 모바일 화면(번호 릴)을 사이드바에 띄우고, 저장한 기록이 큰 창 미반영으로 바로 들어와요." />
+        : <Real text="웨일에서는 사이드바로 열려요. 여기서는 같은 화면을 사이드바 폭의 작은 창으로 열어 볼 수 있어요. 저장하면 왼쪽 큰 창에 알림이 떠요."><button className="btn sm" onClick={openSidePreview}>작은 창으로 열어 보기</button></Real>}
     </>
   );
 }
@@ -193,70 +330,86 @@ function SceneDraft() {
   const doc = useStore((s) => s.doc);
   return (
     <>
-      <Frame title="듀얼탭 · 나이스 옆 누가">
+      <Frame title="웨일 듀얼탭 · 나이스 옆 누가" tag="그림 · 실제로 열기는 아래">
         <div className="wt-dual">
           <div className="pane neis"><span className="wt-sub">업무포털 · 나이스</span><b>세부능력 및 특기사항</b><i /><i /><i className="short" /></div>
           <div className="pane nuga"><span className="who">누가 · 생기부 생성</span><span>{sel ? `${sel.class} · ${sel.no}번 ${studentName(doc, sel.class, sel.no)}` : "학생 선택"}</span><span>근거 기록 · 초안 · 검토</span><span className="chip pass">복사 → 붙여 넣기</span></div>
         </div>
       </Frame>
       {IS_WHALE && sel
-        ? <Real text="생기부 생성 화면을 듀얼탭으로 열어요. 옆 칸에 업무포털(나이스)을 띄워 나란히 써요."><a className="btn sm" href={draftTabUrl(sel.class, sel.no)} rel="whale-dualtab">듀얼탭으로 열기</a></Real>
-        : <Real text="웨일 브라우저에서는 이 화면을 듀얼탭으로 열어, 옆 칸에 업무포털(나이스)을 띄워 나란히 쓸 수 있어요." />}
+        ? <Real text="생기부 생성 화면을 듀얼탭으로 열어요. 옆 칸에 업무포털(나이스)을 띄워 나란히 써요 (웨일 5.39에서 확인)."><a className="btn sm" href={draftTabUrl(sel.class, sel.no)} rel="whale-dualtab">듀얼탭으로 열기</a></Real>
+        : <Real text="웨일 브라우저에서는 이 화면을 듀얼탭으로 열어, 옆 칸에 업무포털(나이스)을 띄워 나란히 쓸 수 있어요 (웨일 5.39에서 확인)." />}
     </>
   );
 }
 
-function SceneScale() {
-  return (
-    <>
-      <div className="col" style={{ gap: 8 }}>
-        <div className="wt-box"><b>배포 · 관리자 정책 한 번</b><span className="wt-sub">교육청·학교 관리자가 정책으로 누가를 선생님들의 웨일 사이드바에 넣어 줘요.</span></div>
-        <div className="wt-box"><b>AI · 교사 인증이 곧 사용 자격</b><span className="wt-sub">지금은 설정 → AI에 선생님이 키를 넣어요(왼쪽 화면). 웨일 스페이스 교사 인증으로 열면 키 없이 쓰고, 하루 한도는 교육청이 정해요.</span></div>
-        <div className="wt-box"><b>개인정보 · 이름은 교사 기기에만</b><span className="wt-sub">AI에는 이름·번호 없이 내용만 가요. 학생 신원은 학교가 관리하는 웨일 스페이스 안에서만 움직여요.</span></div>
-      </div>
-      <div className="wt-honest">
-        <div><b>지금 실제로 되는 것</b><ul><li>누가의 모든 기능 (데모 · 실사용)</li><li>웨일 사이드바 · 듀얼탭으로 열기</li></ul></div>
-        <div><b>연계에 필요한 것</b><ul><li>웨일 스페이스 로그인 연동 승인 (App Console)</li><li>웨일북 수업관리 · 웨일 클래스 연동 (웨일 측 협의)</li><li>학생 웨일로 피드백 카드 보내기 (웨일 측 협의)</li></ul></div>
-      </div>
-    </>
-  );
-}
+/* ---------- 서비스 ---------- */
 
-const st = () => useStore.getState();
-const SCENES: Scene[] = [
-  { when: "아침", title: "로그인 한 번이면 설정 0분", Body: SceneLogin,
-    lead: "웨일 스페이스 교사 계정으로 들어오면 학교와 시간표가 저절로 잡혀요. 영역·반·시간표를 넣는 처음 설정을 건너뛰고, 종이 치면 그 반 현황판이 열려요.",
-    why: "선생님 일은 하나도 늘지 않고, 누가가 아는 학생 정보도 하나도 늘지 않아요.",
-    enter() { st().setPage("main"); } },
-  { when: "수업 중", title: "수업관리 화면의 학생 칸이 곧 기록 버튼", Body: SceneMonitor,
-    lead: "웨일북 수업관리로 학생 화면을 보다가 눈에 띈 학생 칸을 누르면, 그 번호로 누가에 기록돼요. 화면을 바꾸지도, 번호를 다시 찾지도 않아요.",
-    why: "10초 기록이 선생님이 이미 보고 있는 화면 안에서 끝나요. 누른 번호는 계단과 미반영에 바로 보여요.",
-    enter() { st().setPage("main"); } },
-  { when: "쉬는 시간", title: "웨일 클래스 활동이 근거 후보로", Body: SceneClass,
-    lead: "웨일 클래스 퀴즈·과제에서 눈여겨볼 응답을 근거 후보로 보내면, 수업 중에 누른 번호와 함께 '쉬는 시간 기록' 창에 모여요. 선생님이 한 줄로 남겨야 기록이 돼요.",
-    why: "녹음의 놓친 발언 추천과 같은 '추천 → 선생님 확인' 구조예요. 누가는 점수를 매기거나 평가하지 않아요.",
-    enter() { st().setPage("main"); } },
-  { when: "방과 후", title: "피드백은 학생의 웨일로, 대답은 다음 관찰로", Body: SceneFeedback,
-    lead: "기록으로 만든 '잘한 장면 · 다음 도전' 카드가 학생의 웨일로 가요. 학생이 [도전해 볼게요]를 누르면 다음 수업에서 그 학생을 눈여겨보고 기록해요.",
-    why: "피드백이 전달로 끝나지 않고 다음 관찰을 불러요. 피드백 → 도전 → 관찰 → 기록이 한 바퀴 돌아요.",
-    enter() { st().setPage("main"); } },
-  { when: "학기 말", title: "생기부는 나이스 옆 듀얼탭에서", Body: SceneDraft,
-    lead: "누가 생기부 생성 화면을 듀얼탭으로 열고 옆 칸에 업무포털 나이스를 띄워요. 한 학기 동안 쌓인 근거로 초안을 만들고 검토한 뒤 복사해 붙여 넣어요.",
-    why: "학기 말 몰아 쓰기가 아니라 쌓인 근거를 옆에 두고 써요. 최종 작성은 선생님이 해요.",
-    enter() {
+interface Link { from: string; to: string; via: string; st: St }
+interface Svc {
+  tab: string; name: string; title: string; lead?: string;
+  links: Link[]; before: string; after: string; fit: string;
+  /** 탭 안 단계: 단계마다 왼쪽 화면이 바뀐다 */
+  subs?: string[]; Bodies: (() => React.ReactElement)[]; enter(sub: number): void;
+}
+/** 데모의 기본 반(기록이 있는 반)으로 돌아와 현황판 */
+const toMain = () => { const s = st(); s.setClass(mainClass(s.doc)); s.setPage("main"); };
+
+const SVCS: Svc[] = [
+  { tab: "한눈에", name: "한눈에", title: "누가와 딱 맞는 네 곳만 이어요",
+    lead: "선생님과 학생이 웨일 스페이스에서 이미 쓰는 서비스 네 곳과 이렇게 이어요. 연결마다 지금 되는 것과 승인·협의 전인 것을 칩으로 나눴어요. 줄을 누르면 데모로 직접 해 봐요.",
+    links: [], before: "", after: "", fit: "", Bodies: [], enter: toMain },
+  { tab: "스페이스", name: "웨일 스페이스", title: "학교 계정 그대로, 명단도 학교 것 그대로",
+    links: [
+      { from: "관리자 '사용자 다운로드' 명단 파일", to: "반·명단 [엑셀 가져오기]", via: "학생 행 · 고른 반만 · 이메일은 읽지 않음", st: "now" },
+      { from: "웨일 스페이스로 로그인", to: "처음 설정", via: "선생님 본인 · 소속 학교 → 학교급 기본값 (App Console)", st: "plan" },
+      { from: "관리자 정책 · 앱 및 확장앱", to: "선생님들의 웨일", via: "학교 단위로 누가를 한 번에 설치", st: "plan" },
+    ],
+    before: "반마다 명단을 누가 양식에 옮겨 적거나 붙여 넣어요. 번호가 학교 명단과 어긋나기도 해요.",
+    after: "학교가 관리하는 웨일 스페이스 명단 파일을 고치지 않고 넣으면 고른 반 학생만 들어와요. 번호도 학교 명단과 같아요.",
+    fit: "누가는 반 · 번호만 있으면 바로 돌아가요. 명단은 학교 것을 그대로 쓰고, 이름은 선생님 PC에만 둬요.",
+    Bodies: [SceneSpace],
+    enter() { const s = st(); s.setClass(useWhale.getState().roster ? ROSTER_CLASS : mainClass(s.doc)); s.setSettingsTab("roster"); s.setPage("settings"); } },
+  { tab: "클래스", name: "웨일 클래스", title: "학생 응답은 근거 후보로, 피드백은 성적 노트로",
+    links: [
+      { from: "퀴즈 · 과제 응답", to: "쉬는 시간 기록 (근거 후보)", via: "응답 글과 번호만 · 선생님이 한 줄로 남겨야 기록", st: "plan" },
+      { from: "누가 피드백 쪽지", to: "교무수첩 성적 노트 (학생 공개 텍스트 칸)", via: "잘한 장면 · 다음 도전 · 지금은 웨일 모드 데모에서 복사", st: "plan" },
+    ],
+    before: "말이 적은 학생은 수업 중 관찰 기록이 비어요. 피드백은 학기 말 생기부에서야 글이 돼요.",
+    after: "퀴즈에 글로 남긴 생각을 선생님이 한 줄로 남기면 근거가 되고, 그 근거로 만든 피드백이 학생이 여는 웨일 클래스에 남아요.",
+    fit: "녹음 속 놓친 발언 추천과 같은 '추천 → 선생님 확인' 구조예요. 누가는 응답에 점수를 매기지 않아요.",
+    subs: ["들어옴 · 퀴즈 응답", "나감 · 피드백 쪽지"], Bodies: [ClassIn, ClassOut],
+    enter: toMain },
+  { tab: "팀보드", name: "팀보드", title: "모둠 보드에서 그 학생의 몫만 협동 근거로",
+    links: [
+      { from: "클래스 전용 팀보드 · 작성자별 노트", to: "그 학생의 '협동' 근거 후보", via: "노트 글과 작성자 번호만 · 모둠 결과물은 보내지 않음", st: "plan" },
+      { from: "팀보드를 띄운 화면", to: "사이드바 누가", via: "보드를 보며 번호 + 한 줄", st: "real" },
+    ],
+    before: "여러 모둠을 한꺼번에 볼 수 없어 '모둠이 잘함'으로 뭉뚱그려지기 쉬워요.",
+    after: "노트마다 작성자가 붙어 있어, 그 학생이 낸 의견만 그 학생의 근거 후보가 돼요. 모둠 결과물은 보내지 않아요.",
+    fit: "생기부는 공동 활동의 성과를 학생 개인의 성과로 바꾸지 않아요. 누가 AI 초안 지침에도 이 규칙이 들어 있어요.",
+    Bodies: [SceneBoard], enter: toMain },
+  { tab: "브라우저", name: "웨일 브라우저", title: "어느 웨일 화면 옆에서도 기록, 나이스 옆에서 생기부",
+    links: [
+      { from: "웨일 사이드바", to: "누가 모바일 화면 (번호 릴)", via: "수업관리 · 웨일 클래스 · 팀보드를 보던 그대로 · 큰 창 미반영으로", st: "real" },
+      { from: "웨일 듀얼탭", to: "누가 생기부 생성 | 업무포털 나이스", via: "한 학기 근거를 옆에 두고 복사 → 붙여 넣기", st: "real" },
+    ],
+    before: "기록하려면 폰을 꺼내거나 창을 바꿔 번호를 찾아요. 학기 말엔 학생마다 나이스와 기록 창을 오가요.",
+    after: "보던 화면을 떠나지 않고 번호만 눌러 저장해요. 생기부는 한 화면에 나란히 두고 써요.",
+    fit: "승인 없이 지금 웨일에서 되는 연결이에요. 데이터는 선생님 브라우저 안에서만 오가요.",
+    subs: ["수업 중 · 사이드바", "학기 말 · 듀얼탭"], Bodies: [SceneSide, SceneDraft],
+    enter(sub) {
+      toMain();
+      if (sub !== 1) return;
       const s = st(); const card = currentCard(s.doc, s.cls);
       if (card) { s.setClass(card.cls); s.select({ class: card.cls, no: card.no }); }
       s.setMode2p("individual"); s.setPage("draft");
     } },
-  { when: "학교 전체", title: "관리자 정책 한 번, AI는 교사 인증으로", Body: SceneScale,
-    lead: "교육청·학교 관리자가 정책으로 누가를 선생님들의 웨일에 넣어 주고, AI는 웨일 스페이스 교사 인증으로 열어요.",
-    why: "학교 단위로 퍼질 길이 이미 웨일 스페이스 안에 있어요. 무엇이 지금 되고 무엇이 승인을 기다리는지 그대로 밝혀요.",
-    enter() { st().setSettingsTab("ai"); st().setPage("settings"); } },
 ];
 
 /** 오른쪽 밤의 칸 (좁은 화면에서는 아래 시트). 접으면 오른쪽 아래 알약 */
 export function WhaleTour() {
-  const { on, busy, step, min, detailOpen } = useWhale();
+  const { on, busy, step, sub, min, detailOpen } = useWhale();
   const areaId = useStore((s) => s.areaId);
   const loaded = useStore((s) => s.loaded);
   const doc = useStore((s) => s.doc);
@@ -267,39 +420,69 @@ export function WhaleTour() {
     else if (areaId !== WHALE_AREA && on) void exitWhale();
   }, [loaded, busy, areaId, on]);
   if (!on || SUB_WINDOW) return null;
-  const sc = SCENES[step];
-  const go = (i: number) => { const n = Math.max(0, Math.min(SCENES.length - 1, i)); useWhale.setState({ step: n }); SCENES[n].enter(); };
-  const card = step === 3 ? currentCard(doc, useStore.getState().cls) : null;
+  const sv = SVCS[step];
+  const subs = sv.subs?.length || 1;
+  const go = (i: number, k = 0) => { const n = Math.max(0, Math.min(SVCS.length - 1, i)); useWhale.setState({ step: n, sub: k }); SVCS[n].enter(k); };
+  const next = () => (sub < subs - 1 ? go(step, sub + 1) : go(step + 1));
+  const prev = () => (sub > 0 ? go(step, sub - 1) : go(step - 1, (SVCS[step - 1]?.subs?.length || 1) - 1));
+  const last = step === SVCS.length - 1 && sub === subs - 1;
+  const nextLabel = sub < subs - 1 ? sv.subs![sub + 1].split(" · ")[0] : SVCS[step + 1]?.name;
+  const card = step === 2 ? currentCard(doc, useStore.getState().cls) : null;
   const detailStudent = card ? doc.students.find((s) => s.class === card.cls && s.no === card.no) : undefined;
   const back = FROM[whaleFrom() || ""];
-  if (min) return <button className="wt-pill" onClick={() => useWhale.setState({ min: false })}><img className="wt-logo" src={whaleLogo} alt="" />웨일 연계 {step + 1}/{SCENES.length} · {sc.title}</button>;
+  const Body = sv.Bodies[sub];
+  if (min) return <button className="wt-pill" onClick={() => useWhale.setState({ min: false })}><img className="wt-logo" src={whaleLogo} alt="" />웨일 연계 {pad(step)} · {sv.name}</button>;
   // 학생 기록 창(모달)은 칸 밖에 그린다: 칸의 흐림(backdrop-filter)이 모달 덮개를 칸 안에 가두지 않게
   return (
     <>
     <aside className="whale-tour" aria-label="웨일 연계 둘러보기">
       <div className="wt-h wt-dark">
         <img className="wt-logo" src={whaleLogo} alt="" />
-        <b className="grow">웨일 스페이스와 함께 쓰는 하루</b>
+        <b className="grow">웨일 × 누가 · 서비스별 연계</b>
         {back && <a className="btn ghost sm" href={back.href}>← {back.label}</a>}
         <button className="btn ghost sm icon" onClick={() => useWhale.setState({ min: true })} aria-label="접기" title="접기">–</button>
       </div>
       <ol className="wt-steps">
-        {SCENES.map((s, i) => (
-          <li key={s.when}><button className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined} onClick={() => go(i)}><b>{String(i + 1).padStart(2, "0")}</b>{s.when}</button></li>
+        {SVCS.map((s, i) => (
+          <li key={s.tab}><button className={i === step ? "on" : i < step ? "done" : ""} aria-current={i === step ? "step" : undefined} onClick={() => go(i)}><b>{pad(i)}</b>{s.tab}</button></li>
         ))}
       </ol>
       <div className="wt-b" key={step}>
-        <div className="wt-idx">{String(step + 1).padStart(2, "0")} · {sc.when}</div>
-        <h2>{sc.title}</h2>
-        <p className="wt-lead">{sc.lead}</p>
-        <sc.Body />
-        <p className="wt-why"><b>왜 좋은가</b> {sc.why}</p>
+        <div className="wt-idx">{pad(step)} · {sv.name}</div>
+        <h2>{sv.title}</h2>
+        {sv.lead && <p className="wt-lead">{sv.lead}</p>}
+        {step === 0 ? <SceneMap go={go} /> : (
+          <>
+            <section className="wt-sec" aria-label="연결">
+              <h3>연결</h3>
+              <ul className="wt-links">
+                {sv.links.map((l) => (
+                  <li key={l.from}><span className={`dot ${l.st}`} aria-hidden /><span className="grow"><span className="ft"><b>{l.from}</b> → <b>{l.to}</b></span><small>{l.via}</small><Chip st={l.st} /></span></li>
+                ))}
+              </ul>
+            </section>
+            <section className="wt-sec" aria-label="가치">
+              <h3>가치</h3>
+              <div className="wt-ba"><div><i>전</i>{sv.before}</div><div className="after"><i>후</i>{sv.after}</div></div>
+            </section>
+            <section className="wt-sec" aria-label="해 보기">
+              <h3>해 보기</h3>
+              {sv.subs && (
+                <div className="seg wt-seg" role="tablist" aria-label={`${sv.name} 단계`}>
+                  {sv.subs.map((t, k) => <button key={t} role="tab" aria-selected={k === sub} className={k === sub ? "active" : ""} onClick={() => go(step, k)}>{t}</button>)}
+                </div>
+              )}
+              <Body key={sub} />
+            </section>
+            <p className="wt-why"><b>왜 누가와 딱 맞나</b> {sv.fit}</p>
+          </>
+        )}
       </div>
       <div className="wt-f wt-dark">
-        <button className="btn" disabled={step === 0} onClick={() => go(step - 1)}>이전</button>
+        <button className="btn" disabled={step === 0 && sub === 0} onClick={prev}>이전</button>
         <span className="grow" />
-        {step < SCENES.length - 1
-          ? <button className="btn primary" onClick={() => go(step + 1)}>다음 · {SCENES[step + 1].when}</button>
+        {!last
+          ? <button className="btn primary" onClick={next}>다음 · {nextLabel}</button>
           : <button className="btn primary" disabled={busy} onClick={() => void exitWhale()}>웨일 모드 끝내기</button>}
       </div>
     </aside>

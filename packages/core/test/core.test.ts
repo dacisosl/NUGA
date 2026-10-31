@@ -3,7 +3,7 @@ import {
   buildPairingUri, parsePairingUri, generateSyncKey, keyIdOf, encryptEnvelope, decryptEnvelope, encryptBackup, decryptBackup,
   countChars, splitSentences, isNominalEnding, suggestNominal, similarity, josa,
   reviewText, generateLocalDraft, buildDraftRequest, parseDraftResponse,
-  resolveNow, lessonFor, syncProgressSkeleton, routeRecordArea, classSortKey, classifySentence, cleanSpans, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, progressFromRows, toExportJson, parseImportJson, parseBulkRecords,
+  resolveNow, lessonFor, syncProgressSkeleton, routeRecordArea, classSortKey, classifySentence, cleanSpans, mergeRecords, applyTombstones, makeSampleDoc, studentsFromRows, isSchoolRoster, classFromOrgPath, progressFromRows, toExportJson, parseImportJson, parseBulkRecords,
   type NugaRecord, type SyncMessage,
 } from "../src";
 
@@ -146,6 +146,27 @@ describe("import/export", () => {
     expect(s[0]).toEqual({ class: "2-3", no: 15, name: "홍길동", achievement: { auto: null, manual: 85, confidence: "ok" } });
     expect(s[1]).toEqual({ class: "2-5", no: 3, name: "김철수" });
     expect(studentsFromRows([{ 반: "1-1", 번호: 1, 이름: "가", 도달정도: "72" }])[0].achievement?.manual).toBe(72);
+  });
+  it("students from a whale space roster: 학생 행만 · 성+이름 · 조직 경로", () => {
+    const rows = [
+      { "사용자 유형": "선생님", 성: "김", 이름: "하늘", "조직 경로": "/해밀고등학교/교무실", "고유 번호": "", 이메일: "t@x" },
+      { "사용자 유형": "학생", 성: "이", 이름: "서연", "조직 경로": "/해밀고등학교/2학년/7반", "고유 번호": "3", 이메일: "s@x" },
+      { "사용자 유형": "학생", 성: "박", 이름: "민준", "조직 경로": "/해밀고등학교/2학년/8반", "고유 번호": "20812" },
+    ];
+    expect(isSchoolRoster(rows)).toBe(true);
+    expect(isSchoolRoster([{ 반: "2-3", 번호: 1, 이름: "가" }])).toBe(false);
+    expect(studentsFromRows(rows)).toEqual([{ class: "2-7", no: 3, name: "이서연" }, { class: "2-8", no: 12, name: "박민준" }]);
+    // 반을 알 수 없는 행(교무실 · 유형 열 없음)은 고른 반으로 넣지 않는다. 경로 꼴이 달라도 반을 읽는다. 성 '하' + 이름 '하늘'
+    const odd = [
+      { 성: "김", 이름: "하늘", "조직 경로": "/해밀고/교무실", "고유 번호": "7" },
+      { 구분: "학부모", 성: "이", 이름: "부모", "조직 경로": "/해밀고/2학년/7반", "고유 번호": "4" },
+      { 성: "하", 이름: "하늘", "조직 경로": "/해밀고/2학년/2학년 7반", "고유 번호": "5" },
+      { 성: "최", 이름: "지안", "조직 경로": "/해밀고/1-1", "고유 번호": "3" },
+    ];
+    expect(studentsFromRows(odd, "2-7")).toEqual([{ class: "2-7", no: 5, name: "하하늘" }, { class: "1-1", no: 3, name: "최지안" }]);
+    expect(classFromOrgPath("/학교/2학년 7반")).toBe("2-7");
+    // 학교 명단이 아니면 '성' 열은 읽지 않는다 (성별일 수 있음)
+    expect(studentsFromRows([{ 반: "2-3", 번호: 1, 이름: "홍길동", 성: "남" }])[0].name).toBe("홍길동");
   });
   it("progress from rows", () => {
     const p = progressFromRows([{ 날짜: "2026.05.08", 반: "2-3", 단원: "3단원", 차시: 2, 제목: "화학 평형" }]);
