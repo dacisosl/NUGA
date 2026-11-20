@@ -197,8 +197,8 @@ function sStart(root) {
 function sLevel(root) {
   root.innerHTML = `<section class="q"><h2>어느 학교급 선생님이신가요?</h2><p class="sub">고르신 학교급에 맞춰 설명과 사례가 바뀝니다.</p>
     <div class="circles">
-      <button type="button" data-lv="elem" class="${S.level === "elem" ? "on" : ""}"><b>초등</b><span>담임 · 한 반, 여러 교과</span><small>학습태도 · 발표 · 관계 · 생활</small></button>
-      <button type="button" data-lv="mid" class="${S.level === "mid" ? "on" : ""}"><b>중·고등</b><span>교과 · 여러 반</span><small>질문 · 발표 · 협동 · 탐구</small></button>
+      <button type="button" data-lv="elem" class="${S.level === "elem" ? "on" : ""}"><span class="pic"><img src="assets/level-elem.webp" alt="" width="730" height="880"></span><span class="txt"><b>초등</b><span>담임 · 한 반, 여러 교과</span><small>학습태도 · 발표 · 관계 · 생활</small></span><i class="go" aria-hidden="true">선택 →</i></button>
+      <button type="button" data-lv="mid" class="${S.level === "mid" ? "on" : ""}"><span class="pic"><img src="assets/level-mid.webp" alt="" width="730" height="880"></span><span class="txt"><b>중·고등</b><span>교과 · 여러 반</span><small>질문 · 발표 · 협동 · 탐구</small></span><i class="go" aria-hidden="true">선택 →</i></button>
     </div></section>`;
   guide("학교급을 눌러 주세요");
   $$(".circles button").forEach((b) => b.addEventListener("click", () => {
