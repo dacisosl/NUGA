@@ -2,6 +2,7 @@ name: Deploy web app to GitHub Pages
 
 # 한 사이트에 세 화면을 함께 올린다.
 #   /NUGA/        ← main 의 소개 페이지 (apps/landing) — 첫 화면, '앱 열기'로 아래 앱에 들어간다
+#   /NUGA/trial/  ← main 의 체험 페이지 (apps/landing/trial) — 부스용 체험판
 #   /NUGA/app/    ← main 의 데스크톱 웹 (apps/desktop)
 #   /NUGA/whale/  ← dev 의 웨일 버전 (whale/, NWEC 26)
 # 저장소(IndexedDB·localStorage)는 경로가 아니라 dacisosl.github.io 에 붙으므로, 앱 주소가 /NUGA/app/ 으로 옮겨도 쓰던 기록은 그대로다.
@@ -76,6 +77,7 @@ jobs:
           mkdir -p site/app
           cp main/apps/landing/index.html main/apps/landing/site.css main/apps/landing/site.js site/
           cp -r main/apps/landing/assets site/
+          cp -r main/apps/landing/trial site/
           cp -r main/apps/desktop/dist/. site/app/
           # 교육 인증 서류와 옛 안내에 적힌 /NUGA/privacy.html 주소를 그대로 살려 둔다
           cp site/app/privacy.html site/privacy.html
