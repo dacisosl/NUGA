@@ -171,10 +171,14 @@ const SC = [
 ];
 $("#dots").innerHTML = SC.slice(1, -1).map(() => "<li></li>").join("");
 
-function go(i) {
+/** fromHistory = 브라우저 뒤로·앞으로(휴대폰 뒤로 버튼·쓸어 넘기기)로 온 경우. 그 밖에는 장면마다 기록을 남겨 뒤로 가기가 이전 장면이 되게 한다 */
+function go(i, fromHistory) {
   i = Math.max(0, Math.min(SC.length - 1, i));
   if (i >= 2 && !S.level) i = 1;
   clearAll();
+  $("#timeup")?.remove();
+  sceneNext = null;
+  if (!fromHistory) { if (i === 0) history.replaceState({ i: 0 }, ""); else if (history.state?.i !== i) history.pushState({ i }, ""); }
   S.i = i;
   const sc = SC[i];
   stage.dataset.scene = sc.id;
@@ -183,7 +187,7 @@ function go(i) {
   $("#timer").classList.remove("stop"); $("#timer-v").textContent = "0.0";
   $("#lv").hidden = !S.level; if (S.level) $("#lv").textContent = `${LV[S.level].label} 선생님`;
   $$("#dots li").forEach((d, k) => { d.className = k + 1 < i ? "past" : k + 1 === i ? "now" : ""; });
-  prevBtn.disabled = i <= 1;
+  prevBtn.disabled = i < 1;
   nextBtn.disabled = i === 1 && !S.level;
   nextBtn.innerHTML = i === SC.length - 2 ? '마무리 <span aria-hidden="true">→</span>' : '다음 <span aria-hidden="true">→</span>';
   guide("");
@@ -191,13 +195,18 @@ function go(i) {
   sc.render(scene);
 }
 function reset() { S = fresh(); go(0); }
-nextBtn.addEventListener("click", () => go(S.i + 1));
-prevBtn.addEventListener("click", () => go(S.i - 1));
+/** [이전] = 브라우저 뒤로 가기와 같은 길 (지나온 장면으로). 기록이 없으면 바로 앞 장면 */
+function back() { if (history.state?.i > 0) history.back(); else go(S.i - 1); }
+/** 장면이 [다음] 버튼을 잠시 빌려 쓸 때 (상담 장면의 '다음 대화'). go() 가 장면을 바꿀 때마다 비운다 */
+let sceneNext = null;
+nextBtn.addEventListener("click", () => (sceneNext ? sceneNext() : go(S.i + 1)));
+prevBtn.addEventListener("click", back);
+addEventListener("popstate", (e) => go(e.state?.i ?? 0, true));
 $("#home").addEventListener("click", reset);
 addEventListener("keydown", (e) => {
   if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName) || S.i === 0) return;
   if (e.key === "ArrowRight") go(S.i + 1);
-  if (e.key === "ArrowLeft" && S.i > 1) go(S.i - 1);
+  if (e.key === "ArrowLeft") back();
 });
 // 부스용: 90초 동안 손대지 않으면 처음 화면으로
 let idle = 0;
@@ -240,14 +249,14 @@ function sLevel(root) {
 function sValue(root) {
   const words = ["솔직히, 없어도 수업은 됩니다", "있으면 좋지만 늘 뒤로 밀려요", "중요하다는 건 알고 있어요", "평가와 상담에 꼭 필요해요", "기록이 없으면 근거도 없어요"];
   root.innerHTML = `<section class="q"><p class="eyebrow">질문 1</p><h2>기록, <em>얼마나 중요하다</em>고 생각하세요?</h2>
-    <div class="meter"><div class="bars">${[30, 60, 90, 120, 150].map((h) => `<i style="height:${h}px"></i>`).join("")}</div><output id="out"><small>50</small>${words[2]}</output></div>
-    <div class="range"><input id="rng" type="range" min="0" max="100" value="50" aria-label="기록의 중요도"><div class="ends"><span>없어도 된다</span><span>없으면 안 된다</span></div></div>
+    <div class="meter"><div class="bars">${[30, 60, 90, 120, 150].map((h) => `<i style="height:${h}px"></i>`).join("")}</div><output id="out"><small>5</small>${words[2]}</output></div>
+    <div class="range"><input id="rng" type="range" min="1" max="10" step="1" value="5" aria-label="기록의 중요도 (1~10)"><div class="ends"><span>1 · 없어도 된다</span><span>10 · 없으면 안 된다</span></div></div>
     <p class="reveal" id="rev"></p></section>`;
   guide("슬라이드 바를 움직여 생각하시는 만큼 놓아 주세요");
   const rng = $("#rng"), bars = $$(".bars i");
   const draw = () => {
-    const v = Number(rng.value), k = Math.min(4, Math.floor(v / 20));
-    bars.forEach((b, i) => b.classList.toggle("on", i <= k && v > 0));
+    const v = Number(rng.value), k = Math.min(4, Math.floor((v - 1) / 2));   // 1~2 · 3~4 · 5~6 · 7~8 · 9~10
+    bars.forEach((b, i) => b.classList.toggle("on", i <= k));
     $("#out").innerHTML = `<small>${v}</small>${words[k]}`;
   };
   draw();
@@ -332,7 +341,7 @@ function sManual(root) {
   root.innerHTML = `<section class="split"><div id="colp">${phoneRecord(L)}<p class="cap">수업 중 · 교사의 폰 (워치 · 웨일북)</p></div><div id="colc">${pc(L, desk(L, null), 4)}<p class="cap">교무실 · 교사 PC</p></div></section>`;
   guide("폰에서 번호를 굴려 학생을 고르고 [저장]을 눌러 주세요");
   const reel = $("#reel"), save = $("#psave"), rows = $$(".r", reel);
-  let sel = 0, t0 = 0, tick = 0, saved = false;
+  let sel = 0, t0 = 0, tick = 0, saved = false, phoneSec = 0;
   const sync = () => {
     sel = Math.max(0, Math.min(L.n - 1, Math.round(reel.scrollTop / ROW)));
     rows.forEach((r, i) => { r.classList.toggle("sel", i === sel); r.classList.toggle("near", Math.abs(i - sel) === 1); });
@@ -351,7 +360,7 @@ function sManual(root) {
   save.addEventListener("click", () => {
     if (saved) return;
     saved = true; sync(); clearInterval(tick);
-    if (t0) { $("#timer-v").textContent = ((performance.now() - t0) / 1000).toFixed(1); $("#timer").classList.add("stop"); }
+    if (t0) { phoneSec = (performance.now() - t0) / 1000; $("#timer-v").textContent = phoneSec.toFixed(1); $("#timer").classList.add("stop"); }
     save.classList.remove("glow");
     S.pick = { i: sel, no: sel + 1, name: NAMES[sel] };
     $(".scr").insertAdjacentHTML("beforeend", `<div class="ph-snack"><span>저장 · ${L.cls} · ${S.pick.no}번</span><i>취소</i></div>`);
@@ -374,12 +383,18 @@ function sManual(root) {
       <div class="ib-act"><button class="b p" id="nsave" type="button" disabled>저장</button><span class="b">나중에</span><span class="b t">건너뛰기</span></div>
       <div class="ex"><small>예시를 눌러도 됩니다</small>${L.chips.map((c, i) => `<button type="button" data-k="${i}">${c.t}</button>`).join("")}</div></div>`;
     $("#sheet").innerHTML = desk(L, S.pick) + inbox(L, "녹음 없음", man, 5, "");
-    guide("예시를 누르거나 직접 한 줄을 쓰고 [저장]을 눌러 주세요");
-    // 쉬는 시간 한 줄도 시간을 잰다 (창이 열린 순간부터)
-    const t1 = performance.now();
-    $("#timer").classList.remove("stop");
-    const tick2 = every(() => { $("#timer-v").textContent = ((performance.now() - t1) / 1000).toFixed(1); }, 100);
+    guide("기록칸에 한 줄을 쓰거나 예시를 누르고 [저장]을 눌러 주세요");
     const note = $("#note"), ns = $("#nsave");
+    // 한 줄 기록 시간: 기록칸에 커서가 올라가거나 누른 순간부터 저장(Enter)까지
+    let t1 = 0, tick2 = 0;
+    $("#timer-v").textContent = "0.0"; $("#timer").classList.remove("stop");
+    const startLine = () => {
+      if (t1) return;
+      t1 = performance.now();
+      tick2 = every(() => { $("#timer-v").textContent = ((performance.now() - t1) / 1000).toFixed(1); }, 100);
+    };
+    ["pointerenter", "pointerdown", "focus"].forEach((t) => note.addEventListener(t, startLine));
+    $$(".ex button").forEach((b) => ["pointerenter", "pointerdown"].forEach((t) => b.addEventListener(t, startLine)));
     let cat = 0;
     const setCat = (c) => { cat = c; $$("#cats .cat").forEach((x) => x.classList.toggle("on", Number(x.dataset.c) === c)); };
     const check = () => { ns.disabled = !note.value.trim(); ns.classList.toggle("glow", !ns.disabled); };
@@ -387,20 +402,40 @@ function sManual(root) {
     $$(".ex button").forEach((b) => b.addEventListener("click", () => { const c = L.chips[Number(b.dataset.k)]; note.value = c.t; S.chip = Number(b.dataset.k); setCat(c.c); check(); }));
     note.addEventListener("input", check);
     const done = () => {
-      if (ns.disabled) return;
+      if (ns.disabled || !note.value.trim()) return;
+      if (!t1) startLine();
       clearInterval(tick2); $("#timer").classList.add("stop");
-      const sec = ((performance.now() - t1) / 1000).toFixed(1);
-      $("#timer-v").textContent = sec;
+      const sec = (performance.now() - t1) / 1000;
+      $("#timer-v").textContent = sec.toFixed(1);
       S.note = note.value.trim(); S.noteCat = cat;
       if (S.chip >= 0 && L.chips[S.chip].t !== S.note) S.chip = -1;
       $(".ib-man").innerHTML = `<div class="ib-done">${L.cls} ${S.pick.no}번 ${S.pick.name} · 기록했습니다<small>${L.cats[cat]} · 폰 기록에 한 줄이 붙었습니다</small></div>`;
-      later(() => {
+      later(() => timeUp(sec, () => {
         $("#sheet").innerHTML = desk(L, S.pick, S.note);
         $("#pend").textContent = "4";
         $("#colp").classList.remove("dim");
-        guide(`쉬는 시간 한 줄, ${sec}초. 그 한 줄이 학생 카드에 근거로 남았습니다`, true);
-      }, 1100);
+        guide(`한 줄 ${sec.toFixed(1)}초. 그 한 줄이 학생 카드에 근거로 남았습니다`, true);
+      }), 500);
     };
+    /** 저장하면 걸린 시간을 큰 글씨로: 숫자가 0에서 올라가며 멈춘다 */
+    function timeUp(sec, after) {
+      const total = sec + phoneSec;
+      $("#stage").insertAdjacentHTML("beforeend", `<div class="timeup" id="timeup"><div class="tu-card" role="dialog" aria-label="기록에 걸린 시간">
+          <p class="tu-k">${S.pick.no}번 ${esc(S.pick.name)} · 한 줄 기록</p>
+          <p class="tu-n"><b id="tun">0.0</b><span>초</span></p>
+          <p class="tu-m">이만큼의 시간으로<br><em>수업 속 한 장면</em>을 기록했습니다.</p>
+          ${phoneSec ? `<p class="tu-s">수업 중 폰에서 번호 누르기 <b>${phoneSec.toFixed(1)}초</b> + 쉬는 시간 한 줄 <b>${sec.toFixed(1)}초</b> = 모두 <b>${total.toFixed(1)}초</b></p>` : ""}
+          <button class="cta" id="tuok" type="button">확인 <span aria-hidden="true">→</span></button></div></div>`);
+      const el = $("#tun"), t0n = performance.now(), dur = reduced ? 0 : 900;
+      const run = () => {
+        const k = dur ? Math.min(1, (performance.now() - t0n) / dur) : 1;
+        el.textContent = (sec * (1 - Math.pow(1 - k, 3))).toFixed(1);
+        if (k < 1) requestAnimationFrame(run);
+      };
+      run();
+      $("#tuok").focus({ preventScroll: true });
+      $("#tuok").addEventListener("click", () => { $("#timeup").remove(); after(); });
+    }
     ns.addEventListener("click", done);
     note.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); done(); } });
   }
@@ -637,16 +672,37 @@ function sTalk(root) {
     other.classList.add("old");
     who.classList.add("talking"); later(() => who.classList.remove("talking"), 1300);
   };
+  // 대화는 아래 [다음 대화 →]로 한 마디씩 넘긴다. 대화가 끝나야 그 버튼이 [마무리 →]가 된다
+  let step = 0;
+  const label = (t) => { nextBtn.innerHTML = `${t} <span aria-hidden="true">→</span>`; };
+  const talkNext = () => {
+    if (step < T.lines.length) {
+      const ln = T.lines[step];
+      say(ln[0], fill(ln[1]), step === T.lines.length - 1 ? "vague" : "");
+      step++;
+      nextBtn.classList.add("glow"); nextBtn.disabled = false;
+      guide(step === 1 ? "기록 없이 나누는 상담입니다. [다음 대화]로 이어 가세요" : "[다음 대화]를 눌러 주세요");
+      return;
+    }
+    if (step === T.lines.length) {   // 막연한 답 다음: [누가기록!]을 눌러야 이어진다
+      step++;
+      $("#bt").hidden = true; $("#nuga").hidden = false;
+      nextBtn.disabled = true; nextBtn.classList.remove("glow");
+      guide("막연한 말뿐입니다. 선생님 위의 [누가기록!]을 눌러 주세요");
+      return;
+    }
+    // 근거 있는 설명 다음: 상대의 반응 → 대화 끝
+    say("l", fill(T.after), "happy");
+    sceneNext = null; label("마무리"); nextBtn.classList.add("glow");
+    $("#replay").hidden = false;
+    guide("같은 질문, 다른 답. 누가 기록이 상담의 근거가 됩니다 · [마무리]", true);
+  };
   const play = () => {
+    timers.forEach((f) => f()); timers = [];
     $("#bl").hidden = $("#bt").hidden = true; $("#evs").innerHTML = ""; $("#nuga").hidden = true; $("#replay").hidden = true;
     $(".talk2").classList.remove("answered");
-    guide("기록 없이 나누는 상담입니다. 대화를 들어 보세요");
-    T.lines.forEach((ln, k) => later(() => say(ln[0], fill(ln[1]), k === T.lines.length - 1 ? "vague" : ""), 400 + k * 2300));
-    later(() => {
-      $("#bt").hidden = true;
-      $("#nuga").hidden = false;
-      guide("막연한 말뿐입니다. 선생님 위의 [누가기록!]을 눌러 주세요");
-    }, 400 + T.lines.length * 2300);
+    step = 0; sceneNext = talkNext; label("다음 대화");
+    later(talkNext, 300);
   };
   $("#nuga").addEventListener("click", () => {
     $("#nuga").hidden = true;
@@ -654,15 +710,11 @@ function sTalk(root) {
     $("#evs").innerHTML = `<p>누가에 쌓인 ${esc(name)}의 기록</p>` + evRecs.map((r, k) => `<div class="evc" style="animation-delay:${k * 0.18}s">${catChip(L, r[0])}<time>${r[1]}</time><span>${esc(r[2])}</span></div>`).join("");
     later(() => {
       say("t", `<small>누가 기록 ${evRecs.length}건으로</small>${T.answer} ${T.tail} <mark>“${esc(S.note)}”</mark>`, "good");
-      guide("이번엔 날짜와 장면으로 설명합니다");
+      nextBtn.disabled = false; nextBtn.classList.add("glow");
+      guide("이번엔 날짜와 장면으로 설명합니다. [다음 대화]를 눌러 주세요");
     }, 800);
-    later(() => {
-      say("l", fill(T.after), "happy");
-      $("#replay").hidden = false;
-      guide("같은 질문, 다른 답. 누가 기록이 상담의 근거가 됩니다 · [마무리]", true);
-    }, 4200);
   });
-  $("#replay").addEventListener("click", () => { timers.forEach((f) => f()); timers = []; play(); });
+  $("#replay").addEventListener("click", play);
   play();
 }
 
