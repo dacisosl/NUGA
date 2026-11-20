@@ -61,3 +61,12 @@
 .wst{display:inline-block;font-style:normal;text-decoration:none;font-size:11px;font-weight:700;letter-spacing:0;padding:0 6px;margin-left:2px;border-radius:4px;line-height:1.6;vertical-align:1px;white-space:nowrap}.wst.real{background:rgba(111,211,168,.14);color:#6fd3a8}.wst.now{background:rgba(172,205,255,.14);color:#acd0ff}.wst.plan{background:rgba(255,178,128,.13);color:#ffc9a8}.whale-steps small{display:flex;gap:8px}.whale-steps small em{flex:none;font-style:normal;font-size:12px;font-weight:700;color:#6f8cb2;padding-top:1px}.whale-steps small+small{margin-top:2px}.whale-steps .is-current small em{color:#acd0ff}.whale-steps button{padding:13px 0 14px}
 @media(max-height:780px) and (min-width:801px){.whale-steps small{display:flex;font-size:12.5px}.whale-steps small+small{display:none}.whale-steps .is-current small+small{display:flex}.whale-steps button{padding:9px 0 10px}}
 @media(max-height:700px) and (max-width:480px){.whale-steps small{display:flex}.whale-steps small+small{display:none}}
+
+/* 첫 화면: 크게 [체험하기](은은히 깜빡임), 그 아래 작게 [앱 둘러보기] */
+.hero-actions{flex-direction:column;align-items:flex-start;row-gap:12px}
+.hero .hero-actions .button.trial{min-height:62px;padding:0 36px;border-radius:8px;font-size:19px;font-weight:800;gap:10px;animation:trial-blink 1.6s ease-in-out infinite}
+.hero .hero-actions .button.tour{margin-top:0;min-height:36px;padding:0 14px;font-size:13px;font-weight:600;gap:6px;background:transparent;border-color:#476486;color:#c6dcfc}
+.hero .hero-actions .button.tour:hover{border-color:#accdff;color:#eaf2ff}
+@keyframes trial-blink{0%,100%{box-shadow:0 0 0 0 rgba(172,205,255,.55)}50%{box-shadow:0 0 0 14px rgba(172,205,255,0)}}
+@media(max-width:800px){.hero .hero-actions .button.trial{min-height:54px;padding:0 28px;font-size:17px}}
+@media(prefers-reduced-motion:reduce){.hero .hero-actions .button.trial{animation:none}}
