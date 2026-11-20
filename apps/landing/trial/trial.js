@@ -238,6 +238,8 @@ function sLevel(root) {
     </div></section>`;
   guide("학교급을 눌러 주세요");
   $$(".circles button").forEach((b) => b.addEventListener("click", () => {
+    // 시작 화면을 건너뛰고 들어온 폰이면 여기서 전체 화면 + 가로 고정을 시도한다 (누르는 순간이어야 허용됨)
+    if (matchMedia("(pointer: coarse)").matches && !document.fullscreenElement) toLandscape();
     const keep = S.level === b.dataset.lv;
     S = { ...(keep ? S : fresh()), level: b.dataset.lv, i: 1 };
     $$(".circles button").forEach((x) => x.classList.toggle("on", x === b));
@@ -727,5 +729,6 @@ function sEnd(root) {
   $("#again").addEventListener("click", reset);
 }
 
-go(0);
+// 소개 페이지의 [체험하기]는 ?start=level 로 들어와 시작 화면을 건너뛰고 학교급 선택부터. 뒤로 가기는 소개 페이지로
+if (new URLSearchParams(location.search).get("start") === "level") { history.replaceState({ i: 1 }, ""); go(1, true); } else go(0);
 touch();

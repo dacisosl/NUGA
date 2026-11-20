@@ -62,11 +62,22 @@
 @media(max-height:780px) and (min-width:801px){.whale-steps small{display:flex;font-size:12.5px}.whale-steps small+small{display:none}.whale-steps .is-current small+small{display:flex}.whale-steps button{padding:9px 0 10px}}
 @media(max-height:700px) and (max-width:480px){.whale-steps small{display:flex}.whale-steps small+small{display:none}}
 
-/* 첫 화면: 크게 [체험하기](은은히 깜빡임), 그 아래 작게 [앱 둘러보기] */
-.hero-actions{flex-direction:column;align-items:flex-start;row-gap:12px}
-.hero .hero-actions .button.trial{min-height:62px;padding:0 36px;border-radius:8px;font-size:19px;font-weight:800;gap:10px;animation:trial-blink 1.6s ease-in-out infinite}
-.hero .hero-actions .button.tour{margin-top:0;min-height:36px;padding:0 14px;font-size:13px;font-weight:600;gap:6px;background:transparent;border-color:#476486;color:#c6dcfc}
+/* 첫 화면: [체험하기]를 제목 너비만큼 넓게 (오른쪽 빈자리 없이), 그 아래 작게 [앱 둘러보기]
+   글 묶음을 가장 넓은 줄(제목) 너비의 한 칸 격자로 두고, 버튼이 그 칸을 꽉 채운다 */
+.hero .hero-copy{display:grid;grid-template-columns:minmax(0,max-content);justify-content:start}
+.hero-actions{flex-direction:column;align-items:stretch;row-gap:12px}
+.hero .hero-actions .button.trial{position:relative;overflow:hidden;min-height:78px;padding:0 12px 0 26px;justify-content:space-between;gap:16px;border-radius:14px;border:1px solid #fff;color:#0d2442;background:linear-gradient(120deg,#f6f9ff 0%,#dae8ff 52%,#b2cdfa 100%);box-shadow:0 18px 44px rgba(52,104,190,.35);animation:trial-glow 2.4s ease-in-out infinite;transition:transform .2s,box-shadow .2s}
+.hero .hero-actions .button.trial:hover{transform:translateY(-2px);background:linear-gradient(120deg,#fff 0%,#e3eeff 52%,#bdd5fb 100%)}
+.button.trial .t-txt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left}
+.button.trial .t-txt b{font-size:23px;font-weight:850;letter-spacing:-.04em;line-height:1.1}
+.button.trial .t-txt small{font-size:13px;font-weight:600;color:#3d5c86;letter-spacing:-.01em}
+.button.trial .t-arr{flex:none;width:54px;height:54px;border-radius:12px;background:#0d2442;color:#dbe9ff;display:grid;place-items:center;font-size:22px;transition:transform .25s}
+.button.trial:hover .t-arr{transform:translateX(4px)}
+.hero .hero-actions .button.trial::after{content:"";position:absolute;top:0;bottom:0;left:-45%;width:32%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.8),transparent);transform:skewX(-18deg);animation:trial-shine 3.4s ease-in-out infinite;pointer-events:none}
+.hero .hero-actions .button.tour{align-self:flex-start;margin-top:0;min-height:36px;padding:0 14px;font-size:13px;font-weight:600;gap:6px;background:transparent;border-color:#476486;color:#c6dcfc}
 .hero .hero-actions .button.tour:hover{border-color:#accdff;color:#eaf2ff}
-@keyframes trial-blink{0%,100%{box-shadow:0 0 0 0 rgba(172,205,255,.55)}50%{box-shadow:0 0 0 14px rgba(172,205,255,0)}}
-@media(max-width:800px){.hero .hero-actions .button.trial{min-height:54px;padding:0 28px;font-size:17px}}
-@media(prefers-reduced-motion:reduce){.hero .hero-actions .button.trial{animation:none}}
+@keyframes trial-glow{0%,100%{box-shadow:0 18px 44px rgba(52,104,190,.35),0 0 0 0 rgba(172,205,255,.55)}50%{box-shadow:0 18px 44px rgba(52,104,190,.45),0 0 0 12px rgba(172,205,255,0)}}
+@keyframes trial-shine{0%,55%{left:-45%}100%{left:130%}}
+@media(max-width:800px){.hero .hero-actions .button.trial{min-height:66px;padding:0 10px 0 20px}.button.trial .t-txt b{font-size:20px}.button.trial .t-txt small{font-size:12px}.button.trial .t-arr{width:46px;height:46px}}
+@media(prefers-reduced-motion:reduce){.hero .hero-actions .button.trial,.hero .hero-actions .button.trial::after{animation:none}}/* 첫 화면 계단 영상: 마우스를 따라 움직일 때(살짝 확대·이동) 틀 밖으로 삐져나온 가장자리가 보이지 않게 자르고, 네 변을 부드럽게 녹인다 */
+.hero-art{overflow:hidden;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 6%,#000 96%,transparent 100%);mask-image:linear-gradient(0deg,transparent 0,#000 6%,#000 96%,transparent 100%)}
