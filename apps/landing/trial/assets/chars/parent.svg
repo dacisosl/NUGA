@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300">
+  <!-- 학부모(아버지): 짧은 갈색 머리, 연두 니트에 흰 셔츠 깃. 같은 화풍. m-open = 말할 때 입 -->
+  <style>.m-open{display:none}</style>
+  <defs>
+    <linearGradient id="pa-skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbdcc4"/><stop offset="1" stop-color="#eebb98"/></linearGradient>
+    <linearGradient id="pa-hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b4033"/><stop offset="1" stop-color="#33231b"/></linearGradient>
+    <linearGradient id="pa-knit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8cc3a5"/><stop offset="1" stop-color="#5f9b7e"/></linearGradient>
+  </defs>
+  <path d="M24 300c0-66 42-100 96-100s96 34 96 100z" fill="url(#pa-knit)"/>
+  <path d="M98 202l22 24 22-24-6 28-16-6-16 6z" fill="#f6f4ee"/>
+  <path d="M96 204q24 20 48 0" stroke="#4e8a6d" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M60 250c4 14 4 32 2 50M180 250c-4 14-4 32-2 50M100 262h40M96 278h48" stroke="#6faa8c" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>
+  <path d="M106 164h28v42c-8 7-20 7-28 0z" fill="#eab592"/>
+  <ellipse cx="62" cy="128" rx="9" ry="12" fill="#efb995"/><ellipse cx="178" cy="128" rx="9" ry="12" fill="#efb995"/>
+  <ellipse cx="120" cy="124" rx="58" ry="57" fill="url(#pa-skin)"/>
+  <path d="M60 116c-6-46 24-76 60-76 38 0 66 28 60 74-8-14-16-22-28-28-20 6-48 6-66-6-12 8-20 20-26 36z" fill="url(#pa-hair)"/>
+  <path d="M92 58c18-6 40-6 56 2" stroke="#8a6a58" stroke-width="5" stroke-linecap="round" fill="none" opacity=".6"/>
+  <path d="M86 106q12-7 23-1M131 105q11-6 23 1" stroke="#3e2a20" stroke-width="4.6" stroke-linecap="round" fill="none"/>
+  <ellipse cx="98" cy="128" rx="8.5" ry="10.5" fill="#2a1d19"/><ellipse cx="142" cy="128" rx="8.5" ry="10.5" fill="#2a1d19"/>
+  <circle cx="101" cy="124" r="3.2" fill="#fff"/><circle cx="145" cy="124" r="3.2" fill="#fff"/>
+  <ellipse cx="82" cy="150" rx="10" ry="6" fill="#f59b95" opacity=".35"/><ellipse cx="158" cy="150" rx="10" ry="6" fill="#f59b95" opacity=".35"/>
+  <path d="M116 140q4 5 8 0" stroke="#cf8c70" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path class="m-close" d="M106 154q14 11 28 0" stroke="#7d3530" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+  <g class="m-open"><path d="M104 151q16 23 32 0q-16 5-32 0z" fill="#7f2f2f"/><path d="M111 161q9 6 18 0q-9-3.5-18 0z" fill="#ee8585"/></g>
+</svg>

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300">
+  <!-- 중고등 선생님: 검은 곱슬머리, 동그란 안경, 하늘색 셔츠 (학교급 선택 그림의 선생님을 따름). m-open = 말할 때 입 -->
+  <style>.m-open{display:none}</style>
+  <defs>
+    <linearGradient id="tm-skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe2cc"/><stop offset="1" stop-color="#f3c2a1"/></linearGradient>
+    <linearGradient id="tm-hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2f36"/><stop offset="1" stop-color="#16121a"/></linearGradient>
+    <linearGradient id="tm-shirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cddcf7"/><stop offset="1" stop-color="#a7bfe9"/></linearGradient>
+  </defs>
+  <path d="M26 300c0-66 42-100 94-100s94 34 94 100z" fill="url(#tm-shirt)"/>
+  <path d="M100 202l20 26-14 16-14-30zM140 202l-20 26 14 16 14-30z" fill="#e4ecfb"/>
+  <path d="M120 228v72" stroke="#93acd9" stroke-width="2.5"/>
+  <circle cx="126" cy="250" r="2.6" fill="#7f98c6"/><circle cx="126" cy="272" r="2.6" fill="#7f98c6"/><circle cx="126" cy="294" r="2.6" fill="#7f98c6"/>
+  <path d="M146 246h26v20h-26z" fill="none" stroke="#93acd9" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M106 164h28v42c-8 7-20 7-28 0z" fill="#f0b997"/>
+  <ellipse cx="62" cy="130" rx="9" ry="12" fill="#f2bf9e"/><ellipse cx="178" cy="130" rx="9" ry="12" fill="#f2bf9e"/>
+  <ellipse cx="120" cy="124" rx="58" ry="56" fill="url(#tm-skin)"/>
+  <path d="M58 118c-8-26-2-52 16-62 6-14 24-20 38-16 12-10 34-8 44 4 16 2 30 18 28 40 6 12 2 26-4 34-4-16-14-26-26-30-4 10-16 12-24 4-8 8-24 8-30 0-10 6-24 8-32 2-6 8-8 16-10 24z" fill="url(#tm-hair)"/>
+  <path d="M86 60c12-8 28-10 40-6M140 62c8 2 16 8 20 14" stroke="#5c4e58" stroke-width="4" stroke-linecap="round" fill="none" opacity=".7"/>
+  <path d="M84 104q12-6 24 0M132 104q12-6 24 0" stroke="#231b20" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <ellipse cx="98" cy="130" rx="7.5" ry="9.5" fill="#241a19"/><ellipse cx="142" cy="130" rx="7.5" ry="9.5" fill="#241a19"/>
+  <circle cx="100.5" cy="126.5" r="3" fill="#fff"/><circle cx="144.5" cy="126.5" r="3" fill="#fff"/>
+  <g fill="rgba(255,255,255,.14)" stroke="#1b1719" stroke-width="4.5"><circle cx="98" cy="129" r="18"/><circle cx="142" cy="129" r="18"/></g>
+  <path d="M116 127h8M62 124l18 2M178 124l-18 2" stroke="#1b1719" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="80" cy="153" rx="10" ry="6" fill="#f59b95" opacity=".38"/><ellipse cx="160" cy="153" rx="10" ry="6" fill="#f59b95" opacity=".38"/>
+  <path d="M117 143q3 3.5 6 0" stroke="#d3907a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path class="m-close" d="M106 156q14 12 28 0" stroke="#7d3530" stroke-width="3.6" fill="none" stroke-linecap="round"/>
+  <g class="m-open"><path d="M104 153q16 24 32 0q-16 5-32 0z" fill="#7f2f2f"/><path d="M111 163q9 6.5 18 0q-9-3.5-18 0z" fill="#ee8585"/></g>
+</svg>

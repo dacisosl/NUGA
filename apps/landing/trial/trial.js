@@ -18,6 +18,20 @@ function fit() {
 }
 addEventListener("resize", fit); addEventListener("orientationchange", fit); fit();
 
+/* 세로 화면의 [가로로 돌리기]: 전체 화면으로 바꾸고 가로로 고정한다. 아이폰처럼 지원하지 않으면 직접 돌려 달라고 안내 */
+async function toLandscape() {
+  const el = document.documentElement;
+  try {
+    if (!document.fullscreenElement && el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
+    await screen.orientation.lock("landscape");
+    return true;
+  } catch { return false; }
+}
+$("#rotbtn").addEventListener("click", async () => {
+  const ok = await toLandscape();
+  if (!ok) { $("#rotmsg").textContent = "이 기기는 자동으로 돌릴 수 없어요. 휴대폰을 직접 가로로 돌려 주세요. (화면 자동 회전을 켜 주세요)"; $("#rotmsg").classList.add("warn"); }
+});
+
 /* ---------- 데이터 (합성) ---------- */
 const NAMES = ["홍도윤", "류지아", "주시우", "용아린", "여재원", "윤수아", "모서아", "권태윤", "국동현", "왕승현", "이태윤", "금이준", "공이준", "설유진", "윤하준", "한예서", "기지아", "문민준", "허서아", "황재원", "허소율", "편예린", "기정우", "손시우", "임다은", "석예은"];
 const LV = {
@@ -54,6 +68,12 @@ const LV = {
     close: "배려와 책임감, 스스로 배우려는 태도가 고르게 자라고 있어 앞으로의 성장이 더욱 기대되는 학생임.",
     batch: ["수학 시간에 자신의 풀이를 친구에게 차근차근 설명하며…", "모둠 역할을 스스로 정하고 끝까지 맡은 일을 해내는…", "궁금한 점을 바로 질문하며 수업에 적극적으로 참여하는…", "친구의 발표를 귀 기울여 듣고 좋은 점을 찾아 말해 주는…", "정리 시간에 먼저 나서서 교실을 정돈하는 등…"],
     talkWho: "학부모 상담",
+    talk: {
+      left: "parent", leftName: "학부모님", teacher: "teacherF", teacherName: "담임 선생님",
+      lines: [["l", "선생님, 우리 아이 {name}, 학교에서 친구들과 잘 지내나요?"], ["t", "네, 친구들과 두루 잘 지내요. 걱정 안 하셔도 됩니다."], ["l", "다행이네요. 그런데 구체적으로 어떤 모습인지 궁금해요."], ["t", "음… 그게… 늘 밝게 잘 지내는 편이에요."]],
+      ev: [0, 4], answer: "<mark>9월 4일 모둠 활동</mark>에서 친구의 의견을 끝까지 듣고 정리해 주었어요. <mark>9월 30일</mark>에는 다툰 친구에게 먼저 다가가 사과하고 화해했고요.", tail: "오늘 수업 기록에도 남아 있어요.",
+      after: "아, 그런 모습이 있었군요! 집에서도 꼭 칭찬해 줄게요.",
+    },
     qs: [
       { q: "우리 아이가 친구들과 잘 지내나요?", off: "네, 친구들과 두루 잘 지내고 있습니다. 걱정하지 않으셔도 됩니다.", on: "네. <mark>9월 4일 모둠 활동</mark>에서 친구의 의견을 끝까지 듣고 정리해 주었고, <mark>9월 30일</mark>에는 다툰 친구에게 먼저 다가가 사과하고 화해했습니다.", ev: [0, 4], mine: true },
       { q: "수업 시간에는 어떤가요?", off: "수업 태도도 좋은 편입니다.", on: "<mark>9월 11일 수학 시간</mark>에 틀린 문제를 스스로 다시 풀어 보았고, <mark>9월 25일</mark>에는 과학 실험 결과를 그림으로 그려 발표했습니다. 스스로 해 보려는 태도가 자라고 있습니다.", ev: [1, 3] },
@@ -92,6 +112,12 @@ const LV = {
     close: "협력적 태도와 개념을 구조화하는 능력, 탐구하려는 자세가 고르게 드러나는 성실한 학습자임.",
     batch: ["산·염기 평형 보고서 작성에서 자료 정리를 주도하며…", "용해 평형을 실생활 사례에 적용할 수 있는지 질문하며…", "평형 상수에 대한 조사 내용을 사례와 함께 발표하는…", "온도와 촉매 활동에서 모둠원의 오개념을 바로잡아 주는…", "반응 지수 개념 지도를 스스로 그려 정리하는 등…"],
     talkWho: "학생 · 학부모 상담",
+    talk: {
+      left: "student", leftName: "학생", teacher: "teacherM", teacherName: "화학 선생님",
+      lines: [["l", "선생님, 화학 쪽 진로를 생각하는데 제 강점이 뭘까요?"], ["t", "수업 태도가 좋으니까 열심히 하면 잘할 거야."], ["l", "음… 구체적으로 제가 뭘 잘하는지 알고 싶어요."], ["t", "그러니까… 전반적으로 성실한 편이야."]],
+      ev: [1, 3], answer: "<mark>9월 11일</mark>에 그래프에서 평형 도달 시점을 찾아 설명했고, <mark>9월 25일</mark>에는 평형 상수를 모형과 그림으로 표현해 발표했지. 추상적인 개념을 눈에 보이게 풀어내는 게 네 강점이야.", tail: "오늘 수업 기록에도 있단다.",
+      after: "제가 그런 걸 잘했군요! 다음엔 실험 설계까지 도전해 볼게요.",
+    },
     qs: [
       { q: "(학부모) 아이가 수업에 잘 참여하고 있나요?", off: "네, 수업에 성실하게 참여하고 있습니다. 크게 걱정하지 않으셔도 됩니다.", on: "네. <mark>9월 4일 모둠 토의</mark>에서는 의견을 정리하고 조율하는 역할을 맡았고, <mark>10월 5일 퀴즈 활동</mark>에서는 모둠원에게 풀이를 설명해 주었습니다.", ev: [0, 5], mine: true },
       { q: "(학생) 화학 쪽 진로를 생각하는데, 제 강점이 뭘까요?", off: "평소 수업 태도가 좋으니 열심히 하면 잘할 수 있을 거예요.", on: "<mark>9월 11일</mark>에 그래프에서 평형 도달 시점을 찾아 설명했고, <mark>9월 25일</mark>에는 평형 상수를 모형과 그림으로 표현해 발표했어요. 추상적인 개념을 눈에 보이게 풀어내는 게 강점이에요. 다음에는 실험 설계까지 도전해 봅시다.", ev: [1, 3] },
@@ -137,6 +163,7 @@ const SC = [
   { id: "use", title: "기록의 쓰임", render: sUse },
   { id: "hard", title: "기록이 어려운 이유", render: sHard },
   { id: "manual", title: "기록 방법 1 · 간편 기록", render: sManual },
+  { id: "whale", title: "웨일 연계 · 수업 화면에서 바로 기록", render: sWhale },
   { id: "auto", title: "기록 방법 2 · 자동 기록", render: sAuto },
   { id: "apply", title: "기록의 활용 · 대시보드와 생기부", render: sApply },
   { id: "talk", title: "기록의 활용 · 상담", render: sTalk },
@@ -188,7 +215,7 @@ function sStart(root) {
     <a class="link" href="../app/">체험 없이 앱 시작하기</a></div></section>`;
   $("#start").addEventListener("click", () => {
     // 폰·태블릿이면 전체 화면 + 가로 고정을 시도한다 (되는 기기만)
-    if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.("landscape")).catch(() => {});
+    if (matchMedia("(pointer: coarse)").matches) toLandscape();
     go(1);
   });
 }
@@ -379,6 +406,52 @@ function sManual(root) {
   }
 }
 
+/* ---------- 6-2 · 웨일 연계: 수업 관리 화면에서 학생을 바로 골라 기록 ---------- */
+// 웨일 브라우저 안 '수업 관리'(학생 화면 모아 보기) + 오른쪽 사이드바의 누가. 연계 예시 · 데모 데이터 (실제 웨일 화면이 아니라 누가 디자인으로 그린 예시)
+function sWhale(root) {
+  const L = LV[S.level];
+  const shown = Math.min(24, L.n);
+  const raise = 6; // 손 든 학생 (눈에 띄게)
+  const tiles = NAMES.slice(0, shown).map((n, i) => `<button class="tile ${i === raise ? "raise" : ""}" type="button" data-i="${i}"><span class="scr v${i % 4}"><i></i></span><span class="tn"><i>${String(i + 1).padStart(2, "0")}</i>${n}</span>${i === raise ? '<b class="hand">✋ 손 들었어요</b>' : ""}</button>`).join("");
+  const before = S.pick && S.note
+    ? `<li>${catChip(L, S.noteCat)}<span><b>${S.pick.no} ${esc(S.pick.name)}</b><small>폰 · 10:05</small></span></li>`
+    : `<li>${catChip(L, 1)}<span><b>3 ${NAMES[2]}</b><small>폰 · 10:02</small></span></li>`;
+  root.innerHTML = `<section class="wl"><div class="wb">
+      <div class="wb-tabs"><span class="lights"><i></i><i></i><i></i></span><span class="tab on"><img src="../assets/whale-logo.png" alt="">웨일 클래스 · ${L.cls} ${L.period}</span><span class="tab">교과서</span><span class="tab add">+</span><span class="g"></span><span class="demo">웨일 연계 예시 · 데모 데이터</span></div>
+      <div class="wb-bar"><span class="nv">‹ › ↻</span><span class="url">웨일 스페이스 · 수업 관리 · ${L.cls} 학생 화면</span><span class="sbtn on" title="사이드바 · 누가">${LOGO}</span></div>
+      <div class="wb-body">
+        <div class="wb-main"><div class="wm-h"><b>학생 화면 ${L.n}명</b><span>${L.lesson}</span><span class="g"></span><span class="hint">눈에 띈 학생 칸을 누르면 누가에 바로 기록됩니다</span></div>
+          <div class="tiles" id="tiles">${tiles}</div></div>
+        <aside class="wb-side"><div class="ws-h">${LOGO}<b>누가</b><small>웨일 사이드바</small></div>
+          <div class="ws-now"><small>지금 수업</small><b>${L.cls} · ${L.period}</b></div>
+          <div class="ws-cnt">오늘 기록 <b id="wcnt">1</b>건</div>
+          <ul class="ws-list" id="wlist">${before}</ul>
+          <p class="ws-f">카테고리와 번호만 남기고, 쉬는 시간에 한 줄을 더합니다</p></aside>
+      </div></div></section>`;
+  guide("웨일 수업 관리 화면입니다. 눈에 띈 학생 칸을 눌러 보세요");
+  let n = 1, open = null;
+  const close = () => { open?.querySelector(".pop")?.remove(); open = null; };
+  $$("#tiles .tile").forEach((t) => t.addEventListener("click", (e) => {
+    if (e.target.closest(".pop")) return;
+    if (open === t) return close();
+    close(); open = t;
+    const i = Number(t.dataset.i);
+    t.insertAdjacentHTML("beforeend", `<span class="pop ${i % 6 >= 4 ? "left" : ""}"><small>${i + 1}번 ${NAMES[i]} · 무엇이 보였나요?</small>${L.cats.map((_, c) => `<button type="button" class="cat c${c}" data-c="${c}">${L.cats[c]}</button>`).join("")}</span>`);
+    guide(`${NAMES[i]} 학생에게서 보인 것을 골라 주세요`);
+    $$(".pop .cat", t).forEach((b) => b.addEventListener("click", () => {
+      const c = Number(b.dataset.c);
+      close();
+      t.classList.add("done"); t.querySelector(".hand")?.remove();
+      t.querySelector(".ok")?.remove();
+      t.insertAdjacentHTML("beforeend", `<b class="ok">✓ ${L.cats[c]}</b>`);
+      $("#wlist").insertAdjacentHTML("afterbegin", `<li class="new">${catChip(L, c)}<span><b>${i + 1} ${NAMES[i]}</b><small>웨일 수업 관리 · 지금</small></span></li>`);
+      $("#wcnt").textContent = String(++n);
+      S.whale = { i, c };
+      guide(`수업 화면을 떠나지 않고 ${NAMES[i]} 기록 끝. 다른 학생도 눌러 보세요 · [다음]`, true);
+    }));
+  }));
+}
+
 /* ---------- 7 · 자동 기록 ---------- */
 function sAuto(root) {
   const L = LV[S.level];
@@ -534,47 +607,63 @@ function sApply(root) {
   }
 }
 
-/* ---------- 9 · 상담 ---------- */
+/* ---------- 9 · 상담: 두 사람 + 말풍선, [누가기록!]으로 근거 있는 설명 ---------- */
+/** 말하는 사람: assets/chars/*.svg 를 그대로 끼워 넣는다 (말할 때 입 모양을 CSS 로 바꾸려고 img 가 아니라 인라인) */
+const CHAR = { teacherF: "teacher-f", teacherM: "teacher-m", parent: "parent", student: "student" };
+const charCache = {};
+const charSvg = (kind) => (charCache[kind] ||= fetch(`assets/chars/${CHAR[kind]}.svg`).then((r) => (r.ok ? r.text() : Promise.reject())));
+function person(kind) {
+  const slot = `<span class="fig" data-k="${kind}"><img src="assets/chars/${CHAR[kind]}.svg" alt=""></span>`;
+  charSvg(kind).then((svg) => $$(`.fig[data-k="${kind}"]`).forEach((el) => { el.innerHTML = svg; })).catch(() => {});
+  return slot;
+}
 function sTalk(root) {
-  const L = ensure();
-  const recs = [[S.noteCat, "오늘", S.note, true], ...L.recs.slice().reverse()];
-  const recIndex = (k) => L.recs.length - k;
-  let on = false, last = -1;
-  root.innerHTML = `<section class="talk"><div class="panel"><header><b>상담 도우미</b><small>${L.talkWho} · ${S.pick.no}번 ${S.pick.name} · 체험용 예시 (준비 중인 기능)</small><span class="g"></span>
-        <label class="tg">기록 <span id="swt">OFF</span><button class="sw" id="sw" type="button" role="switch" aria-checked="false" aria-label="기록을 근거로 쓰기"></button></label></header>
-      <div class="chat" id="chat"><div class="msg a off"><small>안내</small>아래 질문을 눌러 보세요. 먼저 <b>기록 없이</b> 답하고, 그다음 <b>기록을 켜고</b> 답을 비교합니다.</div></div>
-      <div class="ask"><small>질문을 눌러 주세요</small>${L.qs.map((q, i) => `<button type="button" data-k="${i}" class="${i ? "" : "glow"}">${q.q}</button>`).join("")}</div></div>
-    <div class="panel evp off" id="evp"><header><b>근거 기록</b><small>${S.pick.name} · ${recs.length}건</small></header>
-      ${recs.map((r, k) => `<div class="rec ${r[3] ? "mine" : ""}" data-k="${k}">${catChip(L, r[0])}<time>${r[1]}</time><span>${esc(r[2])}</span></div>`).join("")}
-      <div class="off-note">기록을 끄면 근거가 없어<br>"잘 지냅니다"밖에 말할 수 없습니다.</div>
-      <footer>이름과 기록은 교사 기기에만 둡니다. 상담 문장은 교사가 확인하고 고쳐 씁니다.</footer></div></section>`;
-  guide("질문을 눌러 주세요. 먼저 기록 없이 답합니다");
-  const chat = $("#chat");
-  const say = (html, cls) => { chat.insertAdjacentHTML("beforeend", `<div class="msg ${cls}">${html}</div>`); chat.scrollTop = chat.scrollHeight; };
-  const answer = (k) => {
-    const q = L.qs[k], ev = [...q.ev.map(recIndex), ...(q.mine && on ? [0] : [])];
-    $$("#evp .rec").forEach((r) => r.classList.toggle("on", on && ev.includes(Number(r.dataset.k))));
-    if (on) say(`<small>기록 ON · 근거 ${ev.length}건</small>${q.on}${q.mine ? ` 오늘 수업 기록에도 <mark>"${esc(S.note)}"</mark>라고 남아 있습니다.` : ""}`, "a on");
-    else say(`<small>기록 OFF</small>${q.off}`, "a off");
+  const L = ensure(), T = L.talk, name = S.pick.name;
+  const evRecs = [...T.ev.map((k) => L.recs[k]), [S.noteCat, "오늘", S.note]];
+  const fill = (t) => esc(t).replace(/\{name\}/g, esc(name));
+  root.innerHTML = `<section class="talk2">
+      <p class="tk-cap">${L.talkWho} · ${S.pick.no}번 ${esc(name)} <span>이름과 기록은 교사 기기에만 있습니다</span></p>
+      <div class="who l" id="wl">${person(T.left)}<span class="nm">${T.left === "parent" ? `${esc(name)} ${T.leftName}` : `${esc(name)} (${T.leftName})`}</span></div>
+      <div class="who t" id="wt">${person(T.teacher)}<span class="nm">${T.teacherName}</span></div>
+      <div class="bub l" id="bl" hidden></div><div class="bub t" id="bt" hidden></div>
+      <button class="nuga-btn" id="nuga" type="button" hidden><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25h7v-7h7v-7h8" fill="none" stroke="currentColor" stroke-width="3.4"/></svg>누가기록!</button>
+      <div class="evs" id="evs"></div>
+      <button class="replay" id="replay" type="button" hidden>처음부터 다시 보기</button>
+    </section>`;
+  const say = (side, html, cls = "") => {
+    const me = $(side === "l" ? "#bl" : "#bt"), other = $(side === "l" ? "#bt" : "#bl"), who = $(side === "l" ? "#wl" : "#wt");
+    me.className = `bub ${side} ${cls}`; me.innerHTML = html; me.hidden = false;
+    me.style.animation = "none"; void me.offsetWidth; me.style.animation = "";
+    other.classList.add("old");
+    who.classList.add("talking"); later(() => who.classList.remove("talking"), 1300);
   };
-  $$(".ask button").forEach((b) => b.addEventListener("click", () => {
-    last = Number(b.dataset.k);
-    $$(".ask button").forEach((x) => x.classList.remove("glow"));
-    say(esc(L.qs[last].q), "u");
+  const play = () => {
+    $("#bl").hidden = $("#bt").hidden = true; $("#evs").innerHTML = ""; $("#nuga").hidden = true; $("#replay").hidden = true;
+    $(".talk2").classList.remove("answered");
+    guide("기록 없이 나누는 상담입니다. 대화를 들어 보세요");
+    T.lines.forEach((ln, k) => later(() => say(ln[0], fill(ln[1]), k === T.lines.length - 1 ? "vague" : ""), 400 + k * 2300));
     later(() => {
-      answer(last);
-      if (!on) { $("#sw").classList.add("glow"); guide("틀린 말은 아니지만 막연합니다. 이번엔 위의 [기록] 스위치를 켜 주세요"); }
-      else guide("실제 수업 장면으로 답합니다. 다른 질문도 눌러 보세요 · [마무리]", true);
-    }, 450);
-  }));
-  $("#sw").addEventListener("click", () => {
-    on = !on;
-    $("#sw").classList.toggle("on", on); $("#sw").classList.remove("glow"); $("#sw").setAttribute("aria-checked", String(on)); $("#swt").textContent = on ? "ON" : "OFF";
-    $("#evp").classList.toggle("off", !on);
-    if (!on) { $$("#evp .rec").forEach((r) => r.classList.remove("on")); guide("기록을 끄면 근거가 사라집니다. 다시 켜 보세요"); return; }
-    if (last >= 0) later(() => { answer(last); guide("같은 질문, 다른 답. 기록이 상담의 근거가 됩니다. 다른 질문도 눌러 보세요 · [마무리]", true); }, 350);
-    else guide("기록을 켰습니다. 질문을 눌러 주세요");
+      $("#bt").hidden = true;
+      $("#nuga").hidden = false;
+      guide("막연한 말뿐입니다. 선생님 위의 [누가기록!]을 눌러 주세요");
+    }, 400 + T.lines.length * 2300);
+  };
+  $("#nuga").addEventListener("click", () => {
+    $("#nuga").hidden = true;
+    $(".talk2").classList.add("answered");
+    $("#evs").innerHTML = `<p>누가에 쌓인 ${esc(name)}의 기록</p>` + evRecs.map((r, k) => `<div class="evc" style="animation-delay:${k * 0.18}s">${catChip(L, r[0])}<time>${r[1]}</time><span>${esc(r[2])}</span></div>`).join("");
+    later(() => {
+      say("t", `<small>누가 기록 ${evRecs.length}건으로</small>${T.answer} ${T.tail} <mark>“${esc(S.note)}”</mark>`, "good");
+      guide("이번엔 날짜와 장면으로 설명합니다");
+    }, 800);
+    later(() => {
+      say("l", fill(T.after), "happy");
+      $("#replay").hidden = false;
+      guide("같은 질문, 다른 답. 누가 기록이 상담의 근거가 됩니다 · [마무리]", true);
+    }, 4200);
   });
+  $("#replay").addEventListener("click", () => { timers.forEach((f) => f()); timers = []; play(); });
+  play();
 }
 
 /* ---------- 10 · 마무리 ---------- */
