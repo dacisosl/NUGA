@@ -582,7 +582,7 @@ function sEnd(root) {
   root.innerHTML = `<section class="hero end">${heroBg()}<div class="shade"></div><div class="copy">
     <p class="eyebrow">성장을 이끄는 기록</p><p class="word">누가</p>
     <ol><li><b>1</b>기록은 어렵습니다. 수업 중엔 틈이 없고, 끝나면 흐려집니다.</li><li><b>2</b>그러나 기록은 그 이상으로 가치 있습니다.</li><li><b>3</b>그래서 가장 선명한 순간에, 10초로 기록합니다.</li><li><b>4</b>그 기록이 피드백이 되어 학생의 성장을 이끕니다.</li></ol>
-    <div class="row"><a class="btn2 fill" href="../app/">앱 시작하기 →</a><button class="btn2" id="again" type="button">처음으로</button></div></div></section>`;
+    <div class="row"><a class="btn2 fill" href="../">누가 소개 페이지로 →</a><button class="btn2" id="again" type="button">처음으로</button></div></div></section>`;
   $("#again").addEventListener("click", reset);
 }
 
