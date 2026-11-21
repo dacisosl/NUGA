@@ -19,3 +19,4 @@ export * from "./demo";
 export * from "./adherence";
 export * from "./pipeline";
 export * from "./bulk";
+export * from "./help";

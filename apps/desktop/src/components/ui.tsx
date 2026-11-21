@@ -281,7 +281,7 @@ export function EditableCell({ value, onSave, type = "text", options, placeholde
   return <input ref={ref as React.RefObject<HTMLInputElement>} className="cell-edit" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setV(value); setEditing(false); } }} />;
 }
 
-export function Icon({ name, size = 16 }: { name: "list" | "pen" | "check" | "gear" | "sync" | "excel" | "json" | "plus" | "left" | "right" | "trash" | "mic" | "qr" | "watch" | "phone" | "warn" | "info" | "sun" | "spark"; size?: number }) {
+export function Icon({ name, size = 16 }: { name: "list" | "pen" | "check" | "gear" | "sync" | "excel" | "json" | "plus" | "left" | "right" | "trash" | "mic" | "qr" | "watch" | "phone" | "warn" | "info" | "sun" | "spark" | "help"; size?: number }) {
   const p: Record<string, React.ReactNode> = {
     sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
     spark: <><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8Z" /></>,
@@ -302,6 +302,7 @@ export function Icon({ name, size = 16 }: { name: "list" | "pen" | "check" | "ge
     phone: <><rect x="6" y="2" width="12" height="20" rx="2" /><path d="M11 18h2" /></>,
     warn: <><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></>,
     info: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></>,
+    help: <><circle cx="12" cy="12" r="10" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" /></>,
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{p[name]}</svg>;
 }

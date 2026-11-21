@@ -17,6 +17,7 @@ import { saveFile } from "./lib/platform";
 import { PANEL, SUB_WINDOW, startParams } from "./lib/windows";
 import { enterWhale, useWhale } from "./lib/whale";
 import { WhaleTour } from "./components/WhaleTour";
+import { HelpPanel, closeHelp, toggleHelp, useHelp } from "./components/HelpPanel";
 import whaleLogo from "./assets/whale-logo.png";
 // 반응형은 맨 마지막: 화면별 스타일(계단·카드·폰 미리보기)을 좁은 화면에서 덮어쓴다
 import "./responsive.css";
@@ -68,6 +69,7 @@ export default function App() {
         {view === "mobile" && <MobilePage />}
       </main>
       <WhaleTour />
+      <HelpPanel />
       <Toasts />
       {inbox && <InboxModal />}
     </div>
@@ -89,12 +91,15 @@ function TopNav({ view }: { view: Page }) {
   const backlog = useBacklogCount();
   const openInbox = useStore((s) => s.openInbox);
   const title = PAGE_TITLE[view];
-  const [bulk, setBulk] = useState(false);
+  const bulk = useStore((s) => s.bulkOpen);
+  const setBulk = useStore((s) => s.setBulkOpen);
+  const help = useHelp((s) => !!s.tab);
   const whale = useWhale((s) => s.on);
   const whaleBusy = useWhale((s) => s.busy);
   const toast = useStore((s) => s.toast);
   // [웨일 연계]: 누르기 전까지는 이 앱 그대로. 누르면 데모 영역에서 웨일 모드 둘러보기 (선생님 영역은 그대로)
   const openWhale = () => {
+    closeHelp();   // 오른쪽 칸은 하나만
     if (whale) { useWhale.setState({ min: false }); return; }
     toast({ text: "웨일 모드를 준비하는 중 · 데모 영역을 따로 만들어요 (선생님 기록은 그대로)", ttl: 3000 });
     void enterWhale("app");
@@ -119,6 +124,7 @@ function TopNav({ view }: { view: Page }) {
       <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부<span className="opt"> 생성</span></button>
       {bulk && <BulkRecordModal onClose={() => setBulk(false)} />}
       <button className={`btn whale-btn ${whale ? "active" : ""}`} onClick={openWhale} disabled={whaleBusy} aria-pressed={whale} title="웨일 모드: 웨일 스페이스·웨일 클래스·팀보드·웨일 브라우저와 어떻게 이어지는지 서비스별로 데모에서 해 봅니다"><img src={whaleLogo} alt="" /><span>웨일 연계</span></button>
+      <button className={`btn icon help-btn ${help ? "active" : ""}`} onClick={toggleHelp} title="도움말 · 사용설명서와 묻고 답하기 (F1)" aria-label="도움말" aria-expanded={help}><Icon name="help" /></button>
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
     </header>
   );

@@ -81,6 +81,8 @@ interface State {
   view: { split: boolean; highlight: boolean };
   toasts: Toast[];
   inbox: Inbox | null;
+  /** [일괄 기록 +] 창 (도움말의 [바로 가기]로도 연다) */
+  bulkOpen: boolean;
   syncStatus: { state: "off" | "idle" | "busy" | "error"; message: string; lastAt?: string };
   outbox: Outbox;
   deviceId: string;
@@ -101,6 +103,7 @@ interface State {
   setMode2p(m: "individual" | "batch" | "review"): void;
   select(s: { class: string; no: number } | null): void;
   setSettingsTab(t: string): void;
+  setBulkOpen(b: boolean): void;
   setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
   toast(t: Omit<Toast, "id">): number;
   dismissToast(id: number): void;
@@ -187,6 +190,7 @@ export const useStore = create<State>((set, get) => ({
   view: (() => { try { return { split: false, highlight: false, ...JSON.parse(localStorage.getItem("nuga.view") || "{}") }; } catch { return { split: false, highlight: false }; } })(),
   toasts: [],
   inbox: null,
+  bulkOpen: false,
   syncStatus: { state: "off", message: "연결 안 됨" },
   outbox: { messages: [], tombstones: [] },
   deviceId: "",
@@ -340,6 +344,7 @@ export const useStore = create<State>((set, get) => ({
   setMode2p: (mode2p) => set({ mode2p }),
   select: (selected) => set({ selected }),
   setSettingsTab: (settingsTab) => set({ settingsTab }),
+  setBulkOpen: (bulkOpen) => set({ bulkOpen }),
   setView(p) { const view = { ...get().view, ...p }; set({ view }); try { localStorage.setItem("nuga.view", JSON.stringify(view)); } catch { /* 보기 설정 저장 실패는 무시 */ } },
   toast(t) {
     const id = toastSeq++;
