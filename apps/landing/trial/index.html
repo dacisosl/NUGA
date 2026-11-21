@@ -4,42 +4,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>누가 체험하기</title>
-  <meta name="description" content="누가를 5분 안에 직접 해 보는 체험 페이지. 모든 학생과 기록은 체험용 가상 데이터입니다.">
+  <meta name="description" content="누가를 1분 안에 직접 해 보는 체험 페이지. 모든 학생과 기록은 체험용 가상 데이터입니다.">
   <meta name="theme-color" content="#081422">
   <meta name="robots" content="noindex">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23081422'/%3E%3Cpath d='M6 24h7v-6h6v-6h7' fill='none' stroke='%23accdff' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+  <!-- 안내(이것을 누르세요)는 driver.js 1.14.0 (MIT, vendor/driver.js-LICENSE.txt). 같은 주소에서 불러온다 -->
+  <link rel="stylesheet" href="vendor/driver.css">
   <link rel="stylesheet" href="trial.css">
+  <script src="vendor/driver.js.iife.js" defer></script>
   <script src="trial.js" defer></script>
 </head>
 <body>
-  <!-- 무대는 960×540 으로 그리고 화면에 맞춰 통째로 키우거나 줄인다 (폰 가로 · 태블릿 · 부스 모니터 같은 배치) -->
-  <div id="wrap"><div id="stage" data-scene="start">
+  <!-- 무대는 960×540 으로 그리고 화면에 맞춰 통째로 키우거나 줄인다. 폰을 세로로 들면 90° 돌려 그린다 (trial.js fit) -->
+  <div id="wrap"><div id="stage" data-scene="pick">
     <header class="top">
+      <button class="tb" id="prev" type="button" hidden><span aria-hidden="true">‹</span> 이전</button>
       <a class="brand" href="../" aria-label="누가 소개 페이지"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25h7v-7h7v-7h8" fill="none" stroke="currentColor" stroke-width="3"/></svg><b>누가</b><span>체험</span></a>
-      <span class="lv" id="lv" hidden></span>
-      <h1 id="title"></h1>
-      <span class="timer" id="timer" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg><b id="timer-v">0.0</b>초</span>
-      <button class="home" id="home" type="button">처음으로</button>
+      <ol class="steps" id="steps" aria-label="체험 단계"><li data-i="0"><i>1</i>기록</li><li data-i="1"><i>2</i>한눈에</li><li data-i="2"><i>3</i>생기부</li></ol>
+      <span class="lvsw" id="lvsw" role="group" aria-label="예시 수업 학교급"><button type="button" data-lv="elem">초등</button><button type="button" data-lv="mid">중·고등</button></span>
+      <button class="tb" id="home" type="button">처음으로</button>
     </header>
     <main id="scene" aria-live="polite"></main>
-    <footer class="bottom">
-      <p id="guide"></p>
-      <ol class="dots" id="dots" aria-label="체험 단계"></ol>
-      <button class="nav" id="prev" type="button">이전</button>
-      <button class="nav primary" id="next" type="button">다음 <span aria-hidden="true">→</span></button>
-    </footer>
     <div id="curtain" aria-hidden="true"></div>
   </div></div>
-  <div id="rotate" role="alert">
-    <b>휴대폰을 가로로 돌려 주세요</b>
-    <span>체험은 가로 화면에서 진행됩니다.</span>
-    <button id="rotbtn" type="button" aria-label="가로 화면으로 돌리기">
-      <svg viewBox="0 0 120 120" aria-hidden="true"><rect class="p" x="42" y="18" width="36" height="64" rx="7"/><path class="a" d="M22 92a44 44 0 0 0 70 8M92 100l1-13M92 100l-13-2"/><rect class="l" x="28" y="60" width="64" height="36" rx="7"/></svg>
-      <em>눌러서 가로로 돌리기</em>
-    </button>
-    <small id="rotmsg">버튼이 안 되면 휴대폰을 직접 가로로 돌려 주세요.</small>
+  <!-- 폰을 세로로 들었을 때 잠깐 뜨는 안내 (막지 않는다: 화면은 이미 옆으로 누워 그려져 있다) -->
+  <div id="rotate" role="status">
+    <svg viewBox="0 0 120 120" aria-hidden="true"><rect class="p" x="42" y="18" width="36" height="64" rx="7"/><path class="a" d="M22 92a44 44 0 0 0 70 8M92 100l1-13M92 100l-13-2"/><rect class="l" x="28" y="60" width="64" height="36" rx="7"/></svg>
+    <b>폰을 옆으로 돌려 주세요</b>
+    <span>화면이 가로로 누워 있습니다</span>
+    <button id="rotbtn" type="button">화면 돌리기</button>
   </div>
 </body>
 </html>

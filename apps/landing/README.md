@@ -31,16 +31,32 @@ GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 
 - 앱 상단 바에도 같은 모양의 [웨일 연계] 버튼이 있다. 웨일 모드는 선생님 영역과 따로 만든 데모 영역에서 돌아가고, 끝내면 원래 영역으로 돌아간다.
 - 사진을 다시 찍으려면: 앱 개발 서버를 띄우고 `node apps/landing/video/capture-whale.mjs` (시계 2026-10-28(수) 10:05 고정, 처음 방문한 브라우저로 `?whale=1`에 들어가 장면을 클릭·입력으로 진행).
 
+## 체험 페이지 (`trial/`)
+부스·연수에서 약 1분 안에 직접 눌러 보는 한 장짜리 체험(https://dacisosl.github.io/NUGA/trial/)이다. 첫 화면의 [체험하기]가 여기로 온다. 학생·기록·대본은 모두 체험용 합성 데이터이고 AI·서버를 부르지 않는다.
+
+- 흐름: 방식 고르기(모바일 수동기록 · 웨일 수동기록 · 자동녹음 기록) → ① 기록 → ② 한눈에(기록 조각이 학생 카드로 날아가고, 뒤로 빠지며 반 전체와 기록 부족 알림) → ③ 생기부(실제 분량의 초안, 내 기록 ↔ 문구 연결선, [한 문장씩]) → [다른 활용 보기 · 상담] 또는 [앱 소개 페이지로].
+  - 모바일 수동기록: 수업 중 내 폰에서 번호만 → 쉬는 시간 → 책상 위 모니터로 줌인('교사 PC 화면') → 한 줄.
+  - 웨일 수동기록: 교탁의 모니터 2대(수업용 화면 · 개인 화면) → 개인 화면의 웨일 브라우저에서 명단을 눌러 바로 한 줄. 원래 앱 모양에 '웨일 연계 예시 · 데모 데이터' 표시만 붙인다.
+  - 자동녹음 기록: 시간표대로 녹음되고 글로 옮겨지는 모습(자동 재생) → 쉬는 시간 → PC가 고른 발언에 학생만 붙인다.
+- 방금 남긴 기록은 끝까지 연한 빨강이다. 걸린 시간은 한 줄 칸에 커서가 올라가거나 누른 순간부터 저장(Enter)까지 재고, 저장하면 큰 숫자로 보여 준다.
+- 위쪽 막대: [‹ 이전](브라우저·휴대폰 뒤로 가기, ← 키와 같다) · 진행 표시(지나온 단계는 눌러서 돌아간다) · [초등 | 중·고등](지금 화면을 그 학교급 예시로 다시 그린다, 기본은 초등) · [처음으로].
+- 안내("이것을 누르세요")는 driver.js 로 띄운다. 안내가 떠 있는 동안에는 짚은 곳과 위쪽 막대만 눌린다. 파일을 못 불러왔거나 폰을 세로로 들었을 때는 같은 문구를 무대 안 말풍선으로 보여 준다.
+- 화면은 960×540 무대를 통째로 키우거나 줄인다. 폰을 세로로 들면 무대를 90° 돌려 그리므로(회전 잠금·아이폰에서도) 폰만 옆으로 돌리면 된다. 폰에서는 화면 키보드가 무대를 가리지 않게 한 줄을 예시로만 넣는다.
+- 부스 태블릿은 `?booth=1` 로 연다: 첫 화면에 '내 폰으로 체험하기' QR(assets/qr-trial.svg)이 보이고, 손대지 않으면 45초(평소 90초) 뒤 처음 화면 · 초등 예시로 돌아간다.
+- 파일: index.html(틀) · trial.css · trial.js(장면과 예시 데이터) · assets/chars(상담 캐릭터) · vendor(driver.js).
+- vendor/driver.js.iife.js · driver.css 는 [driver.js](https://github.com/kamranahmedse/driver.js) 1.14.0 (MIT, Copyright (c) Kamran Ahmed)의 배포 파일 그대로이고, 라이선스 전문은 vendor/driver.js-LICENSE.txt 에 있다. 버전을 올릴 때는 npm 의 `driver.js` 패키지에서 `dist/driver.js.iife.js` · `dist/driver.css` · `license` 를 다시 복사한다.
+- QR 을 다시 만들려면 저장소 루트에서: `node -e "require('qrcode').toFile('apps/landing/trial/assets/qr-trial.svg','https://dacisosl.github.io/NUGA/trial/',{type:'svg',margin:1,color:{dark:'#0b1d33'}})"`
+
 ## 실행
 빌드나 npm 설치가 필요 없다. 이 폴더에서 정적 서버를 띄운다.
 
     python -m http.server 8000
 
-그다음 http://localhost:8000 에 접속한다. index.html 을 파일로 바로 열어도 된다.
+그다음 http://localhost:8000 에 접속한다(체험 페이지는 http://localhost:8000/trial/). index.html 을 파일로 바로 열어도 된다.
 앱으로 가는 버튼은 언제나 배포된 앱으로 간다.
 
 ## 배포
-`.github/workflows/pages.yml` 이 main 에 푸시할 때마다 이 폴더의 index.html·site.css·site.js·assets 를 사이트 맨 위에, 데스크톱 웹 빌드(`VITE_BASE=/NUGA/app/`)를 `app/` 에 올린다.
+`.github/workflows/pages.yml` 이 main 에 푸시할 때마다 이 폴더의 index.html·site.css·site.js·assets 를 사이트 맨 위에, 데스크톱 웹 빌드(`VITE_BASE=/NUGA/app/`)를 `app/` 에, `trial/` 폴더를 통째로 `trial/` 에 올린다.
 
 - 문구는 index.html, 디자인은 site.css, 동작은 site.js 에서 고친다.
 - 다른 주소로 배포할 때는 index.html 의 canonical 주소와 `data-app-link` 링크 세 곳의 앱 주소를 함께 바꾼다.
