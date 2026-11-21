@@ -228,7 +228,83 @@ async function auto() {
   await browser.close();
 }
 
+/** 초안 작성: 쌓인 실제 기록 → 일괄의 초안 편집 창에서 [생성] → 문장마다 근거 기록이 붙은 초안 */
+async function draft() {
+  console.log("기록으로 초안 작성");
+  const g = "draft";
+  manifest[g] = { clock: CLOCK };
+  const { browser, page } = await open(9353);
+  // 2-3반에서 내용이 있는 기록이 가장 많은 학생
+  const stu = await page.eval(`(() => {
+    const d = S.getState().doc;
+    const has = (r) => r.status !== 'skipped' && (r.note || r.memo || r.voiceMemo?.transcript || '').trim();
+    return d.students.filter((s) => s.class === '2-3').map((s) => ({ no: s.no, name: s.name, n: d.records.filter((r) => r.class === '2-3' && r.no === s.no && has(r)).length }))
+      .sort((a, b) => b.n - a.n || a.no - b.no)[0];
+  })()`);
+  // 한 학기쯤 쌓인 모습이 되게, 같은 반 다른 학생의 데모 기록(합성) 중 문구가 겹치지 않는 것을 이 학생 기록으로 더 넣는다
+  const EXTRA = 10;
+  stu.n = await page.eval(`(() => {
+    const st = S.getState(), d = st.doc, no = ${stu.no};
+    const text = (r) => (r.note || r.memo || '').trim();
+    const mine = new Set(d.records.filter((r) => r.class === '2-3' && r.no === no).map(text));
+    const days = new Set(d.records.filter((r) => r.class === '2-3' && r.no === no).map((r) => r.time.slice(0, 10)));
+    const pool = d.records.filter((r) => r.class === '2-3' && r.no !== no && r.status !== 'skipped' && text(r) && !mine.has(text(r)) && r.source !== 'suggestion')
+      .sort((a, b) => a.time.localeCompare(b.time));
+    let added = 0;
+    for (const r of pool) {
+      if (added >= ${EXTRA}) break;
+      const day = r.time.slice(0, 10);
+      if (days.has(day) || mine.has(text(r))) continue;
+      const { id, createdAt, updatedAt, ...f } = r;
+      st.addRecord({ ...f, no, status: 'done' });
+      days.add(day); mine.add(text(r)); added++;
+    }
+    return d.records.length >= 0 && S.getState().doc.records.filter((r) => r.class === '2-3' && r.no === no && r.status !== 'skipped' && text(r)).length;
+  })()`);
+  manifest[g].student = stu;
+  console.log(`  학생 ${stu.no} ${stu.name} · 기록 ${stu.n}건 (데모 기록 ${EXTRA}건 더함)`);
+  // 초안은 '한 문장씩'으로 보여 준다 (문장 끝에 근거 기록 수)
+  await page.eval("(async () => { S.getState().setView({ split: true, highlight: false }); return true; })()");
+
+  // 현황판의 학생 카드: 수업 중 쌓인 기록
+  const cardOf = `[...document.querySelectorAll('.sg-card')].find((c) => c.textContent.includes(${JSON.stringify(stu.name)}))`;
+  await page.eval(`(async () => { S.getState().setPage('main'); await wait(900); ${cardOf}.scrollIntoView({ block: 'center' }); await wait(700); return true; })()`);
+  await shot(page, g, "d-card", { rects: { card: cardOf, nav: "byText('.topnav button', '생기부')" } });
+
+  // 생기부 생성 → 일괄 → 이름을 눌러 초안 편집 창
+  await page.eval(`(async () => {
+    const st = S.getState(); st.setPage('draft'); st.setMode2p('batch'); await wait(900);
+    [...document.querySelectorAll('[title="이름: 초안 편집 창 열기"] .stag-name')].find((e) => e.textContent.includes(${JSON.stringify(stu.name)})).click();
+    await wait(1200); return true;
+  })()`);
+  const modalRects = { modal: "document.querySelector('.overlay .modal')", draft: "document.querySelector('.dm-draft')", recs: "document.querySelector('.dm-recs')", gen: "[...document.querySelectorAll('.modal .inputbar button')].pop()", bar: "document.querySelector('.dm-bar')" };
+  await shot(page, g, "d-empty", { rects: modalRects });
+  manifest[g].genLabel = await page.eval("[...document.querySelectorAll('.modal .inputbar button')].pop().textContent");
+  await page.eval("(async () => { [...document.querySelectorAll('.modal .inputbar button')].pop().click(); for (let i = 0; i < 100 && !document.querySelector('.dm-draft li'); i++) await wait(100); await wait(900); return true; })()");
+  await shot(page, g, "d-draft", { rects: { ...modalRects, len: "document.querySelector('.dm-bar').firstElementChild", adh: "byText('.dm-bar .chip', '반영')", status: "document.querySelector('.dm-bar .chip')" } });
+  manifest[g].log = await page.eval("[...document.querySelectorAll('.modal .chatlog .msg')].map((m) => m.innerText)");
+  manifest[g].bar = await page.eval("document.querySelector('.dm-bar').innerText");
+  // 오른쪽 기록 줄 전체 문구 (마무리 네트워크 그림의 기록 이름표)
+  manifest[g].records = await page.eval("[...document.querySelectorAll('.dm-recs .dm-rec')].map((r) => ({ cat: r.querySelector('.chip')?.textContent.trim(), date: r.querySelector('.d')?.textContent.trim() || '', text: r.querySelector('.t')?.textContent.trim() }))");
+
+  // 문장 ↔ 근거 기록: 저장된 초안의 근거 id 를 오른쪽 기록 줄(기록 → PDF 순)과 맞춘다
+  manifest[g].pairs = await page.eval(`(async () => {
+    const m = await import('/src/store.ts');
+    const items = [...document.querySelectorAll('.dm-draft li')];
+    const rows = [...document.querySelectorAll('.dm-recs .dm-rec')];
+    const ids = [...m.recordsOf(S.getState().doc, '2-3', ${stu.no}).map((r) => r.id), ...m.perfsOf(S.getState().doc, '2-3', ${stu.no}).map((p) => p.id)];
+    [...document.querySelectorAll('.modal-f button')].find((b) => b.textContent.trim() === '저장').click();
+    await wait(600);
+    const d = S.getState().doc.drafts.find((x) => x.class === '2-3' && x.no === ${stu.no});
+    return d.sentences.map((s, i) => ({ i, text: s.text, li: rectOf(items[i]), ev: rectOf(items[i]?.querySelector('.dv-ev')), rows: s.evidence.map((id) => ids.indexOf(id)).filter((k) => k >= 0).map((k) => ({ k, rect: rectOf(rows[k]), text: rows[k].innerText.replace(/\\s+/g, ' ') })) }));
+  })()`);
+  for (const p of manifest[g].pairs) console.log(`  문장 ${p.i + 1} → 기록 ${p.rows.map((r) => r.k + 1).join(",") || "없음"} · ${p.text.slice(0, 30)}`);
+  page.close();
+  await browser.close();
+}
+
 if (which === "all" || which === "manual") await manual();
 if (which === "all" || which === "auto") await auto();
+if (which === "all" || which === "draft") await draft();
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 console.log(`\n${manifestPath}`);
