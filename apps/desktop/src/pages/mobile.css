@@ -29,17 +29,7 @@
 .mp-phone::after { content: ""; position: absolute; z-index: 20; left: 50%; bottom: 10px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: rgba(240,244,250,.9); pointer-events: none; }
 .mp-phone button { cursor: pointer; }
 
-/* 상태 표시줄: 투명, 밝은 아이콘 (시스템 다크 모드와 무관) */
-.mp-status { flex: none; display: flex; align-items: center; gap: 3px; height: 34px; padding: 4px 22px 0 26px; color: #fff; font-size: 13.5px; font-weight: 500; letter-spacing: 0; }
-.mp-status b { font-weight: 500; font-variant-numeric: tabular-nums; }
-.mp-status svg { display: block; }
 
-/* 머리 띠 (ScreenHeader): '01 ——' + 26 / 650 하늘빛 제목 */
-.mp-head { padding: 14px 0 4px; }
-.mp-idx { display: flex; align-items: center; gap: 10px; color: #7F95B2; font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .12em; font-variant-numeric: tabular-nums; }
-.mp-idx::after { content: ""; width: 22px; height: 1px; background: rgba(171,201,241,.34); }
-.mp-head-row { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
-.mp-htitle { flex: 1; min-width: 0; color: #DCE9FC; font-size: 26px; line-height: 32px; font-weight: 650; letter-spacing: -0.036em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 밤 위 빈 글 (Text 기본 16sp, Ink2) */
 .mp-none { padding: 16px; color: #A3B7D2; font-size: 16px; line-height: 24px; }
@@ -98,41 +88,36 @@
 .mp-snack button:hover { background: rgb(172 205 255 / .08); }
 
 /* =====================================================================
-   기록 판 (화면에 바로 펼친 기록 시트): 반 줄 · 번호 릴 · [메모] [저장]. 밤 장면 위에 바로 놓인다
+   기록 판 (화면에 바로 펼친 기록 시트): 반 · 과목 · 시각 / 번호 칸 · [메모] [저장]. 밤 장면 위에 바로 놓인다
    ===================================================================== */
-.mp-sheet { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding: 18px 0 44px; color: #EAF2FF; }
-/* 반 줄: 여러 반이면 옆으로 흐르는 칩, 한 반이면 큰 이름. 오른쪽에 'N명' */
-.mp-sheet-top { display: flex; align-items: center; gap: 10px; min-height: 48px; }
-.mp-sheet-classes { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; isolation: isolate; scrollbar-width: none; }
-.mp-sheet-classes::-webkit-scrollbar { display: none; }
-.mp-sheet-classes .mp-nchip { font-size: 14px; }
-.mp-sheet-cls { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #DCE9FC; font-size: 21px; line-height: 28px; font-weight: 700; letter-spacing: -0.03em; }
-.mp-sheet-n { flex: none; color: #7F95B2; font-size: 12.5px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.mp-sheet { position: relative; isolation: isolate; flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 0 0 40px; color: #EAF2FF; }
 
-/* 번호 릴 (NumberReel): 5칸 × 56 = 280. 가운데 유리 판은 움직이지 않고 숫자가 그 위를 지나간다. 위아래 20% 는 투명하게 */
-.mp-reel { position: relative; isolation: isolate; margin-top: -4px; user-select: none; -webkit-user-select: none; }
-/* 가운데 유리 판 (reelPlate): 옅은 하늘빛 유리 Sky .16 → .05, 오른쪽 위가 밝은 1px 테두리, 위 모서리를 따라 흰 빛줄기(오른쪽 끝은 따뜻한 반사광), 아래로 푸른 번짐 */
-.mp-reel-plate {
-  position: absolute; left: 4px; right: 4px; top: 112px; height: 56px; pointer-events: none; border: 1px solid transparent; border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgb(255 255 255 / 0) 6%, rgb(234 242 255 / .85) 20%, #fff 67.6%, #FFF5DB 83.4%, rgb(255 255 255 / 0) 94%) 0 0 / 100% 1px no-repeat border-box,
-    linear-gradient(180deg, rgb(172 205 255 / .16), rgb(172 205 255 / .05)) padding-box,
-    linear-gradient(225deg, rgb(255 255 255 / .62) 0%, rgb(172 205 255 / .34) 22%, rgb(172 205 255 / .10) 56%, rgb(172 205 255 / .20) 100%) border-box;
-}
-.mp-reel-plate::after { content: ""; position: absolute; z-index: -1; left: -1px; right: -1px; bottom: -15px; height: 28px; pointer-events: none; background: radial-gradient(42% 14px at 50% 50%, rgb(84 149 253 / .34), rgb(84 149 253 / 0)); }
-/* 굴리는 칸: 한 칸씩 딸깍(scroll-snap, 한 번에 한 칸). 끝에 닿아도 시트로 넘기지 않는다 (overscroll-behavior). 끄는 동안(.drag)은 스냅을 끈다 */
-.mp-reel-scroll {
-  position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; touch-action: pan-y; cursor: grab;
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent); mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
-}
-.mp-reel-scroll::-webkit-scrollbar { display: none; }
-.mp-reel-scroll.drag { scroll-snap-type: none; cursor: grabbing; }
-.mp-reel-scroll.drag .mp-reel-row { cursor: grabbing; }
-.mp-reel-row { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border: 0; background: none; color: #D6E6FD; scroll-snap-align: center; scroll-snap-stop: always; will-change: transform, opacity; }
-.mp-reel-row b { font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* 이름을 켰을 때: 번호 76 오른쪽 맞춤 + 18 사이 + 이름 128 */
-.mp-reel-row.named b { width: 76px; text-align: right; }
-.mp-reel-row.named span { width: 128px; margin-left: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; color: #EAF2FF; font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.02em; }
+
+/* 맨 위 한 줄: 반 · 과목 · 지금 시각만. 반이 여럿이면 반 이름(▾)을 눌러 바꾼다 */
+.mp-top { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 22px 2px 8px; }
+.mp-top-cls { position: relative; flex: none; color: #DCE9FC; font-size: 28px; line-height: 34px; font-weight: 750; letter-spacing: -0.04em; }
+.mp-top-cls.pick { display: inline-flex; align-items: baseline; gap: 4px; }
+.mp-top-cls.pick select { appearance: none; -webkit-appearance: none; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.mp-top-cls.pick select:focus-visible { outline: 2px solid #ACCDFF; outline-offset: 3px; border-radius: 4px; }
+.mp-top-cls.pick option { color: #122A47; background: #EAF2FF; font-size: 16px; }
+.mp-top-cls.pick span { font-size: 15px; color: #7F95B2; pointer-events: none; }
+.mp-top-subj { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #A3B7D2; font-size: 16px; line-height: 22px; font-weight: 600; }
+.mp-top-time { margin-left: auto; flex: none; color: #EAF2FF; font-size: 18px; line-height: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 번호 칸: 3열 × 3줄 = 한 화면에 9명. 맨 위 줄 바로 아래부터 [저장] 위까지 빈틈 없이 채우고(한 줄 높이 = 칸 높이의 1/3), 더 많으면 칸 안에서 아래로 민다 */
+.mp-grid { position: relative; flex: 1 1 0; min-height: 300px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: calc((100% - 16px) / 3); gap: 8px; align-content: start;
+  overflow-y: auto; overscroll-behavior: contain; scroll-snap-type: y proximity; scrollbar-width: none; isolation: isolate; padding: 0 1px; }
+.mp-grid::-webkit-scrollbar { display: none; }
+.mp-cell { scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 4px;
+  border: 1px solid rgba(171,201,241,.22); border-radius: 12px; background: linear-gradient(180deg, rgb(172 205 255 / .09), rgb(172 205 255 / .035)) border-box; color: #D6E6FD;
+  transition: background .12s, border-color .12s, transform .12s; }
+.mp-cell b { font-size: 40px; line-height: 42px; font-weight: 750; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.mp-cell span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #A3B7D2; font-size: 15px; line-height: 18px; font-weight: 600; }
+.mp-cell:hover { border-color: rgba(172,205,255,.5); background: linear-gradient(180deg, rgb(172 205 255 / .15), rgb(172 205 255 / .06)) border-box; }
+.mp-cell:active { transform: scale(.96); }
+.mp-cell.on { border-color: rgba(255,255,255,.4); background: linear-gradient(180deg, #DEEBFF, #C9DCF8) border-box; color: #122A47; box-shadow: 0 8px 22px -8px rgb(84 149 253 / .75); }
+.mp-cell.on span { color: #2A4A72; }
+.mp-cell:focus-visible { outline: 2px solid #ACCDFF; outline-offset: 2px; }
 
 /* [메모] [저장 · N번]: 저장이 주인공(Lit), 메모는 옆의 작은 유리 버튼. 번짐을 품으니 isolation */
 .mp-sheet-acts { display: flex; align-items: center; gap: 8px; isolation: isolate; }
@@ -188,7 +173,6 @@
    ===================================================================== */
 .mp-recscreen { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 16px 0; overflow-y: auto; isolation: isolate; scrollbar-width: none; }
 .mp-recscreen::-webkit-scrollbar { display: none; }
-.mp-recsub { margin-top: 2px; color: #A3B7D2; font-size: 14px; line-height: 21px; font-variant-numeric: tabular-nums; }
 .mp-page.phone .mp-stage { display: block; }
 .mp-phone.full { width: 100%; height: auto; min-height: calc(100dvh - 140px); border: 0; border-radius: 14px; box-shadow: none; }
 .mp-phone.full::after { display: none; }

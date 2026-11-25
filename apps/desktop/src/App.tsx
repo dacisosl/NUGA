@@ -53,7 +53,7 @@ export default function App() {
 
   // 불러오는 동안도 밤 장면: html 바탕(남색) → 밝은 종이 → 남색 틀로 번쩍이지 않게
   if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
-  // 웨일 사이드바(?panel=sidebar): 모바일 화면(번호 릴) 하나만, 폰처럼 화면 가득
+  // 웨일 사이드바(?panel=sidebar): 모바일 화면(번호 칸) 하나만, 폰처럼 화면 가득
   if (PANEL) return <div className="app panel"><main className="main one" data-page="mobile"><MobilePage forcePhone /></main><Toasts /></div>;
   if (!onboarded) return <><Onboarding /><Toasts /></>;
 

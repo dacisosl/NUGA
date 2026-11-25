@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  CATEGORY_NONE, WEEKDAY_LABELS, dateKey, lessonFor, lessonLabel, nowIso, resolveNow, slotsForWeekday, weekdayOf,
+  CATEGORY_NONE, lessonFor, nowIso, resolveNow, slotsForWeekday, weekdayOf,
   type LessonSlot, type NugaDoc, type RecordCategory, type RecordSource,
 } from "@nuga/core";
 import { Sheet } from "../App";
@@ -9,7 +9,8 @@ import "./mobile.css";
 
 /**
  * 모바일 화면: 상단 바 [모바일 화면]을 누르면 바로 기록 화면이 열린다 (홈·탭·위젯 같은 대시보드 없음).
- * 반(지금 수업이 켜진 채) → 번호 릴 → [저장]. 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
+ * 위에는 반 · 과목 · 지금 시각만. 아래는 3열 번호 칸(번호 크게 · 이름 작게, 한 화면에 9명) → 누르면 바로 고름 → [저장].
+ * 반은 지금(또는 다음) 수업 반으로 열린다. 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
  * 저장하면 PC에서는 곧바로 알림 팝업(쉬는 시간 기록)이 떠서 관찰 내용을 채운다. 폰 너비·터치 화면에서는 팝업 없이
  * 아래 알림 띠만 보이고, 기록은 미반영에 쌓인다 (PC에서 [미반영]으로 처리).
  * 모양은 폰 앱의 '밤의 틀 · 빛나는 종이'(mobile.css)를 따른다. PC에서는 폰 틀 안에, 폰에서는 화면 가득.
@@ -21,7 +22,6 @@ type Next = { slot: LessonSlot; date: Date } | null;
 
 const two = (n: number) => String(n).padStart(2, "0");
 const hhmm = (d: Date) => `${two(d.getHours())}:${two(d.getMinutes())}`;
-const koDate = (d: Date) => `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY_LABELS[weekdayOf(d)]})`;
 const atMin = (day: Date, hm: string, plus = 0) => { const [h, m] = hm.split(":").map(Number); const x = new Date(day); x.setHours(h, m + plus, 0, 0); return x; };
 /** 명렬표 이름 (없으면 null) */
 const nameOf = (doc: NugaDoc, cls: string, no: number) => doc.students.find((s) => s.class === cls && s.no === no)?.name || null;
@@ -48,18 +48,6 @@ function nextSlot(doc: NugaDoc, now: Date): Next {
     const d = new Date(now); d.setDate(d.getDate() + i);
     const s = slotsForWeekday(doc.settings, weekdayOf(d)).find((x) => i > 0 || atMin(now, x.start).getHours() * 60 + atMin(now, x.start).getMinutes() > m);
     if (s) return { slot: s, date: d };
-  }
-  return null;
-}
-
-/** 수업 한 줄 설명 (LessonSlot.subline): 지금이면 진도(없으면 시각), 예정이면 '날짜 시각 시작 · 진도' */
-function sublineOf(doc: NugaDoc, now: Date, current: LessonSlot | null, next: Next): string | null {
-  const sub = (s: LessonSlot, d: Date) => lessonLabel(lessonFor(doc.settings.progress, s.class, dateKey(d)));
-  if (current) return sub(current, now) || `${current.start}–${current.end}`;
-  if (next) {
-    const day = dateKey(next.date) !== dateKey(now) ? koDate(next.date) + " " : "";
-    const s = sub(next.slot, next.date);
-    return `${day}${next.slot.start} 시작${s ? ` · ${s}` : ""}`;
   }
   return null;
 }
@@ -101,7 +89,7 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
   const classes = classList(doc);
   const slot = current || next?.slot || null;
 
-  /** 릴 시작 번호: PC 설정 '번호 릴 시작'이 last 면 그 반에서 마지막으로 기록한 번호, 아니면 1번 */
+  /** 처음 골라 둘 번호: PC 설정 '폰·워치 번호 릴 시작'이 last 면 그 반에서 마지막으로 기록한 번호, 아니면 1번 */
   const reelStart = (cls: string) => {
     const size = Math.max(classSize(doc, cls), 1);
     if (doc.settings.options?.reelStart !== "last") return 1;
@@ -134,20 +122,17 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
     if (!phone && supp) openInbox({ records: [rec.id] });
   };
   const undo = (id: string) => { deleteRecord(id); setSnack(null); };
-  const sub = slot ? sublineOf(doc, now, current, next) : (doc.settings.timetable.length ? "" : "시간표 없음");
+  const subject = doc.settings.school.subject.trim();
 
   return (
     <Sheet>
       <div className={`content mp-page ${phone ? "phone" : ""}`}>
         <div className="mp-stage">
           <div className={`mp-phone ${phone ? "full" : ""}`}>
-            {!phone && <div className="mp-status"><b>{hhmm(now)}</b><span className="grow" /><MIcon name="signal" size={15} /><MIcon name="battery" size={16} /></div>}
             <div className="mp-recscreen">
-              <Header index={current ? "지금 수업" : next ? "다음 수업" : koDate(now)} title={slot ? `${slot.class} · ${slot.period}교시` : "기록"} />
-              {sub && <div className="mp-recsub">{sub}</div>}
               {classes.length === 0
-                ? <div className="mp-none">PC 설정에서 반·명단을 먼저 등록하세요</div>
-                : <RecordPanel doc={doc} sheet={sheet} setSheet={setSheet} showNames reelStart={reelStart} onSave={save} />}
+                ? <><TopRow cls="" classes={[]} subject={subject} now={now} onClass={() => {}} /><div className="mp-none">PC 설정에서 반·명단을 먼저 등록하세요</div></>
+                : <RecordPanel doc={doc} sheet={sheet} setSheet={setSheet} reelStart={reelStart} onSave={save} subject={subject} now={now} />}
             </div>
             {snack && (
               <div className="mp-snack" role="status"><span className="grow">{snack.text}</span>{snack.id && <button onClick={() => undo(snack.id!)}>취소</button>}</div>
@@ -161,12 +146,15 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
 
 /* ---------------- 공통 조각 (Glass.kt) ---------------- */
 
-/** 머리 띠 (ScreenHeader): '01 ——' 쪽 번호 + 크고 촘촘한 하늘빛 제목. 오른쪽에 숫자 하나 */
-function Header({ index, title, children }: { index: string; title: string; children?: React.ReactNode }) {
+/** 맨 위 한 줄: 반 · 과목 · 지금 시각만. 반이 여럿이면 반 이름을 눌러 바꾼다 (지금 수업 반으로 열린다) */
+function TopRow({ cls, classes, subject, now, onClass }: { cls: string; classes: string[]; subject: string; now: Date; onClass: (c: string) => void }) {
   return (
-    <div className="mp-head">
-      <div className="mp-idx">{index}</div>
-      <div className="mp-head-row"><div className="mp-htitle">{title}</div>{children}</div>
+    <div className="mp-top">
+      {classes.length > 1
+        ? <label className="mp-top-cls pick"><select value={cls} onChange={(e) => onClass(e.target.value)} aria-label="반 바꾸기">{classes.map((c) => <option key={c} value={c}>{c}</option>)}</select><span aria-hidden>▾</span></label>
+        : cls && <b className="mp-top-cls">{cls}</b>}
+      {subject && <span className="mp-top-subj">{subject}</span>}
+      <time className="mp-top-time">{hhmm(now)}</time>
     </div>
   );
 }
@@ -189,33 +177,33 @@ function Field({ label, value, onChange, rows = 1, night, autoFocus, err, childr
   );
 }
 
-/* ---------------- 기록 판: 반 · 번호 릴 · [메모] [저장] ---------------- */
+/* ---------------- 기록 판: 반 · 과목 · 시각 / 번호 칸 / [메모] [저장] ---------------- */
 
 type SpeechRec = { lang: string; interimResults: boolean; onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void; onerror: (e: { error: string }) => void; onend: () => void; start: () => void; stop: () => void };
 
-/** 릴 한 칸 높이와 한 번에 보이는 칸 수 (가운데 하나 + 위아래 둘씩) — NumberSheet.kt ReelRow · ReelRows */
-const REEL_ROW = 56;
-const REEL_ROWS = 5;
-const clampRow = (i: number, count: number) => Math.min(Math.max(i, 0), count - 1);
-
 /**
  * 기록 판 (화면에 바로 펼친 기록 시트): 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
- * 번호는 세로 릴 — 굴리면 한 칸씩 딸깍 멈추고, 가운데 유리 판 위의 숫자가 고른 번호다.
- * 메모·음성 메모는 저장 옆 작은 [메모] 버튼을 눌렀을 때만 펼친다. 저장하면 메모 칸은 접힌다.
+ * 번호는 3열 칸 — 칸 하나에 번호(크게)와 이름(작게). 한 화면에 9명이 보이고, 더 많으면 칸 안에서 아래로 민다. 누르면 바로 고른다.
+ * 칸은 엄지가 닿는 아래쪽, [저장] 바로 위에 둔다. 메모·음성 메모는 [메모]를 눌렀을 때만 펼친다. 저장하면 메모 칸은 접힌다.
  */
-function RecordPanel({ doc, sheet, setSheet, showNames, reelStart, onSave }: {
-  doc: NugaDoc; sheet: SheetState; setSheet: React.Dispatch<React.SetStateAction<SheetState>>; showNames: boolean; reelStart: (cls: string) => number; onSave: () => void;
+function RecordPanel({ doc, sheet, setSheet, reelStart, onSave, subject, now }: {
+  doc: NugaDoc; sheet: SheetState; setSheet: React.Dispatch<React.SetStateAction<SheetState>>; reelStart: (cls: string) => number; onSave: () => void; subject: string; now: Date;
 }) {
   const classes = classList(doc);
   const size = Math.max(classSize(doc, sheet.cls), 1);
-  const withNames = showNames && doc.students.some((s) => s.class === sheet.cls);
   const [memoOpen, setMemoOpen] = useState(sheet.memo !== "");
   const [focusMemo, setFocusMemo] = useState(false);
   const [listening, setListening] = useState(false);
   const [err, setErr] = useState("");
   const recRef = useRef<SpeechRec | null>(null);
+  const grid = useRef<HTMLDivElement>(null);
   const set = (p: Partial<SheetState>) => setSheet((s) => ({ ...s, ...p }));
   useEffect(() => () => recRef.current?.stop(), []);
+  // 반을 바꾸거나 처음 열 때: 골라 둔 칸이 보이게 칸 안에서만 민다 (페이지는 움직이지 않는다)
+  useLayoutEffect(() => {
+    const el = grid.current, on = el?.querySelector<HTMLElement>(".mp-cell.on");
+    if (el) el.scrollTop = on ? Math.max(0, on.offsetTop - 4) : 0;
+  }, [sheet.cls]);
   const mic = () => {
     if (listening) { recRef.current?.stop(); return; }
     const W = window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec };
@@ -236,18 +224,18 @@ function RecordPanel({ doc, sheet, setSheet, showNames, reelStart, onSave }: {
   const save = () => { recRef.current?.stop(); setMemoOpen(false); setFocusMemo(false); onSave(); };
   return (
     <div className="mp-sheet" role="form" aria-label="기록">
-      {/* 반: 여러 반이면 칩(지금 수업 반이 켜진 채로 열린다), 한 반이면 큰 이름. 오른쪽에 인원 */}
-      <div className="mp-sheet-top">
-        {classes.length > 1 ? (
-          <div className="mp-sheet-classes">
-            {classes.map((c) => <button key={c} className={`mp-nchip cls ${c === sheet.cls ? "on" : ""}`} aria-pressed={c === sheet.cls} onClick={() => { if (c !== sheet.cls) set({ cls: c, no: reelStart(c) }); }}>{c}</button>)}
-          </div>
-        ) : <span className="mp-sheet-cls">{sheet.cls}</span>}
-        <span className="mp-sheet-n">{size}명</span>
+      <TopRow cls={sheet.cls} classes={classes} subject={subject} now={now} onClass={(c) => { if (c !== sheet.cls) set({ cls: c, no: reelStart(c) }); }} />
+      {/* 번호 칸: 3열, 한 화면에 9명. 누르면 바로 고른다 */}
+      <div ref={grid} className="mp-grid" role="listbox" aria-label="번호">
+        {Array.from({ length: size }, (_, i) => {
+          const n = i + 1, nm = nameOf(doc, sheet.cls, n), on = sheet.no === n;
+          return (
+            <button key={n} type="button" role="option" aria-selected={on} className={`mp-cell ${on ? "on" : ""}`} onClick={() => set({ no: n })} title={nm ? `${n}번 ${nm}` : `${n}번`}>
+              <b>{n}</b>{nm && <span>{nm}</span>}
+            </button>
+          );
+        })}
       </div>
-      {/* 번호 릴: 반을 바꾸면 새로 만든다 (key) */}
-      <NumberReel key={`${sheet.cls}:${size}`} count={size} initial={clampRow((sheet.no ?? 1) - 1, size) + 1} withNames={withNames}
-        nameOf={(n) => (showNames ? nameOf(doc, sheet.cls, n) : null)} onSelect={(no) => set({ no })} />
       {/* 메모(선택): 펼쳤을 때만. 마이크는 칸 안 오른쪽 */}
       {memoOpen && (
         <Field night label={listening ? "듣는 중…" : "메모"} value={sheet.memo} onChange={(memo) => set({ memo })} err={err} autoFocus={focusMemo}>
@@ -257,102 +245,7 @@ function RecordPanel({ doc, sheet, setSheet, showNames, reelStart, onSave }: {
       {/* [메모] [저장 · N번]: 저장이 화면의 주인공(ButtonTone.Lit), 메모는 옆의 작은 유리 버튼 */}
       <div className="mp-sheet-acts">
         <button className={`mp-memo ${memoOpen ? "open" : ""} ${!memoOpen && sheet.memo.trim() ? "has" : ""}`} role="switch" aria-checked={memoOpen} onClick={toggleMemo}><MIcon name="editNote" size={20} />메모</button>
-        <button className="mp-btn night lit save" disabled={!sheet.no} onClick={save}>{sheet.no ? `저장 · ${sheet.no}번` : "저장"}</button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 세로 번호 릴 1..count (NumberSheet.kt NumberReel). 위아래 두 칸씩 여백을 두어 1번과 마지막 번호도 가운데에 설 수 있다.
- * 휠·끌기로 굴리면 가장 가까운 칸에 딸깍 멈추고(scroll-snap, 끄는 동안은 끄고 손을 떼면 굴려 맞춘다), 가운데 칸이 바뀔 때마다 [onSelect].
- * 다른 칸을 누르면 그 번호가 가운데로 굴러온다. 가운데에서 멀수록 작고 흐리다 (재렌더 없이 스크롤마다 style 로 칠한다).
- * [initial]은 처음 한 번만 읽는다. 밖에서 번호를 바꾸려면 key 로 릴을 새로 만든다.
- */
-function NumberReel({ count, initial, nameOf: name, withNames, onSelect }: {
-  count: number; initial: number; nameOf: (n: number) => string | null; withNames: boolean; onSelect: (n: number) => void;
-}) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const rows = useRef<(HTMLButtonElement | null)[]>([]);
-  const report = useRef(onSelect);
-  report.current = onSelect;
-  const reported = useRef(initial);
-  const raf = useRef(0);
-  const drag = useRef<{ y: number; top: number; moved: boolean } | null>(null);
-  const dragged = useRef(false);
-  const snapTimer = useRef<number>();
-
-  /** 가운데에 선 칸(소수)으로 각 칸의 크기·투명도를 칠한다: 0 → 1.0·1.0, 1 → 0.74·0.58, 2 → 0.56·0.30. 가운데 칸이 바뀌면 알린다 */
-  const paint = () => {
-    const el = scroller.current;
-    if (!el) return;
-    const centre = el.scrollTop / REEL_ROW;
-    rows.current.forEach((r, i) => {
-      if (!r) return;
-      const d = Math.min(Math.abs(i - centre), 2.5);
-      const s = d <= 1 ? 1 - 0.26 * d : 0.74 - 0.18 * (d - 1);
-      const a = d <= 1 ? 1 - 0.42 * d : Math.max(0.58 - 0.28 * (d - 1), 0);
-      r.style.transform = `scale(${s.toFixed(3)})`;
-      r.style.opacity = a.toFixed(3);
-    });
-    const n = clampRow(Math.round(centre), count) + 1;
-    if (n !== reported.current) {
-      reported.current = n;
-      rows.current.forEach((r, i) => r?.setAttribute("aria-selected", String(i + 1 === n)));
-      report.current(n);
-    }
-  };
-  const schedule = () => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(paint); };
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (el) el.scrollTop = (initial - 1) * REEL_ROW;
-    paint();
-    return () => { cancelAnimationFrame(raf.current); window.clearTimeout(snapTimer.current); };
-  }, []); // 처음 한 번만: initial 은 마운트 때만 읽는다 (바꾸려면 key 로 새로 만든다)
-  const roll = (i: number) => scroller.current?.scrollTo({ top: clampRow(i, count) * REEL_ROW, behavior: "smooth" });
-
-  // 마우스로 끌어 굴리기: 4px 넘게 움직이면 끌기로 보고 스냅을 끈다. 손을 떼면 가장 가까운 칸으로 굴린 뒤 스냅을 되살린다 (터치는 브라우저가 알아서)
-  const down = (e: React.PointerEvent) => {
-    if (e.button !== 0 || e.pointerType === "touch" || !scroller.current) return;
-    window.clearTimeout(snapTimer.current);
-    dragged.current = false;
-    drag.current = { y: e.clientY, top: scroller.current.scrollTop, moved: false };
-  };
-  const move = (e: React.PointerEvent) => {
-    const d = drag.current; const el = scroller.current;
-    if (!d || !el) return;
-    const dy = e.clientY - d.y;
-    if (!d.moved) {
-      if (Math.abs(dy) < 4) return;
-      d.moved = true; el.classList.add("drag"); el.setPointerCapture(e.pointerId);
-    }
-    el.scrollTop = d.top - dy;
-  };
-  const up = (e: React.PointerEvent) => {
-    const d = drag.current; const el = scroller.current;
-    drag.current = null;
-    if (!d?.moved || !el) return;
-    dragged.current = true;
-    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
-    roll(Math.round(el.scrollTop / REEL_ROW));
-    snapTimer.current = window.setTimeout(() => el.classList.remove("drag"), 360);
-  };
-
-  return (
-    <div className="mp-reel" style={{ height: REEL_ROW * REEL_ROWS }}>
-      {/* 가운데 유리 판: 고른 번호가 서는 자리 (움직이지 않는다) */}
-      <div className="mp-reel-plate" aria-hidden />
-      <div ref={scroller} className="mp-reel-scroll" role="listbox" aria-label="번호" style={{ padding: `${REEL_ROW * ((REEL_ROWS - 1) / 2)}px 0` }}
-        onScroll={schedule} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-        {Array.from({ length: count }, (_, i) => {
-          const n = i + 1;
-          return (
-            <button key={n} ref={(el) => { rows.current[i] = el; }} type="button" role="option" aria-selected={n === initial} title={`${n}번 고르기`}
-              className={`mp-reel-row ${withNames ? "named" : ""}`} onClick={() => { if (!dragged.current) roll(i); }}>
-              <b>{n}</b>{withNames && <span>{name(n) || ""}</span>}
-            </button>
-          );
-        })}
+        <button className="mp-btn night lit save" disabled={!sheet.no} onClick={save}>{sheet.no ? `저장 · ${sheet.no}번` : "번호를 눌러 주세요"}</button>
       </div>
     </div>
   );

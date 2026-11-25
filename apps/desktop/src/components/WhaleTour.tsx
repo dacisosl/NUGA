@@ -46,7 +46,7 @@ const MAP: { step: number; name: string; arrow: string; links: [string, St][]; v
   { step: 1, name: "웨일 스페이스", arrow: "→", links: [["명단 파일 → 반·명단", "now"], ["교사 계정 로그인 → 처음 설정", "plan"]], value: "명단을 옮겨 적지 않아요" },
   { step: 2, name: "웨일 클래스", arrow: "⇄", links: [["퀴즈 응답 → 근거 후보", "plan"], ["피드백 쪽지 → 성적 노트", "plan"]], value: "말이 적은 학생도 근거와 피드백을" },
   { step: 3, name: "팀보드", arrow: "→", links: [["작성자별 노트 → 협동 근거 후보", "plan"], ["보드 옆 사이드바에서 기록", "real"]], value: "모둠 결과물이 아닌 그 학생의 몫만" },
-  { step: 4, name: "웨일 브라우저", arrow: "⊃", links: [["사이드바에 번호 릴 (수업 중)", "real"], ["듀얼탭에 생기부 (나이스 옆)", "real"]], value: "보던 화면을 떠나지 않아요" },
+  { step: 4, name: "웨일 브라우저", arrow: "⊃", links: [["사이드바에 번호 칸 (수업 중)", "real"], ["듀얼탭에 생기부 (나이스 옆)", "real"]], value: "보던 화면을 떠나지 않아요" },
 ];
 
 function SceneMap({ go }: { go: (i: number) => void }) {
@@ -318,8 +318,8 @@ function SceneSide() {
         </div>
       </Frame>
       {IS_WHALE
-        ? <Real text="누가 모바일 화면(번호 릴)을 웨일 사이드바에 띄워요. 저장하면 왼쪽 큰 창에 '사이드바 기록 · 미반영에 추가' 알림이 떠요."><button className="btn sm" onClick={openWhaleSidebar}>사이드바로 열기</button></Real>
-        : isTauri ? <Real text="웨일 브라우저에서 누가 웹을 열면 이 모바일 화면(번호 릴)을 사이드바에 띄우고, 저장한 기록이 큰 창 미반영으로 바로 들어와요." />
+        ? <Real text="누가 모바일 화면(번호 칸)을 웨일 사이드바에 띄워요. 저장하면 왼쪽 큰 창에 '사이드바 기록 · 미반영에 추가' 알림이 떠요."><button className="btn sm" onClick={openWhaleSidebar}>사이드바로 열기</button></Real>
+        : isTauri ? <Real text="웨일 브라우저에서 누가 웹을 열면 이 모바일 화면(번호 칸)을 사이드바에 띄우고, 저장한 기록이 큰 창 미반영으로 바로 들어와요." />
         : <Real text="웨일에서는 사이드바로 열려요. 여기서는 같은 화면을 사이드바 폭의 작은 창으로 열어 볼 수 있어요. 저장하면 왼쪽 큰 창에 알림이 떠요."><button className="btn sm" onClick={openSidePreview}>작은 창으로 열어 보기</button></Real>}
     </>
   );
@@ -391,7 +391,7 @@ const SVCS: Svc[] = [
     Bodies: [SceneBoard], enter: toMain },
   { tab: "브라우저", name: "웨일 브라우저", title: "어느 웨일 화면 옆에서도 기록, 나이스 옆에서 생기부",
     links: [
-      { from: "웨일 사이드바", to: "누가 모바일 화면 (번호 릴)", via: "수업관리 · 웨일 클래스 · 팀보드를 보던 그대로 · 큰 창 미반영으로", st: "real" },
+      { from: "웨일 사이드바", to: "누가 모바일 화면 (번호 칸)", via: "수업관리 · 웨일 클래스 · 팀보드를 보던 그대로 · 큰 창 미반영으로", st: "real" },
       { from: "웨일 듀얼탭", to: "누가 생기부 생성 | 업무포털 나이스", via: "한 학기 근거를 옆에 두고 복사 → 붙여 넣기", st: "real" },
     ],
     before: "기록하려면 폰을 꺼내거나 창을 바꿔 번호를 찾아요. 학기 말엔 학생마다 나이스와 기록 창을 오가요.",
