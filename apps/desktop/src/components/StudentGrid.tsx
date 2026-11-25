@@ -1,6 +1,6 @@
-import React, { memo, useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fmtMD, gradeStep, lessonLabel, type NugaDoc, type NugaRecord, type Performance, type Student } from "@nuga/core";
-import { achievementOf, catLabel, fillLesson, lowRuleOf } from "../store";
+import { achievementOf, catLabel, fillLesson, lowRuleOf, useStore } from "../store";
 import { Empty, SearchBox, useAchPreviewValue, useAchievementPress } from "./ui";
 import { stairBuckets, type StairBuckets } from "./StairsView";
 import "./student-grid.css";
@@ -55,8 +55,12 @@ const LINES = 6;
 type Filter = "all" | "low" | "week0";
 type Sort = "no" | "few" | "recent";
 
-interface Line { id: string; cat: number; md: string; text: string; tip: string }
+interface Line { id: string; cat: number; md: string; text: string; tip: string; /** 방금 쓰거나 채운 기록 */ fresh: boolean }
+/** '방금 기록'으로 보여 주는 시간: 쉬는 시간 기록을 닫고 현황판에서 그 기록이 어느 학생에게 붙었는지 볼 만큼 */
+const FRESH_CARD_MS = 90_000;
 interface Summary {
+  /** 방금 쓰거나 채운 기록이 있다 (카드에 테두리) */
+  hit: boolean;
   /** 건너뜀을 뺀 기록 수 */
   n: number;
   /** 이번 주(월요일 시작) 기록 수 */
@@ -139,6 +143,7 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
 
   /** 학생별 요약: 기록을 한 번만 훑어 반 학생별로 나눈 뒤 계산한다. 내용이 같은 학생은 지난 요약 객체를 그대로 쓴다 */
   const prevSums = useRef(new Map<string, Summary>());
+  const [tick, setTick] = useState(0);
   const { sums, rule, trendMax, buckets, top } = useMemo(() => {
     const want = new Set(students.map(keyOf));
     const all = new Map<string, NugaRecord[]>(); // 도달 정도 추정용 (문서 순서 그대로, 건너뜀 포함 — achievementOf 와 같은 입력)
@@ -165,6 +170,8 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
     const days = [...daySet].sort((a, b) => a - b);
     const dayIx = new Map(days.map((d, i) => [d, i]));
     let trendMax = 0;
+    const freshFrom = nowMs - FRESH_CARD_MS;
+    const isFresh = (r: NugaRecord) => !!textOf(r) && Date.parse(r.updatedAt || r.time) > freshFrom;
     const sums = new Map<string, Summary>();
     for (const s of students) {
       const k = keyOf(s);
@@ -194,12 +201,13 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
         const lesson = lessonLabel(r.lesson);
         const text = textOf(r);
         return {
-          id: r.id, cat: r.category, md, text: text ? text.slice(0, 240) : "내용 없음",
+          id: r.id, cat: r.category, md, text: text ? text.slice(0, 240) : "내용 없음", fresh: isFresh(r0),
           tip: [md, catLabel(doc, r.category), lesson, supp && r.status === "pending" ? "보완 전" : ""].filter(Boolean).join(" · ") + (text ? `\n${text}` : ""),
         };
       });
       const a = achievementOf(doc, s, { records: all.get(k) || [], performances: perfs.get(k) || [] });
       const body = {
+        hit: recs.some(isFresh),
         n: recs.length, week, pending, last: recs[0] ? fmtMD(recs[0].time) : "", lastTime: recs[0]?.time || "",
         lines, rest: Math.max(0, recs.length - LINES), low: rule.isLow(recs.length),
         trend: first >= 0 ? trend : [], hi, lo, from: dayMD(days[0]), to: dayMD(days[days.length - 1]), hiDay: dayMD(days[hi]), loDay: dayMD(days[lo]),
@@ -215,7 +223,31 @@ export function StudentGrid(props: { doc: NugaDoc; students: Student[]; onOpen: 
     for (const m of sums.values()) maxN = Math.max(maxN, m.n);
     const buckets = stairBuckets(maxN);
     return { sums, rule, trendMax, buckets, top: buckets.stepOf(maxN) };
-  }, [doc, students]);
+  }, [doc, students, tick]);
+  // 방금 기록 표시는 시간이 지나면 걷는다 (표시가 있는 동안만 20초마다 다시 본다)
+  const anyHit = useMemo(() => [...sums.values()].some((m) => m.hit), [sums]);
+  useEffect(() => {
+    if (!anyHit) return;
+    const t = window.setTimeout(() => setTick((x) => x + 1), 20_000);
+    return () => window.clearTimeout(t);
+  }, [anyHit, tick]);
+  // 쉬는 시간 기록 창을 닫거나, 반을 바꾸거나, 현황판으로 돌아왔을 때 방금 기록이 붙은 학생 카드가 보이게 한다 (체험판의 '한눈에' 장면)
+  const inboxOpen = useStore((s) => !!s.inbox);
+  const clsNow = students[0]?.class || "";
+  const seen = useRef({ inbox: false, cls: clsNow, first: true, pending: false });
+  useEffect(() => {
+    const closed = seen.current.inbox && !inboxOpen, moved = seen.current.cls !== clsNow || seen.current.first;
+    // pending: 보여 줄 일이 남았다는 표시. 효과가 다시 돌아 예약이 지워져도(개발 모드) 잃지 않는다
+    seen.current = { inbox: inboxOpen, cls: clsNow, first: false, pending: seen.current.pending || closed || moved };
+    if (!seen.current.pending || inboxOpen) return;
+    const t = window.setTimeout(() => {
+      seen.current.pending = false;
+      const card = gridRef.current?.querySelector<HTMLElement>(".sg-card.hit");
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      card?.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
+    }, 160);
+    return () => window.clearTimeout(t);
+  }, [inboxOpen, clsNow]);
 
   const counts = useMemo(() => {
     let low = 0, week0 = 0;
@@ -363,7 +395,7 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, colorBy, recT,
   return (
     <>
       {/* 강한 구분의 빛깔 단계: 기록 수(기록 계단 칸) 또는 도달 정도(이름표와 같은 다섯 단계, 추정 불가 = x) */}
-      <div className={`sg-card${sum.low ? " low" : ""}`} data-t={colorBy === "ach" ? (step < 0 ? "x" : step) : recT} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
+      <div className={`sg-card${sum.low ? " low" : ""}${sum.hit ? " hit" : ""}`} data-t={colorBy === "ach" ? (step < 0 ? "x" : step) : recT} style={{ "--i": Math.min(i, 18) } as React.CSSProperties}
         onClick={() => onOpen(s)} {...bind}>
         {/* 1. 이름 (가장 크게, 맨 위) = 이 카드의 '열기' 단추. 탭 순서: 이름 → [+ 기록].
             단추가 스스로 연다 (카드의 onClick 까지 올라가는 것에 기대지 않는다) */}
@@ -397,8 +429,8 @@ const StudentCard = memo(function StudentCard({ s, sum, i, scale, colorBy, recT,
         ) : (
           <ol ref={linesRef} className={`sg-lines${sum.n <= 2 ? " roomy" : ""}`}>
             {sum.lines.map((l) => (
-              <li key={l.id} className="sg-line" title={l.tip}>
-                <i className={`sg-dot c${l.cat}`} aria-hidden /><span className="sg-date">{l.md}</span>{l.text}
+              <li key={l.id} className={`sg-line${l.fresh ? " new" : ""}`} title={l.tip}>
+                <i className={`sg-dot c${l.cat}`} aria-hidden />{l.fresh ? <b className="sg-new">방금</b> : <span className="sg-date">{l.md}</span>}{l.text}
               </li>
             ))}
           </ol>

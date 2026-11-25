@@ -14,6 +14,7 @@ import { MaskEditor } from "../components/MaskEditor";
 import { exportSheets } from "../lib/excel";
 import { StudentEditModal } from "../components/StudentEdit";
 import { DraftView, SpanLegend, SpanRatioBar, ViewToggles } from "../components/DraftView";
+import { LinkScope, LinkedDraft, useLinkRow } from "../components/DraftLink";
 import { ReviewPage } from "./ReviewPage";
 
 /* ---------------- 공통: 초안 만들기 ---------------- */
@@ -206,7 +207,7 @@ export function ModeTabs({ mode, setMode }: { mode: "individual" | "batch" | "re
 /* ---------------- 개별 생성 ---------------- */
 
 /** 한 학생의 초안 작업 상태와 동작. 개별 페이지와 일괄 모달이 함께 쓴다. */
-function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: () => void }) {
+function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: () => void; onGenerated?: () => void }) {
   const doc = useStore((s) => s.doc);
   const saveDraft = useStore((s) => s.saveDraft);
   const toast = useStore((s) => s.toast);
@@ -260,6 +261,7 @@ function useDraftWorkspace(student: Student | null, opts?: { onGenerateStart?: (
       const base = res.provider === "rules" ? `로직으로 초안을 갱신함 (AI 없이) · ${adh}` : `초안을 갱신함 (${res.model}) · ${adh}`;
       const note = res.checks?.length ? `${base}\n확인 필요:\n${res.checks.map((c) => `· ${c}`).join("\n")}` : base;
       setW((x) => ({ ...x, text: res.text, sentences: res.sentences, history: [...history, { role: "assistant", text: note, at: nowIso() }], dirty: true, mode: as }));
+      opts?.onGenerated?.();
     } catch (e) {
       setW((x) => ({ ...x, history: [...history, { role: "assistant", text: `실패: ${aiErrorText(e)}`, at: nowIso() }] }));
     } finally { setBusy(false); setInput(""); }
@@ -332,14 +334,17 @@ function Individual() {
   const student = useMemo(() => students.find((s) => selected && s.class === selected.class && s.no === selected.no) || students[0] || null, [students, selected]);
   useEffect(() => { if (student && (!selected || selected.class !== cls)) select({ class: student.class, no: student.no }); }, [student?.class, student?.no, cls]);
 
-  const [expanded, setExpanded] = useState(false);
-  const [dockH, setDockH] = useState(360);
+  const setMode2p = useStore((s) => s.setMode2p);
+  const [logOpen, setLogOpen] = useState(false);
   const [addPerf, setAddPerf] = useState(false);
   const [editStu, setEditStu] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
-  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode } = useDraftWorkspace(student, { onGenerateStart: () => setExpanded(true) });
-  const view = useStore((s) => s.view);
+  // 새 초안이 올 때마다 올린다: 초안이 타자 치듯 채워지고, 다 채워지면 근거 기록과 이어진다
+  const [typeKey, setTypeKey] = useState(0);
   const [editView, setEditView] = useState(false);
+  const { recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode } = useDraftWorkspace(student, { onGenerateStart: () => setEditView(false), onGenerated: () => setTypeKey((k) => k + 1) });
+  const view = useStore((s) => s.view);
+  useEffect(() => { setEditView(false); }, [student?.class, student?.no]);
 
   // 명단에서 ↑↓ 키로 학생 이동 (입력란에 포커스가 있을 때는 제외)
   useEffect(() => {
@@ -354,12 +359,17 @@ function Individual() {
     };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h);
   }, [students, student, select]);
-  useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, expanded]);
+  useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, logOpen]);
 
   if (!student) return <div className="content"><Empty title="명단 없음" desc="설정 → 반·명단에서 학생을 등록하세요" /></div>;
   const counts = catCounts(recs);
   const usedN = recs.filter((r) => checked.has(r.id) && hasText(r)).length + perfs.filter((p) => checked.has(p.id)).length;
-  const suggestions = SUGGESTIONS;
+  // 방금 남긴 기록(30분 안에 쓰거나 채운 것 가운데 가장 최근): 빨강으로 보이고, 그 기록으로 쓴 문장도 빨강
+  const freshId = freshOf(recs, checked);
+  const ids = [...recs.map((r) => r.id), ...perfs.map((p) => p.id)];
+  const usedIds = new Set(w.sentences.flatMap((x) => x.evidence));
+  const sentN = w.text ? splitSentences(w.text).length : 0;
+  const freshUsed = !!freshId && usedIds.has(freshId);
 
   return (
     <div className="content noscroll">
@@ -377,80 +387,101 @@ function Individual() {
           })}
         </div>
         <div className="draft-main">
-          <div className="draft-scroll">
-            <div className="card profile">
-              <StudentTag student={student} size="lg" />
-              <div className="muted small">{student.class} · {student.no}번</div>
-              <button className="btn sm" onClick={() => setEditStu(true)}><Icon name="pen" size={13} />번호·이름 수정</button>
-              <div className="stats">
-                {doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={`${c.label} ${counts[c.key]}`} />)}
-                <Chip cat="perf" label={`PDF ${perfs.length}`} />
-              </div>
-            </div>
-            <div className="card">
-              {recs.length === 0 && <Empty title="기록 없음" />}
-              {recs.map((r) => (
-                <label key={r.id} className={`reccard ${checked.has(r.id) ? "" : "off"}`} style={{ cursor: "pointer" }}>
-                  <input type="checkbox" className="checkbox" checked={checked.has(r.id)} onChange={() => toggle(r.id)} style={{ marginTop: 3 }} />
-                  <div className="grow">
-                    <div className="meta"><CatChip cat={r.category} /><span className="num">{fmtMD(r.time)}</span><span>{lessonLabel(r.lesson)}</span>{doc.settings.supplementEnabled && r.status === "pending" && <span className="chip pending">보완 전</span>}</div>
-                    <div className="rc-text">{r.note || r.memo || r.voiceMemo?.transcript || <span className="muted">내용 없음</span>}</div>
-                  </div>
-                </label>
-              ))}
-              {perfs.map((p) => (
-                <label key={p.id} className={`reccard ${checked.has(p.id) ? "" : "off"}`} style={{ cursor: "pointer" }}>
-                  <input type="checkbox" className="checkbox" checked={checked.has(p.id)} onChange={() => toggle(p.id)} style={{ marginTop: 3 }} />
-                  {p.file && <img src={p.file} alt="" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />}
-                  <div className="grow">
-                    <div className="meta"><Chip cat="perf" label={p.title} /><span className="num">{p.date}</span></div>
-                    <div className="rc-text">{p.excerpt || <span className="muted">발췌 없음</span>}</div>
-                  </div>
-                </label>
-              ))}
-              <div style={{ padding: "10px 16px" }}><button className="btn sm" onClick={() => setAddPerf(true)}><Icon name="plus" size={14} />PDF기록</button></div>
+          <div className="card profile ds-profile">
+            <StudentTag student={student} size="lg" />
+            <div className="muted small">{student.class} · {student.no}번</div>
+            <button className="btn sm" onClick={() => setEditStu(true)}><Icon name="pen" size={13} />번호·이름 수정</button>
+            <div className="stats">
+              {doc.settings.categories.map((c) => <Chip key={c.key} cat={c.key} label={`${c.label} ${counts[c.key]}`} />)}
+              <Chip cat="perf" label={`PDF ${perfs.length}`} />
             </div>
           </div>
 
-          <div className="chatdock" style={expanded ? { height: dockH } : undefined}>
-            {expanded && <DragHandle onDrag={(dy) => setDockH((h) => Math.max(220, Math.min(window.innerHeight - 200, h - dy)))} />}
-            <div className="bar">
-              <button className="btn ghost sm" onClick={() => setExpanded(!expanded)}>{expanded ? "접기" : "펼치기"}</button>
-              <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
-              <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
-              {review && w.text && <StatusChip result={review.result} />}
-              {adherence && <AdherenceChip rep={adherence} />}
-              {view.highlight && w.text && <><SpanRatioBar text={w.text} sentences={w.sentences} /><SpanLegend /></>}
-              {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
-              {w.dirty && <span className="muted small">저장 안 됨</span>}
-              <span className="grow" />
-              <DraftModeSwitch mode={mode} aiOn={aiOn} busy={busy} onChange={switchMode} />
-              {busy && <span className="spin" />}
-              <button className="btn sm" disabled={!w.text} onClick={() => navigator.clipboard.writeText(w.text).then(() => toast({ text: "복사됨" }))}>복사</button>
-              {/* 주 버튼은 한 화면에 하나: 초안이 없으면 '생성', 고친 뒤에는 '저장' */}
-              <button className={w.text && w.dirty ? "btn sm primary" : "btn sm"} disabled={!w.text} onClick={save}>저장</button>
-            </div>
-            {expanded && (
-              <>
-                <div className="draft-wrap">
-                  {(view.split || view.highlight) && w.text && !editView
-                    ? <DraftView className="draft dv-box" style={{ height: Math.max(90, dockH * 0.42) }} text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
-                    : <textarea className="draft" style={{ height: Math.max(90, dockH * 0.42) }} value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안이 여기에 표시됩니다. 직접 편집할 수 있습니다." />}
-                  {busy && <DraftLoading n={usedN} again={!!w.text} ai={mode === "ai"} />}
+          {/* 왼쪽 초안 | 오른쪽 기록. 문장을 누르면 그 문장을 쓴 기록이, 기록을 누르면 그 기록이 쓰인 문장이 선으로 이어진다 */}
+          <LinkScope className="ds-body" text={w.text} sentences={w.sentences} ids={ids} freshId={freshId} resetKey={keyOf(student)} typeKey={typeKey} off={editView || busy}>
+            <section className="ds-left" aria-label="초안">
+              <div className="ds-bar">
+                <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
+                <span className="flex small muted" title="이 학생의 분량 한도 (비우면 설정값)">목표 <input type="number" className="num" style={{ width: 66, height: 28 }} value={w.target ?? ""} placeholder={String(limitOf(doc))} onChange={(e) => setW((x) => ({ ...x, target: e.target.value ? Number(e.target.value) : undefined, dirty: true }))} />{unitOf(doc)}</span>
+                {review && w.text && <StatusChip result={review.result} />}
+                {adherence && <AdherenceChip rep={adherence} />}
+                {view.highlight && w.text && <><SpanRatioBar text={w.text} sentences={w.sentences} /><SpanLegend /></>}
+                {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
+                {w.dirty && <span className="muted small">저장 안 됨</span>}
+                <span className="ds-acts">
+                <DraftModeSwitch mode={mode} aiOn={aiOn} busy={busy} onChange={switchMode} />
+                {busy && <span className="spin" />}
+                <button className="btn sm" disabled={!w.text || busy} onMouseDown={(e) => e.preventDefault()} onClick={() => setEditView(!editView)} title="초안을 직접 고칩니다 (초안을 두 번 눌러도 됩니다)">{editView ? "고치기 끝" : "고치기"}</button>
+                <button className="btn sm" disabled={!w.text} onClick={() => navigator.clipboard.writeText(w.text).then(() => toast({ text: "복사됨" }))}>복사</button>
+                {/* 주 버튼은 한 화면에 하나: 초안이 없으면 아래 '생성', 고친 뒤에는 '저장' */}
+                <button className={w.text && w.dirty ? "btn sm primary" : "btn sm"} disabled={!w.text} onClick={save}>저장</button>
+                </span>
+              </div>
+              <div className="draft-wrap ds-wrap">
+                {editView
+                  ? <textarea className="ds-draft" value={w.text} autoFocus onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="초안을 여기에 직접 쓸 수 있습니다." />
+                  : w.text
+                    ? <LinkedDraft className="ds-draft dv-box" split={view.split} highlight={view.highlight} onEdit={() => setEditView(true)} />
+                    : <div className="ds-draft ds-empty" data-ld-box>
+                        <b>아직 초안이 없습니다</b>
+                        <span>{usedN ? "[생성]을 누르면 체크한 기록으로 초안을 씁니다." : "쓸 기록이 없습니다. 기록을 남기면 그 기록으로 초안을 씁니다."}</span>
+                        <button className="btn ghost sm" onClick={() => setEditView(true)}>직접 쓰기</button>
+                      </div>}
+                {busy && <DraftLoading n={usedN} again={!!w.text} ai={mode === "ai"} />}
+              </div>
+              <div className="ds-foot">
+                {w.text
+                  ? <>
+                      <p className={`ds-msg ${freshUsed ? "hit" : ""}`}>
+                        {freshUsed ? <>방금 남긴 기록이 생기부 <b>한 문장</b>이 됐습니다</> : <>기록 <b>{usedIds.size}건</b>이 <b>{sentN}문장</b>이 됐습니다</>}
+                        <small>문장이나 기록을 누르면 서로 이어집니다</small>
+                      </p>
+                      <button className="btn" disabled={busy} onClick={() => generate()}>다시 생성</button>
+                      <button className="btn" onClick={() => setMode2p("batch")} title="반 전체 초안을 한 번에 만듭니다">반 전체 일괄 작성 <Icon name="right" size={14} /></button>
+                    </>
+                  : <>
+                      <p className="ds-msg">{usedN ? <>체크한 기록 <b>{usedN}건</b>으로 초안을 씁니다</> : <>체크한 기록이 없습니다</>}</p>
+                      <button className="btn primary ds-gen" disabled={busy || !usedN} onClick={() => generate()}>{busy ? "쓰는 중" : "생성"}</button>
+                    </>}
+              </div>
+              <div className="ds-ask">
+                {logOpen && (
+                  <div className="chatlog" ref={logRef}>
+                    {w.history.length === 0 && <span className="muted small">아래에 요청을 쓰면 그대로 초안을 다시 씁니다. 고친 내용도 함께 전달됩니다.</span>}
+                    {w.history.map((h, i) => <div key={i} className={`msg ${h.role}`}>{h.text}</div>)}
+                    {busy && <div className="msg assistant typing" aria-hidden><i /><i /><i /></div>}
+                  </div>
+                )}
+                {w.text && <div className="suggest">{SUGGESTIONS.slice(1).map((x) => <button key={x} className="chip outline clickable" onClick={() => generate(x)} disabled={busy}>{x}</button>)}</div>}
+                <div className="inputbar">
+                  <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={w.text ? "고칠 점을 써 주세요 · 예: 두 번째 문장을 더 구체적으로" : "바라는 점을 써서 만들 수도 있어요 · 예: 질문 쪽을 강조해줘"} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && input.trim()) generate(input.trim()); }} disabled={busy} />
+                  <button className="btn" disabled={busy || !input.trim()} onClick={() => generate(input.trim())}>{w.text ? "수정 요청" : "요청대로 생성"}</button>
+                  <button className="btn ghost sm" onClick={() => setLogOpen(!logOpen)} aria-expanded={logOpen} title="요청과 결과 기록">{logOpen ? "기록 접기" : `요청 기록${w.history.length ? ` ${Math.ceil(w.history.length / 2)}` : ""}`}</button>
                 </div>
-                <div className="chatlog" ref={logRef}>
-                  {w.history.length === 0 && <span className="muted small">아래 입력창에 요청을 쓰면 초안이 만들어집니다.</span>}
-                  {w.history.map((h, i) => <div key={i} className={`msg ${h.role}`}>{h.text}</div>)}
-                  {busy && <div className="msg assistant typing" aria-hidden><i /><i /><i /></div>}
-                </div>
-              </>
-            )}
-            <div className="suggest">{suggestions.map((s) => <button key={s} className="chip outline clickable" onClick={() => generate(s)} disabled={busy}>{s}</button>)}</div>
-            <div className="inputbar">
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="예: 체크한 기록으로 세특 만들어줘" onKeyDown={(e) => { if (e.key === "Enter" && input.trim()) generate(input.trim()); }} disabled={busy} />
-              <button className={w.text ? "btn" : "btn primary"} disabled={busy} onClick={() => generate(input.trim() || undefined)}>{w.text ? "수정" : "생성"}</button>
-            </div>
-          </div>
+              </div>
+            </section>
+
+            <aside className="ds-right" aria-label="기록">
+              <div className="ds-right-h"><b>기록</b><span className="muted small">사용 {usedN}건</span><span className="grow" /><button className="btn sm" onClick={() => setAddPerf(true)}><Icon name="plus" size={14} />PDF기록</button></div>
+              <div className="ds-recs" data-ld-list>
+                {recs.length === 0 && perfs.length === 0 && <Empty title="기록 없음" desc="기록을 남기면 여기에 쌓입니다" />}
+                {recs.map((r) => {
+                  const text = r.note || r.memo || r.voiceMemo?.transcript || "";
+                  return (
+                    <RecRow key={r.id} id={r.id} checked={checked.has(r.id)} onToggle={() => toggle(r.id)} disabled={!text}
+                      meta={<><CatChip cat={r.category} /><span className="num">{fmtMD(r.time)}</span><span className="ls">{lessonLabel(r.lesson)}</span>{doc.settings.supplementEnabled && r.status === "pending" && <span className="chip pending">보완 전</span>}</>}
+                      text={text || <span className="muted">내용 없음</span>} />
+                  );
+                })}
+                {perfs.map((p) => (
+                  <RecRow key={p.id} id={p.id} checked={checked.has(p.id)} onToggle={() => toggle(p.id)} thumb={p.file}
+                    meta={<><Chip cat="perf" label={p.title} /><span className="num">{p.date}</span></>}
+                    text={p.excerpt || <span className="muted">발췌 없음</span>} />
+                ))}
+              </div>
+              <div className="ds-right-f">체크한 기록만 초안에 쓰입니다</div>
+            </aside>
+          </LinkScope>
         </div>
       </div>
       {confirmA && <Confirm title="수준 A · 글자수 미달" body={`목표 ${target}자에 미달(${len}자)입니다. 기록이 부족한 상태로 저장할까요?`} okLabel="저장" onOk={doSave} onClose={() => setConfirmA(false)} />}
@@ -474,10 +505,12 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
   const [no, setNo] = useState(startNo);
   const student = students.find((s) => s.no === no) || null;
   const idx = students.findIndex((s) => s.no === no);
-  const ws = useDraftWorkspace(student);
+  const [typeKey, setTypeKey] = useState(0);
+  const [editView, setEditView] = useState(false);
+  const ws = useDraftWorkspace(student, { onGenerateStart: () => setEditView(false), onGenerated: () => setTypeKey((k) => k + 1) });
   const { doc, recs, perfs, checked, toggle, w, setW, busy, input, setInput, confirmA, setConfirmA, target, review, adherence, len, chars, generate, doSave, save, onTextEdit, relabel, labeling, aiOn, mode, switchMode } = ws;
   const view = useStore((s) => s.view);
-  const [editView, setEditView] = useState(false);
+  useEffect(() => { setEditView(false); }, [no]);
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9 }); }, [w.history.length, no]);
 
@@ -526,7 +559,7 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
         <button className={w.text ? "btn primary" : "btn"} disabled={!w.text || idx >= students.length - 1} onClick={saveNext}>저장 후 다음</button>
       </>
     }>
-      <div className="dm-body">
+      <LinkScope className="dm-body" text={w.text} sentences={w.sentences} ids={[...recs.map((r) => r.id), ...perfs.map((p) => p.id)]} freshId={freshOf(recs, checked)} resetKey={keyOf(student)} typeKey={typeKey} off={editView || busy}>
         <div className="dm-left">
           <div className="flex dm-bar">
             <LenBar len={len} target={target} mode={doc.settings.lengthMode} chars={chars} band={doc.settings.lengthBand} />
@@ -539,10 +572,12 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
             {view.highlight && w.text && <SpanLegend />}
             {view.highlight && w.text && aiOn && <button className="btn ghost sm" onClick={relabel} disabled={labeling}>{labeling ? "구별 중" : "AI로 다시 구별"}</button>}
             {busy && <span className="flex small muted"><span className="spin" />생성 중</span>}
+            <button className="btn sm" disabled={!w.text || busy} onMouseDown={(e) => e.preventDefault()} onClick={() => setEditView(!editView)} title="초안을 직접 고칩니다 (초안을 두 번 눌러도 됩니다)">{editView ? "고치기 끝" : "고치기"}</button>
           </div>
           <div className="draft-wrap dm-wrap">
-            {(view.split || view.highlight) && w.text && !editView
-              ? <DraftView className="dm-draft dv-box" text={w.text} sentences={w.sentences} split={view.split} highlight={view.highlight} showEvidence onClick={() => setEditView(true)} />
+            {/* 읽기 화면: 문장을 누르면 오른쪽 근거 기록과 이어진다. 두 번 누르거나 [고치기]로 직접 고친다 */}
+            {w.text && !editView
+              ? <LinkedDraft className="dm-draft dv-box" split={view.split} highlight={view.highlight} onEdit={() => setEditView(true)} />
               : <textarea className="dm-draft" value={w.text} autoFocus={editView} onBlur={() => setEditView(false)} onChange={(e) => onTextEdit(e.target.value)} placeholder="아직 초안이 없습니다. 아래에서 AI에게 요청하거나 여기에 직접 쓰세요." />}
             {busy && <DraftLoading n={usedCount} again={!!w.text} ai={mode === "ai"} />}
           </div>
@@ -567,30 +602,26 @@ function DraftModal({ students, startNo, onClose }: { students: Student[]; start
         </div>
         <aside className="dm-right">
           <div className="flex between dm-right-h"><b>기록</b><span className="muted small">사용 {usedCount}건</span></div>
-          <div className="dm-recs">
+          <div className="dm-recs" data-ld-list>
             {recs.length === 0 && perfs.length === 0 && <div className="muted small" style={{ padding: 12 }}>기록 없음</div>}
             {recs.map((r) => {
               const text = r.note || r.memo || r.voiceMemo?.transcript || "";
               return (
-                <label key={r.id} className={`dm-rec ${checked.has(r.id) ? "" : "off"}`} title={`${fmtMD(r.time)} ${lessonLabel(r.lesson)}\n${text}`}>
-                  <input type="checkbox" className="checkbox" checked={checked.has(r.id)} onChange={() => toggle(r.id)} disabled={!text} />
+                <DmRec key={r.id} id={r.id} checked={checked.has(r.id)} onToggle={() => toggle(r.id)} disabled={!text} title={`${fmtMD(r.time)} ${lessonLabel(r.lesson)}\n${text}`} text={text || <span className="muted">내용 없음</span>}>
                   <CatChip cat={r.category} />
                   <span className="d num">{fmtMD(r.time)}</span>
-                  <span className="t">{text || <span className="muted">내용 없음</span>}</span>
-                </label>
+                </DmRec>
               );
             })}
             {perfs.map((p) => (
-              <label key={p.id} className={`dm-rec ${checked.has(p.id) ? "" : "off"}`} title={`${p.title}\n${p.excerpt}`}>
-                <input type="checkbox" className="checkbox" checked={checked.has(p.id)} onChange={() => toggle(p.id)} />
+              <DmRec key={p.id} id={p.id} checked={checked.has(p.id)} onToggle={() => toggle(p.id)} title={`${p.title}\n${p.excerpt}`} text={<>{p.title}{p.excerpt ? ` · ${p.excerpt}` : ""}</>}>
                 <Chip cat="perf" label="PDF" />
-                <span className="t">{p.title}{p.excerpt ? ` · ${p.excerpt}` : ""}</span>
-              </label>
+              </DmRec>
             ))}
           </div>
-          <div className="muted small" style={{ padding: "8px 12px" }}>체크한 기록만 AI 요청에 쓰입니다.</div>
+          <div className="muted small" style={{ padding: "8px 12px" }}>체크한 기록만 초안에 쓰입니다 · 글을 누르면 쓰인 문장과 이어집니다</div>
         </aside>
-      </div>
+      </LinkScope>
       {confirmA && <Confirm title="수준 A · 글자수 미달" body={`목표 ${target}자에 미달(${len}자)입니다. 기록이 부족한 상태로 저장할까요?`} okLabel={nextAfterConfirm ? "저장 후 다음" : "저장"} onOk={() => { doSave(); if (nextAfterConfirm) go(1); }} onClose={() => { setConfirmA(false); setNextAfterConfirm(false); }} />}
     </Modal>
   );
@@ -608,14 +639,40 @@ function resplit(prev: DraftSentence[], text: string): DraftSentence[] {
   });
 }
 
-function DragHandle({ onDrag }: { onDrag: (dy: number) => void }) {
-  const onDown = (e: React.MouseEvent) => {
-    let last = e.clientY;
-    const mv = (ev: MouseEvent) => { onDrag(ev.clientY - last); last = ev.clientY; };
-    const up = () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); };
-    window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
-  };
-  return <div className="drag" onMouseDown={onDown} />;
+/** 방금 남긴 기록으로 치는 시간 (이 안에 쓰거나 채운 기록) */
+const FRESH_MS = 30 * 60 * 1000;
+/** 방금 남긴 기록: 초안에 쓰는 기록 가운데 30분 안에 쓰거나 채운 가장 최근 것 */
+function freshOf(recs: NugaRecord[], checked: Set<string>): string | undefined {
+  const now = Date.now();
+  return recs.filter((r) => usable(r) && checked.has(r.id) && now - Date.parse(r.updatedAt || r.time) < FRESH_MS)
+    .sort((x, y) => (y.updatedAt || y.time).localeCompare(x.updatedAt || x.time))[0]?.id;
+}
+
+/** 초안 창 오른쪽의 기록 줄: 체크 = 초안에 쓸지, 글을 누르면 그 기록이 쓰인 문장과 이어진다 */
+function DmRec({ id, checked, onToggle, disabled, title, text, children }: { id: string; checked: boolean; onToggle: () => void; disabled?: boolean; title: string; text: React.ReactNode; children: React.ReactNode }) {
+  const { on, fresh, pick } = useLinkRow(id);
+  return (
+    <label className={`dm-rec${checked ? "" : " off"}${on ? " on" : ""}${fresh ? " fresh" : ""}`} data-ld-r={id} title={title}>
+      <input type="checkbox" className="checkbox" checked={checked} onChange={onToggle} disabled={disabled} />
+      {children}
+      <span className="t" onClick={(e) => { e.preventDefault(); pick(); }}>{text}</span>
+    </label>
+  );
+}
+
+/** 개별 화면 오른쪽의 기록 줄: 체크 = 초안에 쓸지, 줄을 누르면 그 기록이 쓰인 문장과 이어진다 */
+function RecRow({ id, checked, onToggle, disabled, meta, text, thumb }: { id: string; checked: boolean; onToggle: () => void; disabled?: boolean; meta: React.ReactNode; text: React.ReactNode; thumb?: string | null }) {
+  const { on, fresh, used, pick } = useLinkRow(id);
+  return (
+    <div className={`ds-rec${checked ? "" : " off"}${on ? " on" : ""}${fresh ? " fresh" : ""}`} data-ld-r={id}>
+      <input type="checkbox" className="checkbox" checked={checked} onChange={onToggle} disabled={disabled} aria-label="초안에 쓰기" />
+      {thumb && <img src={thumb} alt="" />}
+      <button type="button" className="body" onClick={pick} title={used ? "누르면 이 기록이 쓰인 문장이 이어집니다" : "아직 초안에 쓰이지 않은 기록"}>
+        <span className="meta">{fresh && <span className="tagm">방금 기록</span>}{meta}{used > 0 && <span className="used">문장 {used}</span>}</span>
+        <span className="t">{text}</span>
+      </button>
+    </div>
+  );
 }
 
 /* ---------------- PDF기록 등록(개별) ---------------- */
@@ -717,6 +774,8 @@ function PerfAddModal({ student, onClose }: { student: Student; onClose: () => v
 /* ---------------- 일괄 생성 ---------------- */
 
 type RowState = "idle" | "running" | "done" | "error";
+/** 일괄에서 한 학생 줄을 '쓰는 중'으로 보여 주는 가장 짧은 시간 (로직 생성은 순식간이라 줄이 차례로 채워지는 것이 보이게) */
+const BATCH_ROW_MS = 110;
 
 function Batch() {
   const doc = useStore((s) => s.doc);
@@ -755,7 +814,19 @@ function Batch() {
   const stopRef = useRef(false);
   const target = limitOf(doc);
 
-  useEffect(() => { setSel(new Set()); setState({}); }, [cls]);
+  // 체험판처럼 [일괄 생성]만 누르면 되게: 기록(또는 PDF기록)이 있는 학생을 처음부터 골라 둔다
+  useEffect(() => {
+    const d = useStore.getState().doc;
+    setSel(new Set(studentsOf(d, cls).filter((s) => recordsOf(d, s.class, s.no).some(usable) || perfsOf(d, s.class, s.no).length > 0).map((s) => s.no)));
+    setState({}); setRun(null);
+  }, [cls]);
+  /** 일괄 진행: 몇 명 가운데 몇 명 · 걸린 시간. 끝난 뒤에도 아래 띠에 남겨 둔다 */
+  const [run, setRun] = useState<{ total: number; done: number; t0: number; ms: number; end: boolean; stopped: boolean } | null>(null);
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => setRun((r) => (r && !r.end ? { ...r, ms: Date.now() - r.t0 } : r)), 100);
+    return () => window.clearInterval(t);
+  }, [running]);
 
   const runOne = async (s: Student) => {
     const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r)).filter(usable);
@@ -764,8 +835,12 @@ function Batch() {
     if (prev?.text && !overwrite) { setState((x) => ({ ...x, [s.no]: { st: "done", msg: "기존 유지" } })); return true; }
     if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return true; }
     setState((x) => ({ ...x, [s.no]: { st: "running" } }));
+    requestAnimationFrame(() => document.querySelector(`tr[data-no="${s.no}"]`)?.scrollIntoView({ block: "nearest" }));
     try {
+      const began = Date.now();
       const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined, draftModeOf(doc.settings.ai));
+      const rest = BATCH_ROW_MS - (Date.now() - began);
+      if (rest > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) await new Promise((r) => window.setTimeout(r, rest));
       const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "로직 생성 (AI 없이)" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
       const others = d.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` }));
@@ -782,16 +857,22 @@ function Batch() {
     const targets = students.filter((s) => (only ? only.includes(s.no) : sel.has(s.no)));
     if (!targets.length) { toast({ text: "선택된 학생이 없음" }); return; }
     setRunning(true); stopRef.current = false;
+    const t0 = Date.now();
+    setRun({ total: targets.length, done: 0, t0, ms: 0, end: false, stopped: false });
     const failed: number[] = [];
     let ok = 0;
-    for (const s of targets) { if (stopRef.current) break; if (await runOne(s)) ok++; else failed.push(s.no); }
+    for (const s of targets) {
+      if (stopRef.current) break;
+      if (await runOne(s)) ok++; else failed.push(s.no);
+      setRun((r) => (r ? { ...r, done: r.done + 1, ms: Date.now() - t0 } : r));
+    }
     setRunning(false);
+    setRun((r) => (r ? { ...r, ms: Date.now() - t0, end: true, stopped: stopRef.current } : r));
     if (!failed.length) toast({ text: `일괄 생성 완료 · ${ok}명` });
     else toast({ text: `일괄 생성 · 성공 ${ok}명 · 실패 ${failed.length}명 (${failed.join(", ")}번)`, action: { label: "실패만 다시", onClick: () => { void runAll(failed); } } });
   };
 
   const allSel = students.length > 0 && students.every((s) => sel.has(s.no));
-  const doneCount = Object.values(state).filter((x) => x.st === "done").length;
 
   return (
     <div className="content">
@@ -805,9 +886,8 @@ function Batch() {
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
         <span className="grow" />
         <button className="btn" onClick={() => setPerfPanel(true)}>PDF기록 일괄 등록</button>
-        {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={() => { void runAll(); }} disabled={!sel.size}>일괄 생성</button>}
+        {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={() => { void runAll(); }} disabled={!sel.size} title="고른 학생의 초안을 차례로 씁니다">일괄 생성{sel.size ? <span className="num"> · {sel.size}명</span> : null}</button>}
       </div>
-      {running && <div className="prog" style={{ marginBottom: 12 }}><i style={{ width: `${(doneCount / Math.max(1, sel.size)) * 100}%` }} /></div>}
       {students.length === 0 ? <Empty title="명단 없음" /> : (
         <table className="table">
           <thead><tr>
@@ -818,14 +898,15 @@ function Batch() {
             {students.map((s) => {
               const recs = recordsOf(doc, s.class, s.no); const d = draftOf(doc, s.class, s.no); const perfs = perfsOf(doc, s.class, s.no); const st = state[s.no];
               return (
-                <tr key={s.no} className={`row ${sel.has(s.no) ? "selected" : ""}`} onDoubleClick={() => { select({ class: s.class, no: s.no }); setMode("individual"); }}>
+                <tr key={s.no} data-no={s.no} className={`row ${sel.has(s.no) ? "selected" : ""}${st?.st === "running" ? " running" : ""}${st?.st === "done" && !st.msg ? " just" : ""}`} onDoubleClick={() => { select({ class: s.class, no: s.no }); setMode("individual"); }}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="checkbox" checked={sel.has(s.no)} onChange={() => setSel((x) => { const n = new Set(x); n.has(s.no) ? n.delete(s.no) : n.add(s.no); return n; })} /></td>
                   <td className="num key">{s.no}</td>
                   <td className="key name"><StudentTag student={s} onNameClick={() => setModalNo(s.no)} title="이름: 초안 편집 창 열기" /></td>
                   <td className={fold.recs ? "folded-cell" : ""} title={fold.recs ? `누가기록 ${recs.length}건` : undefined}>{fold.recs ? <span className="num small">{recs.length}</span> : <span className="flex" style={{ gap: 4 }}><span className="num">{recs.length}</span>{recs.slice(0, 8).map((r) => <span key={r.id} className={`dot c${r.category}`} />)}</span>}</td>
                   <td className={fold.perfs ? "folded-cell" : ""} title={fold.perfs ? `PDF기록 ${perfs.length}건` : undefined}>{fold.perfs ? <span className="num small">{perfs.length || "–"}</span> : perfs.length ? <span className="chip perf">등록 {perfs.length}</span> : <span className="muted small">미등록</span>}</td>
                   <td className="draft-td" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
-                    <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, reviewCtxOf(doc, s, d.targetLength || target, recs.length, others)); saveDraft(makeDraft(s, w, review, d)); }} />
+                    {st?.st === "running" ? <div className="batch-writing" aria-label="초안을 쓰는 중"><i /><i /></div> :
+                    <DraftCell text={d?.text || ""} sentences={d?.sentences} split={view.split} highlight={view.highlight} lines={rowMode === "fixed" ? rowLines : null} onSave={(v) => { if (!d) return; const w: Working = { text: v, sentences: resplit(d.sentences, v), history: d.history, dirty: false, target: d.targetLength }; const others = doc.drafts.filter((x) => x.class === s.class && x.no !== s.no && x.text).map((x) => ({ text: x.text, label: `${x.no}번` })); const review = reviewText(v, w.sentences, reviewCtxOf(doc, s, d.targetLength || target, recs.length, others)); saveDraft(makeDraft(s, w, review, d)); }} />}
                   </td>
                   <td>{d?.text ? <LenBar len={d.length} target={d.targetLength || target} mode={doc.settings.lengthMode} band={doc.settings.lengthBand} /> : <span className="muted">—</span>}</td>
                   <td>{d?.text && d.adherence ? <AdherenceChip rep={d.adherence} /> : <span className="muted">—</span>}</td>
@@ -841,6 +922,15 @@ function Batch() {
             })}
           </tbody>
         </table>
+      )}
+      {run && (
+        <div className={`batch-strip ${run.end ? "end" : ""}`} role="status" aria-live="polite">
+          <span className="bs-dot" aria-hidden />
+          <b>{run.end ? (run.stopped ? "멈춤" : "끝") : "쓰는 중"} · <span className="num">{run.done}/{run.total}</span>명</b>
+          <span className="num bs-sec">{(run.ms / 1000).toFixed(1)}초</span>
+          <span className="bs-bar"><i style={{ width: `${(run.done / Math.max(1, run.total)) * 100}%` }} /></span>
+          {run.end ? <button className="btn sm ghost" onClick={() => setRun(null)}>닫기</button> : <button className="btn sm warn" onClick={() => { stopRef.current = true; }}>중지</button>}
+        </div>
       )}
       {perfPanel && <PerfBatchPanel onClose={() => setPerfPanel(false)} />}
       {modalNo !== null && <DraftModal students={students} startNo={modalNo} onClose={() => setModalNo(null)} />}

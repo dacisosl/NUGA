@@ -1,0 +1,105 @@
+/* 생기부 생성 · 개별: 초안 | 기록 2분할 + 문장 ↔ 근거 기록 연결 (체험판에서 보는 것과 같은 화면)
+   노랑 = 이어진 문장·기록, 빨강 = 방금 남긴 기록과 그 기록으로 쓴 문장 */
+:root { --ld-y: #E8A100; --ld-y-soft: #FFF3C8; --ld-y-fill: #FFE9A6; --ld-r: #D9482F; --ld-r-soft: #FFE5DF; --ld-r-fill: #FFD3CA; }
+
+.ld-scope { position: relative; }
+.ld-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 3; }
+.ld-svg path { fill: none; stroke: var(--ld-y); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: var(--l); stroke-dashoffset: var(--l); animation: ld-draw .5s var(--ease-out, ease-out) forwards; }
+.ld-svg path.m { stroke: var(--ld-r); }
+@keyframes ld-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .ld-svg path { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } }
+
+/* 문장: 누르면 근거 기록과 이어진다 */
+.ld-draft { cursor: default; }
+.ld-sn { cursor: pointer; padding: 2px 1px; border-radius: 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-color .15s, box-shadow .15s; }
+.ld-sn:hover { background: rgba(36,90,167,.08); }
+.ld-sn.on { background: var(--ld-y-fill); box-shadow: 0 0 0 1px #EDBE45; }
+.ld-sn.on.mine { background: var(--ld-r-fill); box-shadow: 0 0 0 1.5px var(--ld-r); color: #7A1D10; font-weight: 600; }
+.ld-draft .dv-ev { cursor: default; user-select: none; }
+
+/* ---------- 2분할 ---------- */
+.ds-profile { padding: 10px 16px; gap: 12px; }
+.ds-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(270px, 31%, 372px); gap: 30px; }
+.ds-left, .ds-right { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border-radius: var(--r-card); box-shadow: 0 0 0 1px var(--hair-2), var(--sh-hair); }
+.ds-bar { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; padding: 9px 14px; border-bottom: 1px solid var(--hair); }
+.ds-bar > * { white-space: nowrap; }
+.ds-acts { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.ds-wrap { flex: 1 1 0; min-height: 150px; display: flex; flex-direction: column; }
+.ds-draft { flex: 1 1 0; min-height: 0; width: 100%; overflow: auto; padding: 16px 20px; border: 0; border-radius: 0; resize: none; box-shadow: none; background: #FBFCFE;
+  font-size: var(--fs-prose); line-height: var(--lh-prose); letter-spacing: -.004em; text-wrap: pretty; word-break: keep-all; }
+textarea.ds-draft:focus { box-shadow: inset 0 0 0 2px var(--field-halo); }
+.ds-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; color: var(--text2); }
+.ds-empty b { color: var(--text); font-size: 15px; font-weight: 650; }
+.ds-empty button { margin-top: 6px; }
+.ds-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--hair); }
+.ds-msg { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
+.ds-msg b { color: var(--accent); font-feature-settings: var(--num); }
+.ds-msg.hit b { color: var(--ld-r); }
+.ds-msg small { display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--text2); }
+.ds-gen { height: 40px; padding: 0 22px; font-size: 15px; }
+.ds-ask { flex: none; border-top: 1px solid var(--hair); background: var(--surface-2); }
+.ds-ask .chatlog { max-height: 132px; min-height: 0; border-bottom: 1px solid var(--hair); background: var(--surface); }
+.ds-ask .suggest { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 14px 0; }
+.ds-ask .suggest::-webkit-scrollbar { display: none; }
+.ds-ask .suggest > * { flex: none; }
+.ds-ask .inputbar { border-top: 0; padding: 8px 14px 10px; }
+.ds-ask .inputbar input { height: 36px; }
+
+.ds-right-h { flex: none; display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--hair); }
+.ds-right-h b { font-size: 14px; }
+.ds-recs { flex: 1 1 0; min-height: 0; overflow: auto; background: var(--surface); }
+.ds-rec { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px 8px 9px; border-bottom: 1px solid var(--hair); border-left: 3px solid transparent; font-size: 13px; transition: background-color .15s, border-color .15s; }
+.ds-rec .checkbox { margin-top: 2px; flex: none; }
+.ds-rec .body { flex: 1; min-width: 0; padding: 0; border: 0; background: none; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.ds-rec .meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+.ds-rec .meta > * { flex: none; white-space: nowrap; }
+.ds-rec .meta .ls { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ds-rec .used { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+.ds-rec .t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-top: 3px; line-height: 1.5; font-weight: 500; }
+.ds-rec:hover { background: #F6F9FE; }
+.ds-rec.off { opacity: .5; }
+.ds-rec.on { background: var(--ld-y-soft); border-left-color: var(--ld-y); opacity: 1; }
+.ds-rec.on .t { -webkit-line-clamp: unset; }
+.ds-rec.fresh { background: var(--ld-r-soft); border-left-color: var(--ld-r); }
+.ds-rec.fresh.on { box-shadow: inset 0 0 0 1.5px var(--ld-r); }
+.ds-rec .tagm { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--ld-r); color: #fff; font-size: 11px; font-weight: 700; }
+.ds-rec img { width: 36px; height: 36px; flex: none; object-fit: cover; border-radius: 5px; border: 1px solid var(--line); }
+.ds-right-f { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--hair); font-size: 12px; color: var(--text2); }
+
+/* ---------- 일괄의 학생 초안 창: 같은 연결 ---------- */
+.ld-scope.dm-body { gap: 28px; }
+.dm-draft.ld-draft { flex: 1 1 0; min-height: 0; }
+.dm-rec .t { cursor: pointer; }
+.dm-rec.on { background: var(--ld-y-soft); box-shadow: inset 3px 0 0 var(--ld-y); opacity: 1; }
+.dm-rec.on .t { white-space: normal; }
+.dm-rec.fresh { background: var(--ld-r-soft); box-shadow: inset 3px 0 0 var(--ld-r); }
+
+/* ---------- 일괄: 진행 띠 · 쓰는 줄 ---------- */
+.batch-strip { position: sticky; bottom: 12px; z-index: 4; display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 14px; border-radius: 12px;
+  background: #14253D; color: #EAF2FF; box-shadow: 0 10px 30px -12px rgba(8,20,34,.55); animation: fade-in .2s var(--ease-out); }
+.batch-strip b { font-weight: 650; white-space: nowrap; }
+.bs-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #FF8A73; animation: bs-pulse 1s ease-in-out infinite; }
+.batch-strip.end .bs-dot { animation: none; background: #6FD3A0; }
+.bs-sec { flex: none; color: #A9BDD8; font-size: 13px; }
+.bs-bar { flex: 1; height: 4px; border-radius: 2px; overflow: hidden; background: rgba(255,255,255,.16); }
+.bs-bar i { display: block; height: 100%; background: #8FB8FF; transition: width .3s ease; }
+.batch-strip .btn.ghost { color: #EAF2FF; }
+.batch-strip .btn.ghost:hover { background: rgba(255,255,255,.12); }
+@keyframes bs-pulse { 50% { opacity: .35; } }
+tr.row.running > td { background: #F1F7FF; }
+tr.row.just > td { animation: batch-flash 1.4s ease-out; }
+@keyframes batch-flash { from { background: var(--ld-y-soft); } }
+.batch-writing { display: flex; flex-direction: column; gap: 7px; padding: 5px 0; }
+.batch-writing i { display: block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #E6EDF6 0%, #E6EDF6 30%, #CFE0FB 50%, #E6EDF6 70%, #E6EDF6 100%); background-size: 250% 100%; animation: dl-shimmer 1.6s ease-in-out infinite; }
+.batch-writing i:nth-child(2) { width: 62%; animation-delay: .15s; }
+@media (prefers-reduced-motion: reduce) { .bs-dot, tr.row.just > td, .batch-writing i { animation: none; } }
+
+@media (max-width: 1100px) { .ds-body { grid-template-columns: minmax(0, 1fr) 264px; gap: 24px; } }
+/* 좁은 화면: 초안 아래로 기록. 선은 긋지 않고 칠한 것으로 짝을 알린다 */
+@media (max-width: 760px) {
+  .ds-body { display: flex; flex-direction: column; gap: 12px; flex: none; }
+  .ds-wrap { flex: none; }
+  .ds-draft { flex: none; min-height: 240px; max-height: 60vh; }
+  .ds-recs { flex: none; max-height: 50vh; }
+  .ld-svg { display: none; }
+}

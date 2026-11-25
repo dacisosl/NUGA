@@ -62,6 +62,13 @@
   animation-delay: calc(var(--i, 0) * 26ms);
 }
 @keyframes sg-in { from { opacity: 0; transform: translateY(8px); } }
+/* 방금 쓰거나 채운 기록이 붙은 카드: 붉은 테두리가 한 번 번지고, 그 기록 줄은 연한 빨강 (체험판의 '기록이 카드로 날아가 붙는' 장면) */
+.sg-card.hit { box-shadow: 0 0 0 2px #D9482F, 0 12px 28px -16px rgba(217,72,47,.5); }
+.sg-card.hit::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: 0 0 0 0 rgba(217,72,47,.45); animation: sg-hit 1.3s var(--ease-out, ease-out) 2; }
+@keyframes sg-hit { to { box-shadow: 0 0 0 14px rgba(217,72,47,0); } }
+.sg-line.new { margin: -3px -6px; padding: 3px 6px; width: calc(100% + 12px); border-radius: 6px; background: #FFE5DF; color: #7A1D10; font-weight: 600; }
+.sg-new { margin-right: 6px; padding: 0 6px; border-radius: 999px; background: #D9482F; color: #fff; font-size: 11px; font-weight: 700; vertical-align: 1px; }
+@media (prefers-reduced-motion: reduce) { .sg-card.hit::after { animation: none; } }
 /* 들어올림은 translate 로 (등장 애니메이션의 transform 과 서로 덮지 않는다) */
 .sg-card:hover {
   translate: 0 var(--sg-lift);
