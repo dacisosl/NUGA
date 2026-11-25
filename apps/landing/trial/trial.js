@@ -352,12 +352,12 @@ function hint(target, text, opt = {}) {
 
 /* ---------- 진행 ---------- */
 const FLOW = {
-  mobile: ["pick", "m-phone", "m-desk", "board", "draft", "talk"],
-  whale: ["pick", "w-desk", "board", "draft", "talk"],
-  auto: ["pick", "a-rec", "a-desk", "board", "draft", "talk"],
+  mobile: ["pick", "m-phone", "m-desk", "board", "draft", "batch", "points", "talk"],
+  whale: ["pick", "w-desk", "board", "draft", "batch", "points", "talk"],
+  auto: ["pick", "a-rec", "a-desk", "board", "draft", "batch", "points", "talk"],
 };
-const STEP = { "m-phone": 0, "m-desk": 0, "w-desk": 0, "a-rec": 0, "a-desk": 0, board: 1, draft: 2, talk: 3 };
-const SCREEN = { pick: sPick, "m-phone": sPhone, "m-desk": sDesk, "w-desk": sWhale, "a-rec": sRec, "a-desk": sDesk, board: sBoard, draft: sDraft, talk: sTalk };
+const STEP = { "m-phone": 0, "m-desk": 0, "w-desk": 0, "a-rec": 0, "a-desk": 0, board: 1, draft: 2, batch: 2, points: 2, talk: 3 };
+const SCREEN = { pick: sPick, "m-phone": sPhone, "m-desk": sDesk, "w-desk": sWhale, "a-rec": sRec, "a-desk": sDesk, board: sBoard, draft: sDraft, batch: sBatch, points: sPoints, talk: sTalk };
 const flow = () => FLOW[S.mode] || ["pick"];
 
 /** fromHistory = 브라우저 뒤로·앞으로(휴대폰 뒤로 버튼)로 온 경우. 그 밖에는 화면마다 기록을 남겨 뒤로 가기가 이전 화면이 되게 한다 */
@@ -534,8 +534,8 @@ function sPick(root) {
 
 /* ---------- 1-A · 모바일 수동기록: 왼쪽 '수업 중 화면'(짧은 영상) | 오른쪽 '내 폰' ----------
    영상에서 한 학생이 수업 중 빛나는 말을 하고, 영상이 끝나면 폰에서 그 학생 칸을 눌러 저장한다.
-   폰 화면: 위에 반 · 과목 · 지금 시각만, 아래는 3열 칸(번호 크게 · 이름 작게)으로 한 화면에 9명 */
-// 영상 속 수업: 선생님 질문 → 한 학생이 손을 들고 좋은 말 (who = 그 학생 번호-1, 폰 첫 화면 9명 안에 있는 자리)
+   폰 화면: 위에 반 · 과목 · 지금 시각만, 아래는 3열 칸(번호 크게 · 이름 작게)으로 한 화면에 12명 */
+// 영상 속 수업: 선생님 질문 → 한 학생이 손을 들고 좋은 말 (who = 그 학생 번호-1, 폰 첫 화면 12명 안에 있는 자리)
 const CLIP = {
   elem: { who: 4, q: "운동장을 다 함께 쓰려면 어떻게 하면 좋을까요?", a: "앞 친구 말처럼 축구도 중요해요. 그래서 저는 요일을 나눠 쓰면 좋겠어요!" },
   mid: { who: 3, q: "온도를 높이면 평형은 어느 쪽으로 이동할까요?", a: "아까 실험에서 색이 진해진 게 르샤틀리에 원리 때문이죠? 그럼 흡열 쪽이네요!" },
@@ -825,8 +825,8 @@ function sDraft(root) {
     $("#lenb").style.width = `${Math.min(100, (D.total / 1500) * 100)}%`; $("#lent").textContent = `${D.total.toLocaleString("ko-KR")}/1,500B`;
     $("#split").disabled = false; $("#swl").classList.add("ready");
     $("#dpf").innerHTML = `<p class="dp-msg hit">${spent ? `방금 <b>${spent.toFixed(1)}초</b> 기록이` : "방금 남긴 기록이"} 생기부 <b>한 문장</b>이 됐습니다</p>
-      <button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a>`;
-    $("#totalk").addEventListener("click", () => go(S.k + 1));
+      <button class="btn2 fill" id="tobatch" type="button">반 전체 일괄 작성 보기 <span aria-hidden="true">→</span></button>`;
+    $("#tobatch").addEventListener("click", () => go(S.k + 1));
     $$("#para .sn").forEach((x) => x.addEventListener("click", () => selS(Number(x.dataset.k))));
     $$("#recs .rec").forEach((x) => x.addEventListener("click", () => selR(Number(x.dataset.k))));
     draft.scrollTop = 0;
@@ -863,6 +863,155 @@ function sDraft(root) {
     later(() => typeOut(false), 1100);
   });
   later(() => { if (!$("#gen")?.disabled && !S.made) hint("#gen", "생성을 눌러 주세요", { side: "top" }); }, 500);
+}
+
+/* ---------- 3-2 · 반 전체 일괄 작성: 영상처럼 저절로 재생 ---------- */
+// 학생마다 첫 문장: 각자의 기록으로 쓰니 모두 다르다 (체험용 합성 문장)
+const FIRST = {
+  elem: [
+    "모둠 토의에서 친구들의 의견을 차례로 정리해 주며 서로의 생각을 잇는 배려심을 보여 줌.",
+    "과학 실험에서 관찰한 변화를 그림으로 꼼꼼히 기록하며 끝까지 살피는 탐구심이 돋보임.",
+    "틀린 수학 문제를 스스로 다시 풀어 보며 실수에서 배우는 태도가 꾸준히 자라고 있음.",
+    "아침 독서 시간에 읽은 책을 친구에게 소개하며 생각을 나누는 즐거움을 알아 감.",
+    "교실 화분 물 주기를 한 주 동안 빠짐없이 챙기며 맡은 일을 소중히 여기는 책임감을 보여 줌.",
+    "전학 온 친구에게 학교 곳곳을 먼저 안내해 주며 주변을 살피는 따뜻한 마음이 돋보임.",
+    "국어 시간에 자신의 경험을 들어 의견을 또박또박 발표하며 말하기 자신감이 커짐.",
+    "급식 당번을 맡아 정리까지 책임 있게 마무리하며 공동체를 위하는 마음을 보여 줌.",
+    "다툰 친구에게 먼저 다가가 사과하고 화해하며 관계를 소중히 여기는 성숙함을 보임.",
+    "우리 고장 조사 내용을 사진과 함께 발표하며 알아낸 것을 알기 쉽게 전하는 힘이 있음.",
+    "쉬는 시간에 떨어진 쓰레기를 스스로 주워 정리하며 바른 생활 습관이 몸에 배어 있음.",
+    "모르는 낱말을 사전에서 찾아 공책에 정리하며 스스로 배우려는 습관을 길러 가고 있음.",
+    "줄넘기 연습을 매일 이어 가며 목표를 향해 꾸준히 도전하는 끈기를 보여 줌.",
+    "리코더 합주에서 친구들과 박자를 맞추며 함께 어울려 완성하는 기쁨을 느낌.",
+    "미술 협동 작품에서 배경 그리기를 맡아 끝까지 완성하며 맡은 몫을 해내는 성실함이 돋보임.",
+    "학급 회의에서 운동장 사용 규칙을 제안하며 문제를 함께 풀어 가는 힘을 보여 줌.",
+    "도서관 정리를 자원하여 책을 번호대로 꽂으며 스스로 일을 찾아 하는 태도를 보임.",
+    "수학 익힘 문제를 먼저 푼 뒤 친구의 풀이를 도와주며 함께 배우는 기쁨을 나눔.",
+    "동물 기르기 관찰 일지를 하루도 빠짐없이 쓰며 작은 변화도 놓치지 않는 관찰력을 보여 줌.",
+    "발표를 어려워하는 친구에게 먼저 차례를 양보하며 친구의 마음을 헤아리는 배려를 보임.",
+    "탐구 주제를 스스로 정해 자료를 찾으며 궁금한 것을 끝까지 알아보는 호기심이 돋보임.",
+    "짝과 함께 받아쓰기 문장을 서로 불러 주며 협력하여 배우는 태도를 보여 줌.",
+    "학급 텃밭의 상추를 돌보며 생명을 아끼고 보살피는 마음을 키워 감.",
+    "독후 감상문을 친구들 앞에서 읽으며 생각을 글로 표현하는 힘이 자라고 있음.",
+    "수업 중 궁금한 점을 손 들어 질문하며 배움에 적극적으로 참여하는 모습을 보임.",
+    "이어달리기에서 넘어진 친구를 일으켜 함께 달리며 따뜻한 동료애를 보여 줌.",
+  ],
+  mid: [
+    "반응 속도 실험에서 농도에 따른 변화를 그래프로 정리하며 자료를 해석하는 능력이 돋보임.",
+    "동적 평형을 물의 증발 사례로 설명하며 추상적인 개념을 구체화하는 능력을 보여줌.",
+    "르샤틀리에 원리를 온도 변화 실험과 연결해 질문하며 원리를 깊이 이해하려는 탐구적 태도를 보임.",
+    "평형 상수 계산 과정을 모둠원에게 단계별로 설명하며 동료의 이해를 돕는 협력적 태도를 보여줌.",
+    "촉매의 역할에 관한 기사를 찾아 발표하며 배운 내용을 사회 현상과 연결하는 시야를 보여줌.",
+    "산·염기 적정 실험에서 데이터 기록을 맡아 끝까지 정리하며 맡은 역할을 책임 있게 수행함.",
+    "완충 용액의 원리를 모형으로 표현하여 발표하며 개념을 시각화하는 능력이 인상적임.",
+    "반응 지수와 평형 상수를 비교하는 개념 지도를 스스로 그리며 개념 사이의 관계를 구조화함.",
+    "실험 오차의 원인을 스스로 찾아 보고서에 정리하며 결과를 비판적으로 검토하는 태도를 보여줌.",
+    "모둠 토의에서 의견을 조율하여 실험 계획을 세우며 공동 과제를 이끄는 리더십을 발휘함.",
+    "직접 만든 레몬 전지로 전지의 원리를 확인하며 과학적으로 탐구하는 능력을 보여줌.",
+    "오개념 퀴즈에서 모둠원의 잘못된 이해를 근거를 들어 바로잡으며 논리적으로 설명하는 능력이 돋보임.",
+    "용해 평형을 탄산음료 사례에 적용하며 배운 개념을 일상에 연결하는 응용력을 보임.",
+    "반응 속도 요인을 변인 통제 실험으로 설계하며 가설을 세우고 검증하는 능력을 보여줌.",
+    "산화·환원 반응식을 친구들에게 풀이하며 개념을 자기 말로 풀어내는 표현력이 뛰어남.",
+    "평형 이동 실험에서 색 변화를 정밀하게 관찰하고 기록하며 꼼꼼한 실험 태도가 돋보임.",
+    "화학 반응과 에너지에 관한 보고서를 쓰며 자료를 찾아 체계적으로 정리하는 능력을 보임.",
+    "엔탈피 개념의 조건과 예외를 묻는 질문을 하며 원리를 정확히 알고자 하는 태도를 보여줌.",
+    "중화 반응 실험의 안전 수칙을 모둠원과 점검하며 실험 활동의 책임감과 안전 의식을 보여줌.",
+    "기체 반응 실험 결과를 표와 그래프로 비교하여 발표하며 정량적으로 분석하는 능력이 돋보임.",
+    "화학 평형 복습 노트를 스스로 만들어 친구들과 나누며 함께 성장하려는 태도를 보임.",
+    "반응 속도론 심화 문제에 끝까지 도전하여 해결하며 어려운 과제도 포기하지 않는 끈기를 보여줌.",
+    "촉매 실험에서 예상과 다른 결과를 근거로 가설을 고치며 유연한 사고력을 보여줌.",
+    "실험 기구 정리를 자발적으로 맡아 마무리하며 공동체를 위해 먼저 나서는 태도가 돋보임.",
+    "평형 개념을 활용한 공기 정화 원리를 조사해 발표하며 화학을 진로와 연결하는 탐구심을 보임.",
+    "전해질 수용액의 전기 전도성을 반복 측정하며 결과의 신뢰도를 높이려는 태도를 보여줌.",
+  ],
+};
+// 기록이 없는 학생 · 기록이 적은 학생 (현황판에서 '기록 부족'이던 자리)
+const BATCH_ZERO = 0, BATCH_SHORT = 12;
+/** 반 전체 초안 목록: 방금 쓴 학생은 그 초안, 기록이 없으면 쓰지 않고, 적으면 짧게 */
+function batchRows(L) {
+  const mine = S.pick ? S.pick.i : -1, D = draftData(L), pool = FIRST[S.level];
+  return NAMES.slice(0, L.n).map((name, i) => {
+    if (i === mine) return { i, name, n: L.recs.length + 1, first: L.sens[0][0], bytes: D.total, mine: true };
+    if (i === BATCH_ZERO) return { i, name, n: 0, first: "", bytes: 0, zero: true };
+    const first = pool[i % pool.length];
+    if (i === BATCH_SHORT) return { i, name, n: 3, first, bytes: 700 + ((i * 53) % 90), short: true };
+    return { i, name, n: 8 + ((i * 7) % 9), first, bytes: 1330 + ((i * 137) % 165) };
+  });
+}
+function sBatch(root) {
+  const L = ensure(), rows = batchRows(L), n = rows.length;
+  const row = (r) => `<div class="br${r.mine ? " mine" : ""}${r.zero ? " zero" : ""}" data-i="${r.i}"><b>${String(r.i + 1).padStart(2, "0")}</b><span class="nm">${r.name}</span><span class="ev">${r.n ? `기록 ${r.n}건` : "기록 없음"}</span><span class="tx"></span><span class="bl"><i></i><em>–</em></span><span class="bs">대기</span></div>`;
+  root.innerHTML = `<section class="stg deskstage"><div class="cam" id="cam">${monitor(L, `<div class="bt2">
+        <div class="bt2-h"><b>생기부 생성</b><span class="tabs"><i>개별</i><i class="on">일괄</i><i>검토</i></span><span class="it">${L.item} · ${L.cls} ${n}명</span><span class="g"></span><span class="cnt"><b id="btdone">0</b>/${n}명</span><button class="cta bt2-go" id="btgo" type="button" tabindex="-1">일괄 생성</button></div>
+        <div class="bt2-cols"><span>번호</span><span>이름</span><span>근거</span><span>초안 (첫 문장)</span><span>분량</span><span>상태</span></div>
+        <div class="bt2-list" id="btlist">${rows.map(row).join("")}</div></div>`)}</div>
+      <div class="vbar" id="vbar"><span class="live" id="vlive">● 반 전체 일괄 작성</span><span id="vtime">0.0초</span><i class="prog"><i id="vprog"></i></i><button type="button" id="vreplay" hidden>다시 보기 ↺</button><button class="cta" id="btnext" type="button" hidden>강점 3가지 보기 <span aria-hidden="true">→</span></button></div>
+      <div class="mon-label" id="monlabel">${monLabel()}</div></section>`;
+  $("#mkdraft").classList.add("on");
+  const list = $("#btlist"), els = $$(".br", list), prog = $("#vprog"), t0 = performance.now();
+  const START = 900, GAP = 190, WRITE = 520, total = START + (n - 1) * GAP + WRITE + 150;
+  let processed = 0;
+  const count = () => { processed++; $("#btdone").textContent = processed; };
+  const clock = every(() => {
+    const t = Math.min(performance.now() - t0, total);
+    prog.style.transform = `scaleX(${t / total})`; $("#vtime").textContent = `${(t / 1000).toFixed(1)}초`;
+  }, 100);
+  /** 한 학생: '쓰는 중' → 첫 문장이 채워지고 분량이 오른 뒤 '완료' */
+  const run = (r, el) => {
+    const top = el.offsetTop - list.clientHeight + el.offsetHeight * 2.6;   // 이 줄이 화면 아래 영상 막대 위에 보이게
+    if (top > list.scrollTop) list.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+    const st = $(".bs", el), tx = $(".tx", el), em = $(".bl em", el), bar = $(".bl i", el);
+    if (r.zero) { el.classList.add("done"); st.textContent = "기록이 없어 쓰지 않음"; tx.textContent = "—"; em.textContent = "0B"; count(); return; }
+    el.classList.add("run"); st.textContent = "쓰는 중";
+    const s0 = performance.now();
+    const w = every(() => {
+      const k = reduced ? 1 : Math.min(1, (performance.now() - s0) / WRITE);
+      tx.textContent = r.first.slice(0, Math.ceil(r.first.length * k));
+      const b = Math.round(r.bytes * k);
+      em.textContent = `${b.toLocaleString("ko-KR")}B`; bar.style.width = `${(b / 1500) * 100}%`;
+      if (k < 1) return;
+      clearInterval(w); el.classList.remove("run"); el.classList.add("done");
+      st.textContent = r.mine ? "완료 · 방금 쓴 초안" : r.short ? "완료 · 기록만큼 짧게" : "완료";
+      count();
+    }, 40);
+  };
+  later(() => $("#btgo").classList.add("press"), 500);
+  rows.forEach((r, k) => later(() => run(r, els[k]), START + k * GAP));
+  later(() => {
+    clearInterval(clock); prog.style.transform = "scaleX(1)";
+    $("#vlive").textContent = `● 끝 · ${n}명`; $("#vtime").textContent = `${(total / 1000).toFixed(1)}초`;
+    $("#vreplay").hidden = false; $("#btnext").hidden = false; $("#btnext").classList.add("hinted");
+    later(() => list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }), 600);   // 끝나면 맨 위(방금 쓴 학생 · 기록 없는 학생)로
+  }, total);
+  $("#vreplay").addEventListener("click", () => go(S.k, true));
+  $("#btnext").addEventListener("click", () => go(S.k + 1));
+}
+
+/* ---------- 3-3 · 강점 3가지 ---------- */
+function sPoints(root) {
+  const L = ensure(), rows = batchRows(L);
+  const written = rows.filter((r) => !r.zero), sum = written.reduce((a, r) => a + r.n, 0);
+  const three = rows.filter((r) => !r.mine && !r.zero && !r.short).slice(0, 3);
+  // 첫 문장의 '무엇을 했는지'(…며 앞)를 칠해 학생마다 다른 곳이 보이게
+  const lit = (t) => { const k = t.indexOf("며 "); return k > 0 ? `<mark>${esc(t.slice(0, k + 1))}</mark>${esc(t.slice(k + 1))}` : esc(t); };
+  const bars = rows.map((r) => `<i class="${r.mine ? "mine" : ""}" style="height:${Math.max(3, (r.bytes / 1500) * 100)}%"></i>`).join("");
+  root.innerHTML = `<section class="pts">
+      <h2>누가 생기부 초안의 <em>강점 3가지</em></h2>
+      <div class="pt-cards">
+        <article class="pt"><p class="pt-n">1</p><h3>실제 기록으로 씁니다</h3>
+          <div class="pt-body"><span class="rc">${esc(S.note)}</span><i class="pt-ar" aria-hidden="true">↓</i><p class="pt-sen">${esc(S.mineS)}</p></div>
+          <p class="pt-cap">선생님이 남긴 기록 <b>${sum.toLocaleString("ko-KR")}건</b>으로 <b>${written.length}명</b> · 없는 내용은 만들지 않아요</p></article>
+        <article class="pt"><p class="pt-n">2</p><h3>학생마다 모두 다릅니다</h3>
+          <div class="pt-body">${three.map((r) => `<p class="pt-one"><b>${r.i + 1} ${r.name}</b>${lit(r.first)}</p>`).join("")}</div>
+          <p class="pt-cap">각자의 기록으로 쓰니 <b>${written.length}명 ${written.length}가지</b> 초안</p></article>
+        <article class="pt"><p class="pt-n">3</p><h3>한 번에 반 전체, 분량까지</h3>
+          <div class="pt-body"><p class="pt-big"><b>${rows.length}</b>명</p><div class="pt-bars" aria-hidden="true"><span class="lim">1,500B</span>${bars}</div></div>
+          <p class="pt-cap">[일괄 생성] 한 번 · 모두 <b>1,500B 안</b>에 · 기록이 적으면 억지로 늘리지 않아요</p></article>
+      </div>
+      <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div></section>`;
+  $$(".pt").forEach((c, k) => later(() => c.classList.add("in"), 250 + k * 850));
+  later(() => $("#ptend").classList.add("in"), 250 + 3 * 850);
+  $("#totalk").addEventListener("click", () => go(S.k + 1));
 }
 
 /* ---------- 4 · 상담: 두 사람 + 말풍선, [누가기록!]으로 근거 있는 설명 ---------- */
