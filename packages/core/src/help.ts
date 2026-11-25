@@ -7,7 +7,7 @@
 
 /** [바로 가기] 가 여는 곳. 'settings:<탭>' 은 설정의 그 탭 */
 export type HelpGo =
-  | "main" | "draft" | "mobile" | "inbox" | "bulk" | "whale" | "chat"
+  | "main" | "draft" | "mobile" | "inbox" | "bulk" | "whale" | "chat" | "login"
   | "settings:roster" | "settings:timetable" | "settings:sync" | "settings:ai" | "settings:recording"
   | "settings:backup" | "settings:length" | "settings:privacy";
 export interface HelpLink { label: string; go: HelpGo }
@@ -79,9 +79,9 @@ export const HELP_FAQ: HelpFaq[] = [
   { id: "timetable", q: "시간표는 왜 넣나요?", keys: ["시간표", "교시", "수업 시간", "진도"],
     a: "시간표가 있으면 폰과 모바일 화면이 지금 수업하는 반을 먼저 띄워서 번호만 누르면 돼요. 설정 → 시간표에서 칸에 반을 지정해요.",
     links: [{ label: "시간표", go: "settings:timetable" }] },
-  { id: "phone", q: "폰과는 어떻게 연결하나요?", keys: ["폰", "핸드폰", "휴대폰", "스마트폰", "연결", "동기화", "qr", "페어링", "위젯", "안드로이드", "아이폰"],
-    a: "PC 설정 → 동기화에서 [동기화 키 생성]을 누르고 나온 QR을 폰 앱으로 찍어요. 연결이 안 되면 릴레이 주소와 PC 방화벽(8787)을 확인하세요.",
-    links: [{ label: "동기화", go: "settings:sync" }] },
+  { id: "phone", q: "폰과는 어떻게 연결하나요?", keys: ["폰", "핸드폰", "휴대폰", "스마트폰", "연결", "동기화", "qr", "페어링", "위젯", "안드로이드", "아이폰", "로그인", "아이디"],
+    a: "폰과 PC에서 이 앱을 열고 위쪽 [로그인]에 같은 아이디·비밀번호를 넣으면 바로 이어져요(폰은 '폰', PC는 'PC'로). 폰에서 번호를 눌러 저장하면 PC에 쉬는 시간 기록 팝업이 떠요. 안드로이드 앱은 설정 → 동기화의 QR로 연결해요.",
+    links: [{ label: "로그인", go: "login" }, { label: "동기화", go: "settings:sync" }] },
   { id: "watch", q: "워치에서도 기록되나요?", keys: ["워치", "시계", "갤럭시 워치", "wear"],
     a: "네. Wear OS 워치에서 [기록] → 번호 → 저장하면 폰 기록과 같이 PC의 미반영으로 모여요.",
     links: [{ label: "동기화", go: "settings:sync" }] },

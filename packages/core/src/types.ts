@@ -202,6 +202,10 @@ export interface SyncSettings {
   shareRoster: boolean;
   lastPulledId?: string;
   lastSyncAt?: string;
+  /** 중계: relay = 누가 릴레이(QR 페어링, 기본), ntfy = 공개 중계 ntfy.sh(로그인으로 연결) */
+  transport?: "relay" | "ntfy";
+  /** 로그인으로 연결했을 때: 아이디(소문자)와 로그인한 때(유닉스 초, 그 뒤 메시지만 받는다). 비밀번호는 저장하지 않는다 */
+  login?: { id: string; at: number };
 }
 
 export interface AiSettings {

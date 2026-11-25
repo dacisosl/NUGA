@@ -13,6 +13,7 @@ import { useStore } from "../store";
 import { aiErrorText, aiReady } from "../lib/ai";
 import { providerFor } from "../lib/providers";
 import { enterWhale, useWhale } from "../lib/whale";
+import { openLogin } from "./LoginModal";
 import { Icon } from "./ui";
 import "./help.css";
 
@@ -36,6 +37,7 @@ export function toggleHelp() { if (useHelp.getState().tab) closeHelp(); else ope
 function go(g: HelpGo) {
   const st = useStore.getState();
   if (g === "chat") { useHelp.setState({ tab: "chat" }); return; }
+  if (g === "login") { openLogin(); return; }
   if (g === "whale") {
     closeHelp();
     st.toast({ text: "웨일 모드를 준비하는 중 · 데모 영역을 따로 만들어요 (선생님 기록은 그대로)", ttl: 3000 });

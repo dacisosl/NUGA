@@ -113,6 +113,17 @@ Base: 릴레이 URL. 모든 응답 JSON, CORS 전체 허용(`*`). 서버는 `key
 - 폴링 권장 주기: PC 5초(앱 활성) / 30초(비활성). 폰은 앱 실행 시·수동 새로고침 시 `for=phone` 조회.
 - 롱폴링(선택): `GET /box/{keyId}?for=pc&wait=25` → 새 항목이 올 때까지 최대 25초 대기.
 
+### 4.1 로그인으로 연결 (웹 앱 · 공개 중계 ntfy.sh)
+폰·PC 모두 웹 앱일 때 QR 대신 쓰는 방식. 서버 쪽 계정은 없다. 구현: `packages/core/src/login.ts`, `NtfyClient`(`packages/core/src/sync.ts`).
+- 키: `K = PBKDF2-SHA256(비밀번호, salt = "nuga-login-v1|" + 아이디(앞뒤 공백 제거·소문자), 210000회, 256비트)`. `keyId` 는 1장과 같다. 같은 아이디·비밀번호 = 같은 K. 비밀번호는 저장하지 않는다.
+- 설정: `sync.transport = "ntfy"`, `sync.relayUrl = "https://ntfy.sh"`, `sync.login = { id, at }` (`at` = 로그인한 유닉스 초 − 30, 그 뒤 메시지만 받는다). 기기 역할(PC·폰)은 문서가 아니라 기기의 `localStorage["nuga.role"]`.
+- 통로(topic): PC 가 받는 것 `nuga-<keyId>-pc`, 폰이 받는 것 `nuga-<keyId>-ph`. 메시지 본문 = 2장의 봉투 JSON 그대로 (`POST https://ntfy.sh/<통로>`, text/plain).
+- 조각: 봉투 글이 3500자를 넘으면 `{"nuga":"c1","m":<묶음 id>,"i":<0..n-1>,"n":<개수>,"d":<글 조각>}` 로 나눠 보낸다(ntfy 메시지 한도 4KB). 받는 쪽은 `m` 으로 모아 합친다. 머리(i=0) 조각이 없는 묶음은 건너뛰고, 머리가 있는데 45초 넘게 덜 온 묶음도 건너뛴다(막히지 않게).
+- 받기: `GET https://ntfy.sh/<통로>/json?poll=1&since=<유닉스 초>` (줄 단위 JSON, `event = "message"` 만). ntfy 는 since 의 그 초를 포함해 돌려주므로, 받는 쪽은 '이어 받을 위치' = `c:<초>:<그 초에 받은 id,…>` 를 `sync.lastPulledId` 에 두고 그 초에 이미 받은 id 는 뺀다. 서버에서 지우지 않는다(ack 없음, 12시간 뒤 사라짐). 같은 기록이 다시 와도 id 로 합쳐진다(3.1).
+- 바로 받기: `EventSource(https://ntfy.sh/<통로>/sse)` 에 메시지가 오면 한 바퀴(1초에 한 번까지). 확인용 폴링은 60초(화면이 가려지면 180초). 429(요청이 많음)를 받으면 20초 쉬었다가 다시.
+- 흐름: 폰이 처음 `ping` → PC 가 config 를 곧바로 보냄(폰은 받은 반·시간표·진도·이름을 '폰 연결' 영역에 채움) → 폰에서 저장한 기록은 `records`(from=phone) → PC 는 쉬는 시간 기록 팝업 → PC 가 채운 기록은 `records`(from=pc)로 되돌림. PC 는 폰에서 온 기록 id 만 되보내고 기록 메시지는 한 번에 묶는다(하루 메시지 수 절약).
+- 공개 테스트 계정(`TEST_LOGIN`)으로 연결한 PC 는 데모 데이터가 아니면 config 의 `roster` 를 null 로 보낸다.
+
 ## 5. 워치 ↔ 폰 (Wear OS Data Layer)
 - 워치 → 폰: MessageClient path `/nuga/record`, 본문 = Record JSON (UTF-8). 실패 시 워치 로컬 큐(Room/DataStore)에 보관 후 재시도.
 - 폰 → 워치: DataClient path `/nuga/config`, 본문 = 3.3 config JSON 에서 `roster` 를 제거한 것.

@@ -18,6 +18,7 @@ import { PANEL, SUB_WINDOW, startParams } from "./lib/windows";
 import { enterWhale, useWhale } from "./lib/whale";
 import { WhaleTour } from "./components/WhaleTour";
 import { HelpPanel, closeHelp, toggleHelp, useHelp } from "./components/HelpPanel";
+import { LoginButton, LoginModal } from "./components/LoginModal";
 import whaleLogo from "./assets/whale-logo.png";
 // 반응형은 맨 마지막: 화면별 스타일(계단·카드·폰 미리보기)을 좁은 화면에서 덮어쓴다
 import "./responsive.css";
@@ -29,6 +30,7 @@ export default function App() {
   const page = useStore((s) => s.page);
   const setPage = useStore((s) => s.setPage);
   const inbox = useStore((s) => s.inbox);
+  const phoneLinked = useStore((s) => s.role === "phone" && s.doc.settings.sync?.transport === "ntfy");
 
   useEffect(() => { init(); }, [init]);
   // 동기화(폰·워치)는 큰 창 하나만 돌린다. 웨일 사이드바 · 듀얼탭 창은 저장 알림으로 따라온다 (store.ts)
@@ -55,10 +57,19 @@ export default function App() {
   if (!loaded) return <div className="onb hero-dark"><span className="spin" /></div>;
   // 웨일 사이드바(?panel=sidebar): 모바일 화면(번호 칸) 하나만, 폰처럼 화면 가득
   if (PANEL) return <div className="app panel"><main className="main one" data-page="mobile"><MobilePage forcePhone /></main><Toasts /></div>;
-  if (!onboarded) return <><Onboarding /><Toasts /></>;
+  if (!onboarded) return <><Onboarding /><LoginModal /><Toasts /></>;
 
   // 화면은 넷: 현황판(기본) · 생기부 생성(초안 + 검토) · 설정 · 모바일 화면(기록). 옛 이름은 현황판/생성으로 보낸다
   const view: Page = page === "today" || page === "records" ? "main" : page === "review" ? "draft" : page;
+  // 폰으로 로그인한 기기: 얇은 막대 하나 + 번호 칸이 화면 가득 (번호 → 저장이 한 화면에, 알림 띠가 저장 버튼을 가리지 않게)
+  if (phoneLinked && view === "mobile") return (
+    <div className="app phone-mode">
+      <main className="main one" data-page="mobile"><PhoneBar /><MobilePage /></main>
+      <LoginModal />
+      <Toasts />
+      {inbox && <InboxModal />}
+    </div>
+  );
   return (
     <div className="app">
       <main className="main one" data-page={view}>
@@ -70,9 +81,26 @@ export default function App() {
       </main>
       <WhaleTour />
       <HelpPanel />
+      <LoginModal />
       <Toasts />
       {inbox && <InboxModal />}
     </div>
+  );
+}
+
+/** 폰으로 로그인한 기기의 얇은 막대: 누가 · 미반영 N · 로그인 상태 · [전체 메뉴] (현황판 등 PC 화면으로) */
+function PhoneBar() {
+  const backlog = useBacklogCount();
+  const openInbox = useStore((s) => s.openInbox);
+  const setPage = useStore((s) => s.setPage);
+  return (
+    <header className="phone-bar">
+      <b className="pb-brand">누가</b>
+      <button className={`btn pb-backlog ${backlog ? "on" : ""}`} onClick={() => openInbox({ backlog: true })} title="PC로 보낸 뒤 아직 채우지 않은 기록">미반영 <b className="num">{backlog}</b></button>
+      <span className="grow" />
+      <LoginButton />
+      <button className="btn pb-menu" onClick={() => setPage("main")} title="현황판 등 전체 메뉴">전체 메뉴</button>
+    </header>
   );
 }
 
@@ -124,6 +152,7 @@ function TopNav({ view }: { view: Page }) {
       <button className={`btn ${view === "draft" ? "active" : ""}`} aria-current={view === "draft" ? "page" : undefined} onClick={() => setPage(view === "draft" ? "main" : "draft")} title="학기 말: 누가기록으로 세특 초안을 만들고 검토"><Icon name="pen" />생기부<span className="opt"> 생성</span></button>
       {bulk && <BulkRecordModal onClose={() => setBulk(false)} />}
       <button className={`btn whale-btn ${whale ? "active" : ""}`} onClick={openWhale} disabled={whaleBusy} aria-pressed={whale} title="웨일 모드: 웨일 스페이스·웨일 클래스·팀보드·웨일 브라우저와 어떻게 이어지는지 서비스별로 데모에서 해 봅니다"><img src={whaleLogo} alt="" /><span>웨일 연계</span></button>
+      <LoginButton />
       <button className={`btn icon help-btn ${help ? "active" : ""}`} onClick={toggleHelp} title="도움말 · 사용설명서와 묻고 답하기 (F1)" aria-label="도움말" aria-expanded={help}><Icon name="help" /></button>
       <button className={`btn icon ${view === "settings" ? "active" : ""}`} aria-current={view === "settings" ? "page" : undefined} onClick={() => setPage(view === "settings" ? "main" : "settings")} title="설정" aria-label="설정"><Icon name="gear" /></button>
     </header>

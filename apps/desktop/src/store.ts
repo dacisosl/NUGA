@@ -7,6 +7,7 @@ import { getPersist } from "./lib/persist";
 import { hasKey, loadSecrets, setKey, setWebRemember } from "./lib/secrets";
 import { isTauri } from "./lib/platform";
 import { PANEL, startParams } from "./lib/windows";
+import { loadRole, saveRole, type Role } from "./lib/role";
 
 /** 화면: 현황판(main) · 생기부 생성(draft, 검토 포함) · 설정 · 모바일 화면(기록). today·records·review 는 옛 이름(→ main / draft) */
 export type Page = "main" | "today" | "records" | "draft" | "review" | "settings" | "mobile";
@@ -26,6 +27,8 @@ export interface AreaStats { id: string; name: string; students: number; records
 export interface MultiBackup { format: "nuga-multi"; version: 1; exportedAt: string; global: GlobalSettings | null; currentArea: string; areas: { meta: AreaMeta; doc: NugaDoc }[] }
 
 const DEFAULT_AREA = "default";
+/** 폰으로 로그인한 기기의 영역: PC 가 보낸 반·시간표·이름을 담는다 (이 기기의 다른 영역은 건드리지 않는다) */
+export const PHONE_AREA = "phone-link";
 function normalizeDoc(doc: NugaDoc): NugaDoc {
   const base = emptyDoc();
   // 0.2.0 이하 문서는 lengthMode·lengthBand 가 없을 수 있다. 옛 문서의 기본 단위는 '공백 포함 글자'였다.
@@ -83,6 +86,10 @@ interface State {
   inbox: Inbox | null;
   /** [일괄 기록 +] 창 (도움말의 [바로 가기]로도 연다) */
   bulkOpen: boolean;
+  /** 이 기기의 역할 (로그인으로 연결할 때): PC 는 기록을 받아 팝업, 폰은 저장한 기록을 PC 로 보냄 */
+  role: Role;
+  /** 모바일 화면을 보는 동안 생긴 기록: 그 화면에서는 팝업을 띄우지 않고, PC 화면으로 돌아갈 때 모아서 띄운다 */
+  deferred: string[];
   syncStatus: { state: "off" | "idle" | "busy" | "error"; message: string; lastAt?: string };
   outbox: Outbox;
   deviceId: string;
@@ -104,6 +111,11 @@ interface State {
   select(s: { class: string; no: number } | null): void;
   setSettingsTab(t: string): void;
   setBulkOpen(b: boolean): void;
+  setRole(r: Role): void;
+  /** 모바일 화면에 있는 동안 생긴 기록을 모아 둔다 (모바일 화면을 떠날 때 쉬는 시간 기록 팝업으로) */
+  deferInbox(ids: string[]): void;
+  /** 폰 역할: 폰 연결 영역을 만들어(없으면) 그리로 옮기고 모바일 화면을 연다 */
+  enterPhoneArea(): Promise<void>;
   setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
   toast(t: Omit<Toast, "id">): number;
   dismissToast(id: number): void;
@@ -174,6 +186,10 @@ function scheduleSave(doc: NugaDoc, outbox: Outbox) {
   saveTimer = setTimeout(() => { pendingSave?.(); }, 250);
 }
 
+/** 보낼 것이 생기면 알릴 곳 (동기화 엔진이 등록: 기다리지 않고 바로 보낸다) */
+let queueListener: (() => void) | null = null;
+export function onQueued(fn: (() => void) | null) { queueListener = fn; }
+
 let toastSeq = 1;
 let initStarted = false;
 
@@ -191,6 +207,8 @@ export const useStore = create<State>((set, get) => ({
   toasts: [],
   inbox: null,
   bulkOpen: false,
+  role: loadRole(),
+  deferred: [],
   syncStatus: { state: "off", message: "연결 안 됨" },
   outbox: { messages: [], tombstones: [] },
   deviceId: "",
@@ -339,12 +357,41 @@ export const useStore = create<State>((set, get) => ({
     set({ doc });
     if (!opts?.silent) scheduleSave(doc, get().outbox);
   },
-  setPage: (page) => set({ page }),
+  setPage(page) {
+    const prev = get().page;
+    set({ page });
+    // 모바일 화면을 떠나 PC 화면으로 돌아오면, 그동안 저장·도착한 기록으로 쉬는 시간 기록 팝업을 띄운다
+    if (prev === "mobile" && page !== "mobile" && get().deferred.length) {
+      const ids = get().deferred.filter((id) => get().doc.records.some((r) => r.id === id && r.status === "pending"));
+      set({ deferred: [] });
+      if (ids.length) get().openInbox({ records: ids });
+    }
+  },
   setClass: (cls) => set({ cls }),
   setMode2p: (mode2p) => set({ mode2p }),
   select: (selected) => set({ selected }),
   setSettingsTab: (settingsTab) => set({ settingsTab }),
   setBulkOpen: (bulkOpen) => set({ bulkOpen }),
+  setRole(role) { saveRole(role); set({ role }); },
+  deferInbox(ids) { if (ids.length) set({ deferred: [...new Set([...get().deferred, ...ids])] }); },
+  async enterPhoneArea() {
+    const st = get();
+    if (st.areaId !== PHONE_AREA) {
+      await st.flush();
+      if (!st.areas.some((a) => a.id === PHONE_AREA)) {
+        const p = await getPersist();
+        const d = applyGlobal(emptyDoc(), pickGlobal(st.doc, lastGlobal));
+        d.settings = { ...d.settings, school: { ...d.settings.school, subject: "폰 연결" }, onboarded: true };
+        await writeAreaDoc(PHONE_AREA, d);
+        const areas = [...get().areas, { id: PHONE_AREA, name: "폰 연결", createdAt: nowIso() }];
+        await p.saveAux("areas", areas);
+        set({ areas });
+      }
+      await get().switchArea(PHONE_AREA);
+    }
+    if (!get().doc.settings.onboarded) get().update((d) => { d.settings.onboarded = true; });
+    set({ page: "mobile", inbox: null });
+  },
   setView(p) { const view = { ...get().view, ...p }; set({ view }); try { localStorage.setItem("nuga.view", JSON.stringify(view)); } catch { /* 보기 설정 저장 실패는 무시 */ } },
   toast(t) {
     const id = toastSeq++;
@@ -368,6 +415,7 @@ export const useStore = create<State>((set, get) => ({
   queueMessage(m) {
     const outbox = { ...get().outbox, messages: [...get().outbox.messages, m] };
     set({ outbox }); scheduleSave(get().doc, outbox);
+    queueListener?.();
   },
   drainOutbox() {
     const o = get().outbox;
@@ -381,6 +429,8 @@ export const useStore = create<State>((set, get) => ({
     const rec: NugaRecord = { ...r, id: uuid(), createdAt: now, updatedAt: now };
     addedSinceSave.push(rec.id);
     get().update((d) => { d.records.push(rec); });
+    // 폰으로 로그인한 기기: 저장한 기록을 PC 로 보낸다 (PC 에서 쉬는 시간 기록 팝업)
+    if (get().role === "phone" && get().doc.settings.sync) get().queueMessage({ v: 1, type: "records", deviceId: get().deviceId, sentAt: now, payload: [rec] });
     return rec;
   },
   addRecords(rs) {
@@ -388,6 +438,7 @@ export const useStore = create<State>((set, get) => ({
     const recs: NugaRecord[] = rs.map((r) => ({ ...r, id: uuid(), createdAt: now, updatedAt: now }));
     addedSinceSave.push(...recs.map((r) => r.id));
     if (recs.length) get().update((d) => { d.records.push(...recs); });
+    if (recs.length && get().role === "phone" && get().doc.settings.sync) get().queueMessage({ v: 1, type: "records", deviceId: get().deviceId, sentAt: now, payload: recs });
     return recs;
   },
   updateRecord(id, patch) {
@@ -402,6 +453,7 @@ export const useStore = create<State>((set, get) => ({
     get().update((d) => { d.records = d.records.filter((x) => x.id !== id); });
     const outbox = { ...get().outbox, tombstones: [...get().outbox.tombstones, { id, deletedAt: nowIso() }] };
     set({ outbox }); scheduleSave(get().doc, outbox);
+    queueListener?.();
   },
   setStudents(students) {
     get().update((d) => {

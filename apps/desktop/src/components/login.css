@@ -1,0 +1,47 @@
+/* 로그인 창 · 위쪽 막대의 [로그인] / ● 아이디 */
+.login { display: flex; flex-direction: column; gap: 12px; }
+.login-lead { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text-2, #3c5374); word-break: keep-all; }
+.login .field { display: flex; flex-direction: column; gap: 4px; }
+.login .field label { font-size: 12.5px; font-weight: 650; color: var(--text-2, #3c5374); }
+.login .field input { height: 40px; font-size: 15px; }
+.login-role-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.login-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.login-acts .btn { height: 40px; padding: 0 16px; font-size: 14.5px; }
+.login-err { padding: 8px 10px; border-radius: 8px; background: #fdecea; color: #b3261e; font-size: 13px; font-weight: 600; }
+.login-now { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: #eef4ff; border: 1px solid #cddcf5; font-size: 14px; }
+.login-now .btn { align-self: flex-start; }
+.login-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.5; color: var(--muted, #5b6f8c); word-break: keep-all; }
+
+.topnav .login-btn { gap: 6px; white-space: nowrap; }
+.topnav .login-btn .led { width: 8px; height: 8px; border-radius: 50%; background: #7F95B2; flex: none; }
+.topnav .login-btn .led.on { background: #3ecf8e; box-shadow: 0 0 0 3px rgba(62,207,142,.2); }
+.topnav .login-btn .led.busy { background: #ACCDFF; }
+.topnav .login-btn .led.err { background: #ff8a65; }
+.topnav .login-btn .login-id { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.topnav .login-btn .login-role { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(172,205,255,.18); color: #ACCDFF; }
+/* 폰 너비: 첫 줄(로고 · 영역 · 설정 옆)에 작게 */
+@media (max-width: 560px) {
+  .topnav > .btn.login-btn.login-btn { order: 1; flex: none; height: 34px; padding: 0 10px; font-size: 13px; }
+}
+/* 첫 화면(시작 화면)의 '로그인해서 PC와 연결' */
+.onb-login { margin-top: 10px; align-self: flex-start; background: none; border: 1px solid rgba(172,205,255,.45); color: #DCE9FC; border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
+.onb-login:hover { background: rgba(172,205,255,.12); }
+
+/* 폰으로 로그인한 기기 (App phone-mode): 얇은 막대 + 번호 칸이 화면 가득 */
+.app.phone-mode { flex-direction: column; }
+.app.phone-mode .main { padding: 0; }
+.phone-bar { flex: none; display: flex; align-items: center; gap: 8px; height: 54px; padding: 0 10px; color: #EAF2FF; }
+.phone-bar .pb-brand { font-size: 18px; font-weight: 800; letter-spacing: -.04em; margin-right: 2px; }
+.phone-bar .grow { flex: 1; }
+.phone-bar .btn { height: 36px; padding: 0 11px; gap: 6px; border-radius: 9px; border: 1px solid rgba(171,201,241,.3); background: rgba(172,205,255,.06); color: #EAF2FF; font-size: 13.5px; font-weight: 650; white-space: nowrap; }
+.phone-bar .pb-backlog.on { border-color: #c98a5e; color: #ffd9bd; }
+.phone-bar .pb-backlog .num { font-variant-numeric: tabular-nums; }
+.phone-bar .login-btn .led { width: 8px; height: 8px; border-radius: 50%; background: #7F95B2; flex: none; }
+.phone-bar .login-btn .led.on { background: #3ecf8e; }
+.phone-bar .login-btn .led.busy { background: #ACCDFF; }
+.phone-bar .login-btn .led.err { background: #ff8a65; }
+.phone-bar .login-btn .login-role { display: none; }
+.app.phone-mode .content.mp-page { padding: 0 6px 6px; background: none; overflow: hidden; }
+.app.phone-mode .mp-phone.full { height: calc(100dvh - 60px); min-height: 0; }
+.app.phone-mode .mp-sheet { padding-bottom: 14px; }
+.app.phone-mode .toasts { top: 58px; bottom: auto; left: 8px; right: 8px; }

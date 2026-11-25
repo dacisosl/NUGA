@@ -9,9 +9,10 @@ import "./mobile.css";
 
 /**
  * 모바일 화면: 상단 바 [모바일 화면]을 누르면 바로 기록 화면이 열린다 (홈·탭·위젯 같은 대시보드 없음).
- * 위에는 반 · 과목 · 지금 시각만. 아래는 3열 번호 칸(번호 크게 · 이름 작게, 한 화면에 9명) → 누르면 바로 고름 → [저장].
+ * 위에는 반 · 과목 · 지금 시각만. 아래는 3열 번호 칸(번호 크게 · 이름 작게, 한 화면에 12명) → 누르면 바로 고름 → [저장].
  * 반은 지금(또는 다음) 수업 반으로 열린다. 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
- * 저장하면 PC에서는 곧바로 알림 팝업(쉬는 시간 기록)이 떠서 관찰 내용을 채운다. 폰 너비·터치 화면에서는 팝업 없이
+ * PC 에서 저장하면 이 화면에서는 팝업 없이, PC 화면(현황판 등)으로 돌아갈 때 쉬는 시간 기록 팝업이 떠서 관찰 내용을 채운다.
+ * 같은 아이디로 로그인한 폰에서 저장하면 PC 로 보내져 PC 에 팝업이 뜬다. 폰 너비·터치 화면에서는 팝업 없이
  * 아래 알림 띠만 보이고, 기록은 미반영에 쌓인다 (PC에서 [미반영]으로 처리).
  * 모양은 폰 앱의 '밤의 틀 · 빛나는 종이'(mobile.css)를 따른다. PC에서는 폰 틀 안에, 폰에서는 화면 가득.
  */
@@ -70,8 +71,11 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
   const doc = useStore((s) => s.doc);
   const addRecord = useStore((s) => s.addRecord);
   const deleteRecord = useStore((s) => s.deleteRecord);
-  const openInbox = useStore((s) => s.openInbox);
-  const phone = useIsPhone() || forcePhone;
+  const deferInbox = useStore((s) => s.deferInbox);
+  const role = useStore((s) => s.role);
+  const linked = useStore((s) => s.doc.settings.sync?.transport === "ntfy");
+  // 폰으로 로그인한 기기는 화면 크기와 상관없이 폰 (팝업 없이 PC로 보낸다)
+  const phone = useIsPhone() || forcePhone || role === "phone";
   const [tick, setTick] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 15_000); return () => clearInterval(t); }, []);
   const now = useMemo(() => new Date(tick), [tick]);
@@ -118,8 +122,9 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
     });
     setSheet((s) => ({ ...s, memo: "" }));
     // 알림 띠 글자: '저장 · 2-3 · 14번'
-    showSnack(`저장 · ${sheet.cls} · ${sheet.no}번`, rec.id);
-    if (!phone && supp) openInbox({ records: [rec.id] });
+    showSnack(`저장 · ${sheet.cls} · ${sheet.no}번${phone && linked && role === "phone" ? " · PC로 보냄" : ""}`, rec.id);
+    // PC 의 모바일 화면: 여기서는 팝업을 띄우지 않고, PC 화면(현황판 등)으로 돌아갈 때 모아서 띄운다
+    if (!phone && supp) deferInbox([rec.id]);
   };
   const undo = (id: string) => { deleteRecord(id); setSnack(null); };
   const subject = doc.settings.school.subject.trim();
@@ -131,7 +136,7 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
           <div className={`mp-phone ${phone ? "full" : ""}`}>
             <div className="mp-recscreen">
               {classes.length === 0
-                ? <><TopRow cls="" classes={[]} subject={subject} now={now} onClass={() => {}} /><div className="mp-none">PC 설정에서 반·명단을 먼저 등록하세요</div></>
+                ? <><TopRow cls="" classes={[]} subject={subject} now={now} onClass={() => {}} /><div className="mp-none">{role === "phone" && linked ? "PC와 연결 중… PC에서도 같은 아이디로 로그인하세요" : "PC 설정에서 반·명단을 먼저 등록하세요"}</div></>
                 : <RecordPanel doc={doc} sheet={sheet} setSheet={setSheet} reelStart={reelStart} onSave={save} subject={subject} now={now} />}
             </div>
             {snack && (
@@ -183,7 +188,7 @@ type SpeechRec = { lang: string; interimResults: boolean; onresult: (e: { result
 
 /**
  * 기록 판 (화면에 바로 펼친 기록 시트): 카테고리는 고르지 않는다 (0 = 미정, PC가 보충할 때 정한다).
- * 번호는 3열 칸 — 칸 하나에 번호(크게)와 이름(작게). 한 화면에 9명이 보이고, 더 많으면 칸 안에서 아래로 민다. 누르면 바로 고른다.
+ * 번호는 3열 칸 — 칸 하나에 번호(크게)와 이름(작게). 한 화면에 12명이 보이고, 더 많으면 칸 안에서 아래로 민다. 누르면 바로 고른다.
  * 칸은 엄지가 닿는 아래쪽, [저장] 바로 위에 둔다. 메모·음성 메모는 [메모]를 눌렀을 때만 펼친다. 저장하면 메모 칸은 접힌다.
  */
 function RecordPanel({ doc, sheet, setSheet, reelStart, onSave, subject, now }: {
@@ -225,7 +230,7 @@ function RecordPanel({ doc, sheet, setSheet, reelStart, onSave, subject, now }: 
   return (
     <div className="mp-sheet" role="form" aria-label="기록">
       <TopRow cls={sheet.cls} classes={classes} subject={subject} now={now} onClass={(c) => { if (c !== sheet.cls) set({ cls: c, no: reelStart(c) }); }} />
-      {/* 번호 칸: 3열, 한 화면에 9명. 누르면 바로 고른다 */}
+      {/* 번호 칸: 3열, 한 화면에 12명. 누르면 바로 고른다 */}
       <div ref={grid} className="mp-grid" role="listbox" aria-label="번호">
         {Array.from({ length: size }, (_, i) => {
           const n = i + 1, nm = nameOf(doc, sheet.cls, n), on = sheet.no === n;

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { SCHOOL_PRESETS, WRITE_ITEM_LABEL, applySchoolPreset, presetLimit, type SchoolLevel } from "@nuga/core";
 import { useStore } from "../store";
 import { startDemo } from "../lib/demo";
+import { openLogin } from "../components/LoginModal";
 import { ProgressSection, RosterSection, SubjectSection, TimetableSection } from "./SettingsPage";
 
 const STEPS = ["학교급", "영역", "반·명단", "시간표", "진도"];
@@ -55,6 +56,7 @@ export function Onboarding() {
               <button className="onb-cta main" onClick={async () => { await startDemo(); setSettings({ onboarded: true }); setPage("today"); }}><b>데모로 둘러보기</b><span>화학Ⅰ · 2개 반 · 9월부터의 합성 기록 · 합성 모의 수업과 추천 카드. 나중에 설정 → 데이터에서 지울 수 있습니다.</span></button>
               <button className="onb-cta" onClick={() => setStep(0)}><b>처음부터 설정</b><span>학교급 → 영역 → 명단 → 시간표 → 진도. 5단계, 약 5분</span></button>
             </div>
+            <button className="onb-login" onClick={openLogin}>폰이나 PC에서 로그인해서 연결하기 →</button>
             <div className="onb-note">학생 이름은 이 PC에만 저장됩니다. 워치·폰·서버에는 반·번호만 오갑니다.</div>
           </div>
           <div className="onb-stairs" aria-hidden="true">
