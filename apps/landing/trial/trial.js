@@ -98,7 +98,7 @@ const LV = {
       ["아침 독서 시간에 스스로 책을 골라 읽고 쉬는 시간에 떨어진 쓰레기를 스스로 주워 정리하는 등 바른 생활 습관이 몸에 배어 있음.", [0, 12]],
     ],
     close: "배려와 책임감, 스스로 배우려는 태도가 고르게 자라고 있어 앞으로의 성장이 더욱 기대됨.",
-    talkWho: "학부모 상담", seat: "교실 내 자리로",
+    subj: "국어", talkWho: "학부모 상담", seat: "교실 내 자리로",
     talk: {
       left: "parent", leftName: "학부모님", teacher: "teacherF", teacherName: "담임 선생님",
       lines: [["l", "선생님, 우리 아이 {name}, 학교에서 친구들과 잘 지내나요?"], ["t", "네, 친구들과 두루 잘 지내요. 걱정 안 하셔도 됩니다."], ["l", "다행이네요. 그런데 구체적으로 어떤 모습인지 궁금해요."], ["t", "음… 그게… 늘 밝게 잘 지내는 편이에요."]],
@@ -152,7 +152,7 @@ const LV = {
       ["용해 평형을 실생활 사례에 적용할 수 있는지 질문하며 탐구적 태도를 보여줌.", [7]],
     ],
     close: "자기주도적 학습 태도, 책임감과 리더십이 드러나는 성실한 학습자임.",
-    talkWho: "학생 · 학부모 상담", seat: "교무실 자리로",
+    subj: "화학Ⅰ", talkWho: "학생 · 학부모 상담", seat: "교무실 자리로",
     talk: {
       left: "student", leftName: "학생", teacher: "teacherM", teacherName: "화학 선생님",
       lines: [["l", "선생님, 화학 쪽 진로를 생각하는데 제 강점이 뭘까요?"], ["t", "수업 태도가 좋으니까 열심히 하면 잘할 거야."], ["l", "음… 구체적으로 제가 뭘 잘하는지 알고 싶어요."], ["t", "그러니까… 전반적으로 성실한 편이야."]],
@@ -176,6 +176,8 @@ let S = fresh();
 let timers = [];
 const later = (fn, ms) => { const t = setTimeout(fn, reduced ? Math.min(ms, 60) : ms); timers.push(() => clearTimeout(t)); return t; };
 const every = (fn, ms) => { const t = setInterval(fn, ms); timers.push(() => clearInterval(t)); return t; };
+/** 줄이지 않는 타이머: 움직임 줄이기 설정이어도 이야기 순서(수업 영상의 질문 → 손 들기 → 대답)는 제 시간에 보여 준다 */
+const beat = (fn, ms) => { const t = setTimeout(fn, ms); timers.push(() => clearTimeout(t)); return t; };
 function clearAll() { timers.forEach((f) => f()); timers = []; curtainEl.classList.remove("on"); $$(".fly", stage).forEach((e) => e.remove()); }
 const who = (i) => ({ i, no: i + 1, name: NAMES[i] });
 const catChip = (L, c, on) => `<span class="cat c${c} ${on ? "on" : ""}" data-c="${c}">${L.cats[c]}</span>`;
@@ -300,6 +302,7 @@ function hintOff() {
  */
 function hint(target, text, opt = {}) {
   hintOff();
+  if ($("#timeup")) return;   // '기록 완료!' 창이 떠 있으면 늦게 온 안내는 띄우지 않는다 ([다음]을 가리지 않게)
   const el = typeof target === "string" ? $(target) : target;
   if (!el) return;
   const dim = opt.dim !== false;
@@ -318,7 +321,11 @@ function hint(target, text, opt = {}) {
     drv.highlight({ element: proxy, popover: { description: text, side: opt.side || "bottom", align: opt.align || "center", showButtons: [] } });
     return;
   }
-  const r = box(el);
+  // 무대 안 좌표: 화면에 보이는 자리(줌·축소 transform 포함)를 무대 좌표로 되돌린다. 폰을 세로로 들어 무대를 90° 돌렸으면 축도 돌린다
+  const er = el.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  const r = ROT
+    ? { x: (er.top - sr.top) / SCALE, y: (sr.right - er.right) / SCALE, w: er.height / SCALE, h: er.width / SCALE }
+    : { x: (er.left - sr.left) / SCALE, y: (er.top - sr.top) / SCALE, w: er.width / SCALE, h: er.height / SCALE };
   if (dim) {
     const ring = document.createElement("div");
     ring.className = "hintr";
@@ -417,8 +424,12 @@ const deco = (two) => `<div class="deco" aria-hidden="true">${two ? '<i class="s
 const monLabel = () => (S.mode === "whale" ? "개인 화면 · 웨일" : "교사 PC 화면");
 const rosterGrid = (L, cls = "") => `<div class="roster ${cls}" id="roster">${NAMES.slice(0, L.n).map((n, i) => `<button type="button" data-i="${i}"><i>${i + 1}</i>${n}</button>`).join("")}</div>`;
 /** 한 줄 기록 칸: 카테고리 · 한 줄 · 저장 · 예시 (쉬는 시간 창과 웨일 개인 화면이 함께 쓴다) */
-function entryForm(L, p, meta) {
-  return `<div class="ib-item man"><div class="t"><b>${p.no} ${p.name}</b><span>${meta}</span><i class="tm" id="tm">0.0초</i></div>
+/** pick = 수업 중 폰에서 고른 학생이라는 표시(빨간 테두리 + 이어진 선 + 이름표) */
+function entryForm(L, p, meta, pick) {
+  const who = pick
+    ? `<b class="pick-n">${p.no} ${p.name}</b><span class="pick-call"><i aria-hidden="true"></i><em>아까 수업 중 폰으로 고른 학생 · ${meta}</em></span>`
+    : `<b>${p.no} ${p.name}</b><span>${meta}</span>`;
+  return `<div class="ib-item man"><div class="t">${who}<i class="tm" id="tm">0.0초</i></div>
     <div class="catrow" id="cats">${L.cats.map((_, c) => catChip(L, c, c === 0)).join("")}</div>
     <div id="entry"><div class="line"><textarea id="note" placeholder="${ROT || PHONE ? "아래 예시를 눌러 주세요" : "무엇을 했는지 한 줄 (Enter 저장)"}" maxlength="80" ${ROT || PHONE ? "readonly" : ""}></textarea><button class="b p" id="nsave" type="button" disabled>저장</button></div>
       <div class="ex"><small>예시 · 눌러서 넣기</small>${L.chips.map((c, i) => `<button type="button" data-k="${i}">${c.t}</button>`).join("")}</div></div></div>`;
@@ -460,19 +471,24 @@ function wireEntry(L, onDone) {
   ns.addEventListener("click", done);
   // Enter 는 칸 안에서든 밖에서든(예시를 누른 직후) 저장이다. 칸 안에서는 줄바꿈이 들어가지 않게 한다
   note.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) e.preventDefault(); });
-  const onKey = (e) => { if (e.key === "Enter" && !e.isComposing && !ns.disabled) { e.preventDefault(); done(); } };
+  const onKey = (e) => { if (e.key === "Enter" && !e.isComposing && !ns.disabled && !fin) { e.preventDefault(); done(); } };
   addEventListener("keydown", onKey);
   entryOff = () => { clearInterval(tick); removeEventListener("keydown", onKey); entryOff = null; };
   timers.push(() => entryOff?.());
 }
-/** 저장하면 걸린 시간을 큰 숫자로. 2.8초 뒤 저절로 넘어가고, 눌러도 넘어간다 */
-function timeUp({ sec, head, sub }, after) {
+/** 저장하면 걸린 시간: 숫자와 한 줄만. 저절로 넘어가지 않고 [다음]을 눌러야 넘어간다 */
+function timeUp({ sec }, after) {
+  hintOff();
   let fin = false;
-  const end = () => { if (fin) return; fin = true; $("#timeup")?.remove(); after(); };
+  // Enter·스페이스로도 넘긴다 (저장할 때 누른 Enter 가 바로 넘기지 않게 0.5초 뒤부터, 누르고 있는 키는 무시)
+  const armAt = performance.now() + 500;
+  const onKey = (e) => { if ((e.key === "Enter" || e.key === " ") && !e.repeat && performance.now() > armAt) { e.preventDefault(); end(); } };
+  const end = () => { if (fin) return; fin = true; removeEventListener("keydown", onKey); $("#timeup")?.remove(); after(); };
+  addEventListener("keydown", onKey);
+  timers.push(() => removeEventListener("keydown", onKey));
   stage.insertAdjacentHTML("beforeend", `<div class="timeup" id="timeup"><div class="tu-card" role="dialog" aria-label="기록에 걸린 시간">
-      <p class="tu-k">${head}</p><p class="tu-n"><b id="tun">0.0</b><span>초</span></p>
-      <p class="tu-m">이만큼의 시간으로<br><em>수업 속 한 장면</em>을 기록했습니다.</p>${sub ? `<p class="tu-s">${sub}</p>` : ""}
-      <button class="cta" id="tuok" type="button">다음 <span aria-hidden="true">→</span><i></i></button></div></div>`);
+      <p class="tu-n"><b id="tun">0.0</b><span>초</span></p><p class="tu-m">기록 완료!</p>
+      <button class="cta" id="tuok" type="button">다음 <span aria-hidden="true">→</span></button></div></div>`);
   const el = $("#tun"), t0 = performance.now(), dur = reduced ? 0 : 800;
   const run = () => {
     const k = dur ? Math.min(1, (performance.now() - t0) / dur) : 1;
@@ -481,8 +497,6 @@ function timeUp({ sec, head, sub }, after) {
   };
   run();
   $("#tuok").addEventListener("click", end);
-  const t = setTimeout(end, 2800);
-  timers.push(() => clearTimeout(t));
 }
 /** 수업 → 쉬는 시간 전환 */
 function breakTime(fn, from = "10:05") {
@@ -507,13 +521,10 @@ function fly(text, from, to, hold, ms, cb) {
 
 /* ---------- 0 · 방식 고르기 ---------- */
 function sPick(root) {
-  root.innerHTML = `<section class="pick"><h2>수업 중 빛나는 순간, <em>10초면</em> 기록됩니다</h2>
-      <p class="pick-s">기록 방법을 하나 골라 체험해 보세요 · 약 1분</p>
-      <div class="pick-lv"><span>예시 수업</span><span class="lvsw big" role="group" aria-label="예시 수업 학교급">${["elem", "mid"].map((lv) => `<button type="button" data-lv="${lv}" class="${S.level === lv ? "on" : ""}">${LV[lv].label}</button>`).join("")}</span></div>
-      <div class="modes">${MODES.map((x) => `<button type="button" data-m="${x.m}"><span class="art">${x.art}</span><b>${x.t}</b><span class="d">${x.d}</span><i class="go" aria-hidden="true">체험 →</i></button>`).join("")}</div>
-      <p class="pick-f">모든 학생과 기록은 체험용 가상 데이터입니다</p>
+  // 첫 화면은 고를 것 셋만. 학교급은 위쪽 막대의 작은 [초등 | 중·고등]으로
+  root.innerHTML = `<section class="pick"><h2>3개의 <em>기록</em> 방식 중 1개를 골라 주세요.</h2>
+      <div class="modes">${MODES.map((x) => `<button type="button" data-m="${x.m}"><span class="art">${x.art}</span><b>${x.t}</b></button>`).join("")}</div>
       ${BOOTH ? '<div class="qr"><img src="assets/qr-trial.svg" alt="체험 주소 QR 코드" width="74" height="74"><span>내 폰으로<br>체험하기</span></div>' : ""}</section>`;
-  $$(".pick .lvsw button").forEach((b) => b.addEventListener("click", () => setLevel(b.dataset.lv)));
   $$(".modes button").forEach((b) => b.addEventListener("click", () => {
     if (PHONE && !document.fullscreenElement) toLandscape();   // 폰만: 전체 화면 + 가로 고정 (누르는 순간이어야 허용된다)
     S = { ...fresh(), level: S.level, mode: b.dataset.m };
@@ -521,51 +532,74 @@ function sPick(root) {
   }));
 }
 
-/* ---------- 1-A · 모바일 수동기록: 수업 중 · 내 폰 ---------- */
-const ROW = 46;
+/* ---------- 1-A · 모바일 수동기록: 왼쪽 '수업 중 화면'(짧은 영상) | 오른쪽 '내 폰' ----------
+   영상에서 한 학생이 수업 중 빛나는 말을 하고, 영상이 끝나면 폰에서 그 학생 칸을 눌러 저장한다.
+   폰 화면: 위에 반 · 과목 · 지금 시각만, 아래는 3열 칸(번호 크게 · 이름 작게)으로 한 화면에 9명 */
+// 영상 속 수업: 선생님 질문 → 한 학생이 손을 들고 좋은 말 (who = 그 학생 번호-1, 폰 첫 화면 9명 안에 있는 자리)
+const CLIP = {
+  elem: { who: 4, q: "운동장을 다 함께 쓰려면 어떻게 하면 좋을까요?", a: "앞 친구 말처럼 축구도 중요해요. 그래서 저는 요일을 나눠 쓰면 좋겠어요!" },
+  mid: { who: 3, q: "온도를 높이면 평형은 어느 쪽으로 이동할까요?", a: "아까 실험에서 색이 진해진 게 르샤틀리에 원리 때문이죠? 그럼 흡열 쪽이네요!" },
+};
+const CLIP_MS = 6800;
 function sPhone(root) {
-  const L = LV[S.level];
-  S.pick = null; S.phoneSec = 0;
-  const rows = NAMES.slice(0, L.n).map((n, i) => `<button class="r" data-i="${i}" type="button"><b>${i + 1}</b><span>${n}</span></button>`).join("");
-  root.innerHTML = `<section class="stg phonestage"><div class="where"><small>수업 중</small><b>내 폰</b><span>${L.cls} · ${L.period}</span></div>
-      <div class="phone"><div class="scr"><div class="ph-status"><span>10:05</span><span>◢ ▮</span></div><div class="ph-kicker">지금 수업 ──</div><div class="ph-now">${L.cls} · ${L.period}</div><div class="ph-lesson">${L.lesson}</div><div class="ph-grow"></div>
-        <div class="ph-chips">${L.classes.map((c, i) => `<b class="${i ? "" : "on"}">${c}</b>`).join("")}<span>${L.n}명</span></div>
-        <div class="reel" id="reelbox"><div class="plate"></div><div class="sc" id="reel">${rows}</div></div>
-        <div class="ph-btns"><button class="memo" type="button" tabindex="-1">메모</button><button class="save" id="psave" type="button">저장 · 3번</button></div></div></div>
-      <div class="say"><b>수업 중엔 번호만.</b><span>무엇을 했는지는<br>쉬는 시간에 한 줄.</span></div></section>`;
-  const reel = $("#reel"), save = $("#psave"), rs = $$(".r", reel);
-  let sel = 2, t0 = 0, saved = false, raf = 0;
-  const sync = () => {
-    sel = Math.max(0, Math.min(L.n - 1, Math.round(reel.scrollTop / ROW)));
-    rs.forEach((r, i) => { r.classList.toggle("sel", i === sel); r.classList.toggle("near", Math.abs(i - sel) === 1); });
-    save.textContent = `저장 · ${sel + 1}번`;
+  const L = LV[S.level], C = CLIP[S.level];
+  // 뒤로 왔다가 다시 오면 아까 고른 학생을 그대로 골라 둔다
+  const prev = S.pick && S.pick.i < L.n ? S.pick.i : -1;
+  S.phoneSec = 0;
+  const kids = [C.who - 1, C.who, C.who + 1];
+  const cellsHtml = NAMES.slice(0, L.n).map((n, i) => `<button class="pc" data-i="${i}" type="button"><b>${i + 1}</b><span>${n}</span></button>`).join("");
+  root.innerHTML = `<section class="stg split2">
+      <div class="half"><p class="half-h"><b>수업 중 화면</b><span>${L.cls} · ${L.lesson}</span></p>
+        <div class="clip" id="clip">
+          <div class="cl-board"><small>${L.slide[0]}</small><b>${L.slide[1]}</b></div>
+          <div class="cl-t" id="clt">${person(L.talk.teacher)}<span class="nm">선생님</span></div>
+          <div class="cl-kids">${kids.map((i) => `<div class="kid ${i === C.who ? "star" : ""}" data-i="${i}"><i class="hand" aria-hidden="true">✋</i>${person("student")}<span class="nm">${i + 1} ${NAMES[i]}</span></div>`).join("")}</div>
+          <div class="cl-bub q" id="clq" hidden>${C.q}</div><div class="cl-bub a" id="cla" hidden>${C.a}</div>
+          <div class="cl-bar"><span class="live">● 수업 중</span><span id="clclock">10:03</span><i class="prog"><i id="clprog"></i></i><button type="button" id="clreplay" hidden>다시 보기 ↺</button></div>
+        </div></div>
+      <div class="half ph-half" id="phhalf"><p class="half-h"><b>내 폰</b><span>칸을 눌러 바로 기록</span></p>
+        <div class="phone"><div class="scr">
+          <div class="ph-top"><b>${L.cls}</b><span>${L.subj}</span><time>10:05</time></div>
+          <div class="pgrid" id="pgrid">${cellsHtml}</div>
+          <div class="ph-btns"><button class="save" id="psave" type="button" disabled>번호를 눌러 주세요</button></div></div></div>
+        <p class="ph-wait" id="phwait">영상이 끝나면 여기서 기록해요</p></div></section>`;
+  // 영상: 선생님 질문 → 손 들기 → 좋은 말 → 끝. 움직임 줄이기 설정이어도 순서는 그대로(beat), 흔들림·확대만 빠진다
+  const clip = $("#clip"), star = $(".kid.star"), clock = $("#clclock");
+  const talk = (el, on) => el?.classList.toggle("talking", on);
+  let sel = prev, t0 = 0, saved = false, asked = prev >= 0;
+  const end = () => {
+    clip.classList.add("done"); $("#clreplay").hidden = false; clock.textContent = "10:05";
+    talk($("#clt"), false); talk(star, false);
+    $("#phhalf").classList.add("ready");
+    if (!asked) hint("#pgrid", `방금 말한 ${C.who + 1}번 ${josa(NAMES[C.who], "을/를")} 눌러 주세요`, { dim: false, side: "bottom" });
   };
+  $("#clreplay").addEventListener("click", () => go(S.k, true));
+  const prog = $("#clprog"), c0 = performance.now();
+  const bar = every(() => { const k = Math.min(1, (performance.now() - c0) / CLIP_MS); prog.style.transform = `scaleX(${k})`; if (k >= 1) clearInterval(bar); }, 100);
+  beat(() => { $("#clq").hidden = false; talk($("#clt"), true); }, 600);
+  beat(() => { talk($("#clt"), false); star.classList.add("up"); clock.textContent = "10:04"; }, 2500);
+  beat(() => { $("#clq").classList.add("old"); $("#cla").hidden = false; star.classList.add("shine"); talk(star, true); }, 3300);
+  beat(end, CLIP_MS);
+  // 폰: 칸을 누르면 바로 고르고, [저장]으로 남긴다. 고른 뒤에도 다른 칸으로 바꿀 수 있다
+  const grid = $("#pgrid"), save = $("#psave"), cells = $$(".pc", grid);
   const begin = () => { if (!t0) t0 = performance.now(); };
-  reel.scrollTop = sel * ROW;
-  // 학생을 고르면(누르거나 굴리면) 안내가 [저장]으로 옮겨 간다. 그 뒤에도 명단은 바꿀 수 있다
-  let asked = false, settle = 0;
-  const ask = () => { if (asked || saved) return; asked = true; hint("#psave", "저장을 눌러 주세요", { side: "top", allow: "#reelbox" }); };
-  reel.addEventListener("scroll", () => {
-    cancelAnimationFrame(raf); raf = requestAnimationFrame(sync);
-    if (t0 && !asked) { clearTimeout(settle); settle = setTimeout(ask, 350); }
-  }, { passive: true });
-  timers.push(() => clearTimeout(settle));
-  ["pointerdown", "wheel", "touchstart"].forEach((t) => reel.addEventListener(t, begin, { passive: true }));
-  rs.forEach((r) => r.addEventListener("click", () => {
-    begin();
-    reel.scrollTo({ top: Number(r.dataset.i) * ROW, behavior: reduced ? "auto" : "smooth" });
-    ask();
-  }));
-  sync();
-  save.addEventListener("click", () => {
+  ["pointerdown", "wheel", "touchstart"].forEach((t) => grid.addEventListener(t, begin, { passive: true }));
+  if (prev >= 0) { cells[prev].classList.add("sel"); save.disabled = false; save.textContent = `저장 · ${prev + 1}번`; }
+  cells.forEach((c) => c.addEventListener("click", () => {
     if (saved) return;
-    saved = true; hintOff(); sync();
+    begin(); sel = Number(c.dataset.i);
+    cells.forEach((x) => x.classList.toggle("sel", x === c));
+    save.disabled = false; save.textContent = `저장 · ${sel + 1}번`;
+    if (!asked) { asked = true; hint("#psave", "저장을 눌러 주세요", { side: "top", allow: "#pgrid" }); }
+  }));
+  save.addEventListener("click", () => {
+    if (saved || sel < 0) return;
+    saved = true; hintOff();
     if (t0) S.phoneSec = (performance.now() - t0) / 1000;
     S.pick = who(sel);
     $(".scr").insertAdjacentHTML("beforeend", `<div class="ph-snack"><span>저장 · ${L.cls} · ${S.pick.no}번</span><i>취소</i></div>`);
     later(() => breakTime(() => go(S.k + 1)), 700);
   });
-  later(() => { if (!asked) hint("#reelbox", "수업 중입니다. 눈에 띈 학생을 눌러 주세요", { side: "right", allow: "#psave" }); }, 350);
 }
 
 /* ---------- 1-A · 1-C · 쉬는 시간: 교사 PC 화면 ---------- */
@@ -581,38 +615,39 @@ function sDesk(root) {
   if (auto) {
     const s = L.script, p = L.pickLine;
     body = inboxShell(L, `<div class="sg"><div class="sgl"><div class="hd"><b>${s[p][0]}</b><i>${L.sgTag}</i>${catChip(L, L.sgCat, true)}<span class="ti">${L.sgTitle}</span></div>
-        <div class="ctx"><span>화자${s[p - 1][1]}: ${s[p - 1][2]}</span><q>${s[p][2]}</q></div><p class="sgn">PC가 수업 녹음에서 고른 발언입니다</p></div>
-        <div class="sgr"><div class="who2"><b>누구의 발언인가요?</b><small>명단을 누르면 저장</small><i class="tm" id="tm">0.0초</i></div>${rosterGrid(L)}</div></div>`, "수동 기록 없음", "a");
+        <div class="ctx"><span>화자${s[p - 1][1]}: ${s[p - 1][2]}</span><q class="key">${s[p][2]}</q></div><p class="sgn">수업 시간 중 선별된 발언입니다</p></div>
+        <div class="sgr"><div class="who2"><b>누가 말했을까요?</b><small>명단을 누르면 저장</small><i class="tm" id="tm">0.0초</i></div>${rosterGrid(L)}</div></div>`, "수동 기록 없음", "a");
   } else {
-    if (!S.pick || S.pick.i >= L.n) S.pick = who(6);
-    body = inboxShell(L, "녹음 없음", entryForm(L, S.pick, "10:05 · 폰"), "m");
+    // 빨간 '아까 폰으로 고른 학생' 표시는 폰에서 실제로 고른 학생에게만 (건너뛰어 왔으면 예시 학생, 표시 없음)
+    const picked = !!S.pick && S.pick.i < L.n;
+    if (!picked) S.pick = who(6);
+    body = inboxShell(L, "녹음 없음", entryForm(L, S.pick, "10:05", picked), "m");
   }
-  root.innerHTML = `<section class="stg deskstage"><div class="cam ${reduced ? "" : "far"}" id="cam">${monitor(L, body)}${deco()}</div><div class="mon-label big" id="monlabel">교사 PC 화면</div></section>`;
+  root.innerHTML = `<section class="stg deskstage"><div class="cam far" id="cam">${monitor(L, body)}${deco()}</div><div class="mon-label big" id="monlabel">교사 PC 화면</div></section>`;
   later(() => $("#cam").classList.remove("far"), 650);   // 책상 위 모니터를 잠깐 보여 준 뒤 줌인
   later(() => $("#monlabel").classList.remove("big"), 1800);
   if (!auto) {
-    wireEntry(L, (sec) => timeUp({
-      sec, head: `${S.pick.no}번 ${S.pick.name} · 한 줄 기록`,
-      sub: S.phoneSec ? `수업 중 폰에서 번호 누르기 <b>${S.phoneSec.toFixed(1)}초</b> + 쉬는 시간 한 줄 <b>${sec.toFixed(1)}초</b> = 모두 <b>${(S.phoneSec + sec).toFixed(1)}초</b>` : "",
-    }, () => go(S.k + 1)));
+    wireEntry(L, (sec) => timeUp({ sec }, () => go(S.k + 1)));
     later(() => hint(".ib-item.man", "예시를 누르거나 한 줄을 써 주세요", { side: "top" }), 2100);
     return;
   }
-  // 자동녹음: PC가 고른 발언에 학생만 붙인다. 시간은 카드가 보인 뒤부터 학생을 누를 때까지
+  // 자동녹음: 수업 중 선별된 발언(테두리)에 학생만 붙인다. 시간은 카드가 보인 뒤부터 학생을 누를 때까지
   let t1 = 0, tick = 0, fin = false;
+  const s0 = performance.now();
   later(() => {
+    if (fin) return;
     t1 = performance.now();
     tick = every(() => { const el = $("#tm"); if (el) el.textContent = `${((performance.now() - t1) / 1000).toFixed(1)}초`; }, 100);
-    hint(".sg", "PC가 고른 발언입니다. 누구의 말인지 눌러 주세요", { side: "top" });
+    hint(".sg", "수업 시간 중 선별된 발언입니다.\n누가 말했을까요?", { side: "top" });
   }, 2100);
   $$("#roster button").forEach((b) => b.addEventListener("click", () => {
     if (fin) return;
     fin = true; hintOff(); clearInterval(tick);
-    const sec = t1 ? (performance.now() - t1) / 1000 : 0;
+    const sec = (performance.now() - (t1 || s0)) / 1000;
     S.pick = who(Number(b.dataset.i)); S.sec = sec; S.phoneSec = 0;
     fillMine();
     b.classList.add("on");
-    timeUp({ sec, head: `${S.pick.no}번 ${S.pick.name} · 학생 지정`, sub: `${L.cats[L.sgCat]} · ${L.sgMemo}` }, () => go(S.k + 1));
+    timeUp({ sec }, () => go(S.k + 1));
   }));
 }
 
@@ -622,20 +657,27 @@ function sWhale(root) {
   S.pick = null; S.note = ""; S.chip = -1; S.phoneSec = 0; S.boardSeen = false; S.made = false; S.split = false;
   const page = `<div class="wr"><div class="wr-main"><div class="wr-h"><b>${L.cls} · ${L.period}</b><span>${L.lesson}</span><i>웨일 스페이스 명단 그대로 · ${L.n}명</i></div>${rosterGrid(L, "big")}</div>
       <aside class="wr-side" id="wside"><div class="wr-empty"><b>학생을 누르면</b>여기에서 바로 기록합니다<small>보던 화면을 떠나지 않아요</small></div></aside></div>`;
-  root.innerHTML = `<section class="stg deskstage two"><div class="cam ${reduced ? "" : "far2"}" id="cam">
+  root.innerHTML = `<section class="stg deskstage two"><div class="cam far2" id="cam">
         <div class="mon slide"><div class="sl"><small>${L.slide[0]}</small><b>${L.slide[1]}</b><span>${L.slide[2]}</span></div></div>
         <span class="montag t1">수업용 화면<small>교실 TV와 같은 화면</small></span><span class="montag t2">개인 화면<small>웨일 · 누가</small></span>
         ${monitor(L, page, "full")}${deco(true)}</div>
-      <div class="mon-label big ${reduced ? "" : "hide"}" id="monlabel">개인 화면 · 웨일</div></section>`;
-  later(() => { $("#cam").classList.remove("far2"); $("#monlabel").classList.remove("hide"); }, 1800);   // 두 모니터를 잠깐 보여 준 뒤 개인 화면으로
-  later(() => $("#monlabel").classList.remove("big"), 3000);
-  later(() => hint("#roster", "명단에서 학생을 눌러 주세요", { side: "top" }), 3300);
+      <div class="mon-label big hide" id="monlabel">개인 화면 · 웨일</div></section>`;
+  // 두 모니터가 다 보이는 채로 개인 화면의 명단에서 학생을 고른다(명단만 크게). 고르면 개인 화면으로 줌인해 그 자리에서 한 줄
+  const cam = $("#cam"), label = $("#monlabel");
+  let zoomed = false;
+  beat(() => { if (!S.pick) hint("#roster", "개인 화면의 명단에서 학생을 눌러 주세요", { side: "bottom", opacity: 0.4 }); }, 900);
   $$("#roster button").forEach((b) => b.addEventListener("click", () => {
+    hintOff();
     $$("#roster button").forEach((x) => x.classList.toggle("on", x === b));
     S.pick = who(Number(b.dataset.i)); S.chip = -1;
     $("#wside").innerHTML = entryForm(L, S.pick, "지금 · 웨일");
-    wireEntry(L, (sec) => timeUp({ sec, head: `${S.pick.no}번 ${S.pick.name} · 한 줄 기록`, sub: "수업용 화면은 그대로, <b>개인 화면에서 바로</b> 기록했습니다" }, () => go(S.k + 1)));
-    hint(".ib-item.man", "예시를 누르거나 한 줄을 써 주세요", { side: "left", allow: "#roster" });
+    wireEntry(L, (sec) => timeUp({ sec }, () => go(S.k + 1)));
+    const ask = () => hint(".ib-item.man", "예시를 누르거나 한 줄을 써 주세요", { side: "left", allow: "#roster" });
+    if (zoomed) { ask(); return; }
+    zoomed = true;
+    cam.classList.remove("far2"); label.classList.remove("hide");   // 고른 순간 개인 화면으로 확대
+    later(() => label.classList.remove("big"), 1300);
+    beat(ask, reduced ? 200 : 1350);
   }));
 }
 
@@ -647,12 +689,25 @@ function sRec(root) {
         <div class="ph-noti"><div class="h"><i></i>누가 · 지금</div><b class="rec">녹음 중 · ${L.cls} ${L.period}</b><p>시간표의 수업 시간이 되어 자동으로 시작했습니다</p><div class="a"><span>일시정지</span><span>중단</span></div></div>
         <div class="waves on">${Array.from({ length: 13 }, (_, i) => `<i style="animation-delay:${(i * 0.07).toFixed(2)}s;height:${28 + ((i * 37) % 40)}px"></i>`).join("")}</div>
         <div class="ph-clock" id="rclock">00:00</div><div class="ph-grow"></div><p class="ph-fine">음성은 이 폰에만 저장되고<br>24시간 뒤 지워집니다</p></div></div>
-      <div class="stt"><h3>글로 옮기는 중<small>이름 없이 화자만 구분합니다</small></h3><div class="stt-list" id="stt"></div><p class="stt-f">녹음은 기본 꺼짐 · 학교 승인·안내·동의 후 사용</p></div></section>`;
+      <div class="stt"><h3 id="stth">글로 옮기는 중<small>이름 없이 화자만 구분합니다</small></h3><div class="stt-list" id="stt"></div>
+        <div class="stt-f" id="sttf"><span>녹음은 기본 꺼짐 · 학교 승인·안내·동의 후 사용</span></div></div></section>`;
   let sec = 0;
-  every(() => { sec += 9; $("#rclock").textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; }, 250);
+  const clock = every(() => { sec += 9; $("#rclock").textContent = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`; }, 250);
+  // 다 옮기면 저절로 넘어가지 않고 멈춘다: 기록할 만한 발언에 테두리를 치고(이 발언을 학생과 잇게 된다), [다음]을 눌러야 쉬는 시간으로
+  const pause = () => {
+    clearInterval(clock);
+    $(".waves").classList.remove("on");
+    $(".ph-noti b").textContent = `녹음 끝 · ${L.cls} ${L.period}`; $(".ph-noti b").classList.remove("rec");
+    $("#stth").firstChild.textContent = "글로 옮겼어요";
+    const key = $(`#stt .seg[data-k="${L.pickLine}"]`);
+    key.classList.add("key"); key.insertAdjacentHTML("beforeend", "<em>기록할 만한 발언</em>");
+    $("#sttf").innerHTML = '<span>테두리 친 발언을 쉬는 시간에 학생과 연결해요</span><button class="cta" id="recnext" type="button">다음 <span aria-hidden="true">→</span></button>';
+    $("#recnext").classList.add("hinted");
+    $("#recnext").addEventListener("click", () => { $("#recnext").disabled = true; breakTime(() => go(S.k + 1), "09:50"); });
+  };
   L.script.forEach((s, k) => later(() => {
-    $("#stt").insertAdjacentHTML("beforeend", `<div class="seg ${s[1] === 1 ? "t1" : ""}"><b class="sp${s[1]}">화자${s[1]}</b><span>${s[2]}</span></div>`);
-    if (k === L.script.length - 1) later(() => breakTime(() => go(S.k + 1), "09:50"), 1000);
+    $("#stt").insertAdjacentHTML("beforeend", `<div class="seg ${s[1] === 1 ? "t1" : ""}" data-k="${k}"><b class="sp${s[1]}">화자${s[1]}</b><span>${s[2]}</span></div>`);
+    if (k === L.script.length - 1) later(pause, 800);
   }, 500 + k * 750));
 }
 
@@ -714,7 +769,7 @@ function draftData(L) {
 }
 function sDraft(root) {
   const L = ensure(), D = draftData(L);
-  const spent = S.sec + S.phoneSec;
+  const spent = S.sec;   // '기록 완료!' 창과 같은 숫자 (한 줄 칸에 커서가 올라간 때부터 저장까지)
   const rows = D.recs.map((r, k) => `<div class="rec ${r.mine ? "mine" : ""}" data-k="${k}">${r.mine ? '<span class="tagm">방금 기록</span>' : ""}${catChip(L, r.c)}${r.mine ? "" : `<time>${r.d}</time>`}<span class="tx">${esc(r.t)}</span></div>`).join("");
   root.innerHTML = `<section class="stg deskstage"><div class="cam" id="cam">${monitor(L, `<div class="dp">
         <div class="dp-h"><span class="no">${S.pick.no}</span><span class="nm">${S.pick.name}</span><b class="it">${L.item}</b><span class="g"></span>
@@ -730,15 +785,33 @@ function sDraft(root) {
   const sn = (k) => $(`#para .sn[data-k="${k}"]`), row = (k) => $(`#recs .rec[data-k="${k}"]`);
   const draw = (still) => {
     const d = box(draft, dpb);
-    $("#link").innerHTML = pairs().map(([s, r, mine]) => {
+    $("#link").innerHTML = pairs().map(([s, r, mine], i) => {
       const a = box(s, dpb), b = box(r, dpb);
       const x1 = d.x + d.w, y1 = Math.max(d.y + 8, Math.min(d.y + d.h - 8, a.y + a.h / 2 - draft.scrollTop)), x2 = b.x, y2 = b.y + b.h / 2;
-      return `<path class="${mine ? "m" : ""}${still ? " still" : ""}" style="--l:${Math.ceil(Math.hypot(x2 - x1, y2 - y1) * 1.5)}" d="M${x1} ${y1} C${x1 + 18} ${y1},${x2 - 18} ${y2},${x2} ${y2}"/>`;
+      return `<path class="${mine ? "m" : ""}${still ? " still" : ""}" style="--l:${Math.ceil(Math.hypot(x2 - x1, y2 - y1) * 1.5)};animation-delay:${(i * 0.14).toFixed(2)}s" d="M${x1} ${y1} C${x1 + 18} ${y1},${x2 - 18} ${y2},${x2} ${y2}"/>`;
     }).join("");
   };
   const mark = (ks, rs) => {
     $$("#para .sn").forEach((x) => x.classList.toggle("on", ks.includes(Number(x.dataset.k))));
     $$("#recs .rec").forEach((x) => x.classList.toggle("on", rs.includes(Number(x.dataset.k))));
+  };
+  // 처음 보여 줄 모습: 내 기록(빨강) + 다른 문장 두어 개의 근거 기록 3~4건(노랑)이 함께 이어진 모습
+  const selAll = () => {
+    cur = ["all"];
+    const mineK = D.sens.findIndex((s) => s.mine), ks = [mineK], rs = [0];
+    // 노란 문장은 내 문장(빨강)보다 아래에서 한 문장씩 건너뛰며 고른다: 빨강과 붙지 않고 드문드문 보이게. 기록은 모두 3~4건
+    const take = (from) => {
+      for (let k = from; k < D.sens.length - 1 && rs.length - 1 < 4; k += 2) {
+        const ev = D.sens[k].ev.filter((e) => !rs.includes(e));
+        if (ks.includes(k) || !ev.length || rs.length - 1 + ev.length > 4) continue;
+        ks.push(k); rs.push(...ev);
+      }
+    };
+    take(mineK + 2);
+    if (rs.length - 1 < 3) take(mineK + 3);
+    mark(ks, rs);
+    pairs = () => ks.flatMap((k) => D.sens[k].ev.filter((e) => rs.includes(e)).map((e) => [sn(k), row(e), D.sens[k].mine]));
+    draw();
   };
   const selS = (k) => { cur = ["s", k]; mark([k], D.sens[k].ev); pairs = () => D.sens[k].ev.map((e) => [sn(k), row(e), D.sens[k].mine]); draw(); };
   const selR = (r) => {
@@ -748,7 +821,7 @@ function sDraft(root) {
     mark(ks, [r]); pairs = () => ks.map((k) => [sn(k), row(r), r === 0]); draw();
   };
   const done = () => {
-    S.made = true;
+    S.made = true; hintOff();
     $("#lenb").style.width = `${Math.min(100, (D.total / 1500) * 100)}%`; $("#lent").textContent = `${D.total.toLocaleString("ko-KR")}/1,500B`;
     $("#split").disabled = false; $("#swl").classList.add("ready");
     $("#dpf").innerHTML = `<p class="dp-msg hit">${spent ? `방금 <b>${spent.toFixed(1)}초</b> 기록이` : "방금 남긴 기록이"} 생기부 <b>한 문장</b>이 됐습니다</p>
@@ -757,8 +830,7 @@ function sDraft(root) {
     $$("#para .sn").forEach((x) => x.addEventListener("click", () => selS(Number(x.dataset.k))));
     $$("#recs .rec").forEach((x) => x.addEventListener("click", () => selR(Number(x.dataset.k))));
     draft.scrollTop = 0;
-    selS(D.sens.findIndex((s) => s.mine));
-    if (!S.split) later(() => { hint("#swl", "문장별로도 볼 수 있어요", { dim: false, side: "left" }); later(hintOff, 6000); }, 1400);
+    selAll();
   };
   /** 한 문단이 타자 치듯 채워진다 (instant = 이미 만든 초안을 다시 열 때) */
   const typeOut = (instant) => {
@@ -790,7 +862,7 @@ function sDraft(root) {
     draft.innerHTML = `<div class="dl"><i></i><i></i><i></i><i></i><b>초안을 쓰는 중 · 기록 ${D.recs.length}건을 엮고 있어요</b></div>`;
     later(() => typeOut(false), 1100);
   });
-  later(() => hint("#gen", "생성을 눌러 주세요", { side: "top" }), 500);
+  later(() => { if (!$("#gen")?.disabled && !S.made) hint("#gen", "생성을 눌러 주세요", { side: "top" }); }, 500);
 }
 
 /* ---------- 4 · 상담: 두 사람 + 말풍선, [누가기록!]으로 근거 있는 설명 ---------- */
