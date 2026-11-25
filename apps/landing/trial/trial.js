@@ -15,6 +15,8 @@ const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25h7v-7h7v
 // 부스 태블릿은 ?booth=1 로 연다: 첫 화면에 QR, 손대지 않으면 더 빨리 처음으로
 const BOOTH = new URLSearchParams(location.search).has("booth");
 const DRV = window.driver?.js?.driver;
+// 효과음 · 흔들림 · 쿵 (fx.js). 그 파일이 없거나 막혀도 체험은 그대로 돌게 빈 것으로 받는다
+/*fx*/ const FX = window.FX || { s() {}, shake() {}, thud() {}, burst() {}, flash() {}, calm() {} };
 let drv = null, hintEls = [], proxy = null, proxyFor = null;
 
 /* ---------- 무대 맞춤 ---------- */
@@ -299,6 +301,7 @@ function hintOff() {
 /**
  * "이것을 누르세요 / 여기에 쓰세요".
  * 기본은 주변을 어둡게 하고 짚은 곳과 위쪽 막대만 눌리게 한다(driver.js). allow 로 더 눌리게 할 곳을 넘긴다. dim:false 는 말풍선만 띄운다(선택 단계).
+ * dim:false + ring:true 는 주변을 어둡게 하지 않고 짚은 곳에 밝은 테두리만 두른다 (화면을 계속 보여 주면서 다음 단추를 짚을 때).
  */
 function hint(target, text, opt = {}) {
   hintOff();
@@ -326,9 +329,9 @@ function hint(target, text, opt = {}) {
   const r = ROT
     ? { x: (er.top - sr.top) / SCALE, y: (sr.right - er.right) / SCALE, w: er.height / SCALE, h: er.width / SCALE }
     : { x: (er.left - sr.left) / SCALE, y: (er.top - sr.top) / SCALE, w: er.width / SCALE, h: er.height / SCALE };
-  if (dim) {
+  if (dim || opt.ring) {
     const ring = document.createElement("div");
-    ring.className = "hintr";
+    ring.className = dim ? "hintr" : "hintr soft";
     Object.assign(ring.style, { left: `${r.x - 6}px`, top: `${r.y - 6}px`, width: `${r.w + 12}px`, height: `${r.h + 12}px` });
     stage.append(ring); hintEls.push(ring);
   }
@@ -365,6 +368,8 @@ function go(k, fromHistory) {
   const f = flow();
   k = Math.max(0, Math.min(f.length - 1, k));
   clearAll(); hintOff(); $("#timeup")?.remove();
+  FX.calm(false);
+  if (!fromHistory) { if (k > S.k && S.k > 0) FX.s("step"); else if (k < S.k) FX.s("back"); }
   if (!fromHistory) {
     if (k === 0) history.replaceState({ k: 0 }, "");
     else if (history.state?.k !== k || history.state?.mode !== S.mode) history.pushState({ k, mode: S.mode }, "");
@@ -374,18 +379,19 @@ function go(k, fromHistory) {
   stage.dataset.scene = id;
   $("#prev").hidden = k === 0;
   const st = STEP[id] ?? -1;
-  $$("#steps li").forEach((li, i) => { li.className = st === i ? "on" : st > i ? "done" : ""; });
+  $$("#steps li").forEach((li, i) => { if (st === i && !li.classList.contains("on")) FX.thud(li); li.className = st === i ? "on" : st > i ? "done" : ""; });
   $$("#lvsw button").forEach((b) => b.classList.toggle("on", b.dataset.lv === S.level));
   scene.innerHTML = "";
   SCREEN[id](scene);
   rotPrompt();
 }
 /** [이전] = 브라우저 뒤로 가기와 같은 길 (지나온 화면으로) */
-function back() { if (S.k === 0) return; if (history.state?.k > 0) history.back(); else go(S.k - 1); }
+function back() { if (S.k === 0) return; FX.s("back"); if (history.state?.k > 0) history.back(); else go(S.k - 1); }
 function reset() { S = fresh(); go(0); }
 /** 학교급을 바꾸면 지금 화면을 그 학교급 예시로 다시 그린다 (고른 학생·잰 시간은 그대로) */
 function setLevel(lv) {
   if (lv === S.level) return;
+  FX.s("pick");
   S.level = lv;
   if (S.pick && S.pick.i >= LV[lv].n) S.pick = who(LV[lv].n - 1);
   if (S.note) fillMine();
@@ -393,6 +399,7 @@ function setLevel(lv) {
 }
 $("#prev").addEventListener("click", back);
 $("#home").addEventListener("click", reset);
+$("#home").addEventListener("click", () => FX.s("back"));
 $$("#lvsw button").forEach((b) => b.addEventListener("click", () => setLevel(b.dataset.lv)));
 $("#steps").addEventListener("click", (e) => {
   const li = e.target.closest("li.done");
@@ -449,19 +456,22 @@ function wireEntry(L, onDone) {
   const check = () => { ns.disabled = !note.value.trim(); ns.classList.toggle("glow", !ns.disabled); };
   ["pointerenter", "pointerdown", "focus"].forEach((t) => note.addEventListener(t, startLine));
   note.addEventListener("focus", () => { if (!note.readOnly) hintOff(); });   // 글쓰기를 막지 않게 안내를 닫는다
-  note.addEventListener("input", () => { S.chip = -1; check(); });
+  note.addEventListener("input", () => { S.chip = -1; FX.s("key"); check(); });
   $$("#cats .cat").forEach((x) => x.addEventListener("click", () => setCat(Number(x.dataset.c))));
+  $$("#cats .cat").forEach((x) => x.addEventListener("click", () => FX.s("pick")));
   $$(".ex button").forEach((b) => {
     ["pointerenter", "pointerdown"].forEach((t) => b.addEventListener(t, startLine));
     b.addEventListener("click", () => {
       const k = Number(b.dataset.k), c = L.chips[k];
       startLine(); note.value = c.t; S.chip = k; setCat(c.c); check();
+      FX.s("pick"); FX.thud(note);
       hint("#nsave", "저장(Enter)을 눌러 주세요", { side: "bottom", allow: ".ib-item.man, #roster" });
     });
   });
   const done = () => {
     if (fin || !note.value.trim()) return;
     fin = true; hintOff(); startLine(); clearInterval(tick);
+    FX.s("save");
     const sec = (performance.now() - t1) / 1000;
     S.note = note.value.trim(); S.noteCat = cat; S.sec = sec;
     if (S.chip >= 0 && L.chips[S.chip].t !== S.note) S.chip = -1;
@@ -490,10 +500,12 @@ function timeUp({ sec }, after) {
       <p class="tu-n"><b id="tun">0.0</b><span>초</span></p><p class="tu-m">기록 완료!</p>
       <button class="cta" id="tuok" type="button">다음 <span aria-hidden="true">→</span></button></div></div>`);
   const el = $("#tun"), t0 = performance.now(), dur = reduced ? 0 : 800;
+  FX.thud(".tu-card"); FX.shake(1);
   const run = () => {
     const k = dur ? Math.min(1, (performance.now() - t0) / dur) : 1;
     el.textContent = (sec * (1 - Math.pow(1 - k, 3))).toFixed(1);
     if (k < 1 && el.isConnected) requestAnimationFrame(run);
+    if (k >= 1 && el.isConnected) { if (dur) FX.s("win"); FX.burst(el, { n: 14 }); } else if (k < 1) FX.s("tick");   // 올라가는 동안 똑똑, 멈추는 순간 성공음 (한 번)
   };
   run();
   $("#tuok").addEventListener("click", end);
@@ -503,6 +515,7 @@ function breakTime(fn, from = "10:05") {
   const L = LV[S.level];
   curtainEl.innerHTML = `<i>딩동댕</i><b>쉬는 시간</b><span>${from} <u>→</u> <em>${L.time.split("–")[1]}</em> · ${L.seat}</span>`;
   curtainEl.classList.add("on");
+  FX.s("arrive");   // 딩동댕
   later(fn, 1500);
 }
 /** 기록 조각이 from 에 잠깐(hold) 떠 있다가 to 로 날아간다 (무대 안 좌표) */
@@ -515,6 +528,7 @@ function fly(text, from, to, hold, ms, cb) {
     f.style.transition = `transform ${ms}ms cubic-bezier(.5,0,.2,1),opacity ${Math.round(ms * 0.3)}ms ease-in ${Math.round(ms * 0.7)}ms`;
     f.style.transform = `translate(calc(-50% + ${to.x - from.x}px),calc(-50% + ${to.y - from.y}px)) scale(.5)`;
     f.style.opacity = "0";
+    FX.s("send");
     later(() => { f.remove(); cb?.(); }, ms);
   }, hold);
 }
@@ -528,6 +542,7 @@ function sPick(root) {
   $$(".modes button").forEach((b) => b.addEventListener("click", () => {
     if (PHONE && !document.fullscreenElement) toLandscape();   // 폰만: 전체 화면 + 가로 고정 (누르는 순간이어야 허용된다)
     S = { ...fresh(), level: S.level, mode: b.dataset.m };
+    FX.s("pick"); FX.flash();
     go(1);
   }));
 }
@@ -571,14 +586,15 @@ function sPhone(root) {
     clip.classList.add("done"); $("#clreplay").hidden = false; clock.textContent = "10:05";
     talk($("#clt"), false); talk(star, false);
     $("#phhalf").classList.add("ready");
+    FX.s("arrive");
     if (!asked) hint("#pgrid", `방금 말한 ${C.who + 1}번 ${josa(NAMES[C.who], "을/를")} 눌러 주세요`, { dim: false, side: "bottom" });
   };
   $("#clreplay").addEventListener("click", () => go(S.k, true));
   const prog = $("#clprog"), c0 = performance.now();
   const bar = every(() => { const k = Math.min(1, (performance.now() - c0) / CLIP_MS); prog.style.transform = `scaleX(${k})`; if (k >= 1) clearInterval(bar); }, 100);
   beat(() => { $("#clq").hidden = false; talk($("#clt"), true); }, 600);
-  beat(() => { talk($("#clt"), false); star.classList.add("up"); clock.textContent = "10:04"; }, 2500);
-  beat(() => { $("#clq").classList.add("old"); $("#cla").hidden = false; star.classList.add("shine"); talk(star, true); }, 3300);
+  beat(() => { talk($("#clt"), false); star.classList.add("up"); FX.s("pop", { i: 1 }); clock.textContent = "10:04"; }, 2500);
+  beat(() => { $("#clq").classList.add("old"); $("#cla").hidden = false; star.classList.add("shine"); FX.s("pop", { i: 4 }); FX.burst(star, { n: 8 }); talk(star, true); }, 3300);
   beat(end, CLIP_MS);
   // 폰: 칸을 누르면 바로 고르고, [저장]으로 남긴다. 고른 뒤에도 다른 칸으로 바꿀 수 있다
   const grid = $("#pgrid"), save = $("#psave"), cells = $$(".pc", grid);
@@ -588,6 +604,7 @@ function sPhone(root) {
   cells.forEach((c) => c.addEventListener("click", () => {
     if (saved) return;
     begin(); sel = Number(c.dataset.i);
+    FX.s("pop", { i: sel }); FX.thud(c);
     cells.forEach((x) => x.classList.toggle("sel", x === c));
     save.disabled = false; save.textContent = `저장 · ${sel + 1}번`;
     if (!asked) { asked = true; hint("#psave", "저장을 눌러 주세요", { side: "top", allow: "#pgrid" }); }
@@ -598,6 +615,7 @@ function sPhone(root) {
     if (t0) S.phoneSec = (performance.now() - t0) / 1000;
     S.pick = who(sel);
     $(".scr").insertAdjacentHTML("beforeend", `<div class="ph-snack"><span>저장 · ${L.cls} · ${S.pick.no}번</span><i>취소</i></div>`);
+    FX.s("save"); FX.thud(".ph-snack"); FX.shake(1);
     later(() => breakTime(() => go(S.k + 1)), 700);
   });
 }
@@ -610,7 +628,7 @@ function inboxShell(L, auto, man, cls) {
 }
 function sDesk(root) {
   const L = LV[S.level], auto = S.mode === "auto";
-  S.boardSeen = false; S.made = false; S.split = false;
+  S.boardSeen = false; S.boardFx = false; S.made = false; S.split = false;
   let body;
   if (auto) {
     const s = L.script, p = L.pickLine;
@@ -647,6 +665,7 @@ function sDesk(root) {
     S.pick = who(Number(b.dataset.i)); S.sec = sec; S.phoneSec = 0;
     fillMine();
     b.classList.add("on");
+    FX.s("save"); FX.thud(b);
     timeUp({ sec }, () => go(S.k + 1));
   }));
 }
@@ -654,7 +673,7 @@ function sDesk(root) {
 /* ---------- 1-B · 웨일 수동기록: 교탁의 모니터 2대 ---------- */
 function sWhale(root) {
   const L = LV[S.level];
-  S.pick = null; S.note = ""; S.chip = -1; S.phoneSec = 0; S.boardSeen = false; S.made = false; S.split = false;
+  S.pick = null; S.note = ""; S.chip = -1; S.phoneSec = 0; S.boardSeen = false; S.boardFx = false; S.made = false; S.split = false;
   const page = `<div class="wr"><div class="wr-main"><div class="wr-h"><b>${L.cls} · ${L.period}</b><span>${L.lesson}</span><i>웨일 스페이스 명단 그대로 · ${L.n}명</i></div>${rosterGrid(L, "big")}</div>
       <aside class="wr-side" id="wside"><div class="wr-empty"><b>학생을 누르면</b>여기에서 바로 기록합니다<small>보던 화면을 떠나지 않아요</small></div></aside></div>`;
   root.innerHTML = `<section class="stg deskstage two"><div class="cam far2" id="cam">
@@ -670,6 +689,7 @@ function sWhale(root) {
     hintOff();
     $$("#roster button").forEach((x) => x.classList.toggle("on", x === b));
     S.pick = who(Number(b.dataset.i)); S.chip = -1;
+    FX.s("pick"); FX.thud(b);
     $("#wside").innerHTML = entryForm(L, S.pick, "지금 · 웨일");
     wireEntry(L, (sec) => timeUp({ sec }, () => go(S.k + 1)));
     const ask = () => hint(".ib-item.man", "예시를 누르거나 한 줄을 써 주세요", { side: "left", allow: "#roster" });
@@ -701,12 +721,14 @@ function sRec(root) {
     $("#stth").firstChild.textContent = "글로 옮겼어요";
     const key = $(`#stt .seg[data-k="${L.pickLine}"]`);
     key.classList.add("key"); key.insertAdjacentHTML("beforeend", "<em>기록할 만한 발언</em>");
+    FX.s("pick");
     $("#sttf").innerHTML = '<span>테두리 친 발언을 쉬는 시간에 학생과 연결해요</span><button class="cta" id="recnext" type="button">다음 <span aria-hidden="true">→</span></button>';
     $("#recnext").classList.add("hinted");
     $("#recnext").addEventListener("click", () => { $("#recnext").disabled = true; breakTime(() => go(S.k + 1), "09:50"); });
   };
   L.script.forEach((s, k) => later(() => {
     $("#stt").insertAdjacentHTML("beforeend", `<div class="seg ${s[1] === 1 ? "t1" : ""}" data-k="${k}"><b class="sp${s[1]}">화자${s[1]}</b><span>${s[2]}</span></div>`);
+    FX.s("row", { i: k });
     if (k === L.script.length - 1) later(pause, 800);
   }, 500 + k * 750));
 }
@@ -740,8 +762,9 @@ function sBoard(root) {
     card.querySelectorAll("p").forEach((p) => p.remove());
     card.querySelector(".n").insertAdjacentHTML("afterend", `<p class="new">오늘 ${esc(S.note)}</p>`);
     card.classList.add("hit"); $(`#p${mine}`)?.classList.add("hit");
+    if (!S.boardSeen && !S.boardFx) { S.boardFx = true; FX.s("land"); FX.thud(card); FX.shake(3); FX.burst(card, { n: 10 }); }   // 그 기록에 한 번만. 다시 볼 때는 조용히
   };
-  const ring = () => alerts.forEach((i, k) => later(() => { const c = $(`#c${i}`); c.classList.add("warn"); c.insertAdjacentHTML("beforeend", '<s class="bell">기록이 필요해요</s>'); $(`#p${i}`)?.classList.add("warn"); }, k * 280));
+  const ring = () => alerts.forEach((i, k) => later(() => { const c = $(`#c${i}`); c.classList.add("warn"); if (!S.boardSeen) FX.s(k ? "tick" : "warn"); c.insertAdjacentHTML("beforeend", '<s class="bell">기록이 필요해요</s>'); $(`#p${i}`)?.classList.add("warn"); }, k * 280));
   const ask = () => { S.boardSeen = true; hint("#mkdraft", "쌓인 기록으로 생기부를 써 보세요", { side: "bottom", align: "end", opacity: 0.42 }); };
   $("#mkdraft").addEventListener("click", () => go(S.k + 1));
   if (S.boardSeen || reduced) { out(0); land(); ring(); later(ask, 400); return; }
@@ -753,6 +776,7 @@ function sBoard(root) {
   const sb = box(sheet), to = { x: sb.x + zx + cx * z, y: sb.y + zy + cy * z };
   fly(S.note, { x: Math.max(200, Math.min(760, to.x - 180)), y: 150 }, to, 600, 650, land);
   later(() => out(1300), 2000);
+  later(() => FX.s("step"), 2000);
   later(ring, 3500);
   later(ask, 3500 + alerts.length * 280 + 500);
 }
@@ -813,12 +837,13 @@ function sDraft(root) {
     pairs = () => ks.flatMap((k) => D.sens[k].ev.filter((e) => rs.includes(e)).map((e) => [sn(k), row(e), D.sens[k].mine]));
     draw();
   };
-  const selS = (k) => { cur = ["s", k]; mark([k], D.sens[k].ev); pairs = () => D.sens[k].ev.map((e) => [sn(k), row(e), D.sens[k].mine]); draw(); };
+  const selS = (k) => { cur = ["s", k]; FX.s("link", { i: k }); mark([k], D.sens[k].ev); pairs = () => D.sens[k].ev.map((e) => [sn(k), row(e), D.sens[k].mine]); draw(); };
   const selR = (r) => {
     cur = ["r", r];
     let ks = D.sens.map((s, k) => (s.ev.includes(r) && s.ev.length < D.recs.length ? k : -1)).filter((k) => k >= 0);
     if (!ks.length) ks = [D.sens.length - 1];   // 문장에 따로 쓰이지 않은 기록은 마무리 문장으로
     mark(ks, [r]); pairs = () => ks.map((k) => [sn(k), row(r), r === 0]); draw();
+    FX.s("link", { i: r });
   };
   const done = () => {
     S.made = true; hintOff();
@@ -831,8 +856,9 @@ function sDraft(root) {
     $$("#recs .rec").forEach((x) => x.addEventListener("click", () => selR(Number(x.dataset.k))));
     draft.scrollTop = 0;
     selAll();
-    // 개인 작성이 끝나면 화면을 어둡게 하고 [반 전체 일괄 작성 보기]를 짚는다 (잠깐 초안과 연결선을 본 뒤)
-    later(() => hint("#tobatch", "반 전체도 한 번에 써 볼까요?", { side: "top", align: "end", opacity: 0.55 }), 1700);
+    // 개인 작성이 끝나면 [반 전체 일괄 작성 보기]를 짚는다 (잠깐 초안과 연결선을 본 뒤).
+    // 여기서는 화면을 어둡게 하지 않는다: 방금 만든 초안과 연결선이 그대로 보이게, 단추에 밝은 테두리와 말풍선만
+    later(() => hint("#tobatch", "반 전체도 한 번에 써 볼까요?", { side: "top", dim: false, ring: true }), 1700);
   };
   /** 한 문단이 타자 치듯 채워진다 (instant = 이미 만든 초안을 다시 열 때) */
   const typeOut = (instant) => {
@@ -846,7 +872,7 @@ function sDraft(root) {
       $("#lent").textContent = `${Math.max(0, b).toLocaleString("ko-KR")}/1,500B`; $("#lenb").style.width = `${Math.min(100, (Math.max(0, b) / 1500) * 100)}%`;
     };
     if (instant) { paint(); done(); return; }
-    const tick = every(() => { n += 5; paint(); draft.scrollTop = draft.scrollHeight; if (n >= all) { clearInterval(tick); done(); } }, 16);
+    const tick = every(() => { n += 5; FX.s("key"); paint(); draft.scrollTop = draft.scrollHeight; if (n >= all) { clearInterval(tick); done(); FX.s("win"); FX.burst("#para .sn.mine", { n: 14 }); FX.shake(1); } }, 16);
   };
   $("#split").addEventListener("click", () => {
     S.split = !S.split; hintOff();
@@ -861,6 +887,7 @@ function sDraft(root) {
   $("#gen").addEventListener("click", () => {
     hintOff();
     $("#gen").disabled = true; $("#gen").textContent = "쓰는 중";
+    FX.s("gen");
     draft.innerHTML = `<div class="dl"><i></i><i></i><i></i><i></i><b>초안을 쓰는 중 · 기록 ${D.recs.length}건을 엮고 있어요</b></div>`;
     later(() => typeOut(false), 1100);
   });
@@ -977,6 +1004,7 @@ function showcaseText(L, r) {
 }
 function sBatch(root) {
   const L = ensure(), rows = batchRows(L), n = rows.length;
+  FX.calm(!!S.batchSeen && !S.batchReplay); S.batchReplay = false;
   // 첫 학생: 초안 전체를 크게 보여 준 뒤 자기 줄로 줄어든다. 나머지는 줄에서 같은 방식으로 채워진다
   const first = rows[0], full = showcaseText(L, first);
   if (!first.mine) first.bytes = bytes(full);
@@ -1009,7 +1037,7 @@ function sBatch(root) {
     const top = el.offsetTop - list.clientHeight + el.offsetHeight * 2.6;   // 이 줄이 화면 아래 영상 막대 위에 보이게
     if (top > list.scrollTop) list.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
     const st = $(".bs", el), tx = $(".tx", el), em = $(".bl em", el), bar = $(".bl i", el);
-    if (r.zero) { el.classList.add("done"); st.textContent = "기록이 없어 쓰지 않음"; tx.textContent = "—"; em.textContent = "0B"; count(); return; }
+    if (r.zero) { el.classList.add("done"); st.textContent = "기록이 없어 쓰지 않음"; tx.textContent = "—"; em.textContent = "0B"; FX.s("warn"); count(); return; }
     el.classList.add("run"); st.textContent = "쓰는 중";
     const s0 = performance.now();
     const w = every(() => {
@@ -1017,25 +1045,29 @@ function sBatch(root) {
       tx.textContent = r.first.slice(0, Math.ceil(r.first.length * k));
       const b = Math.round(r.bytes * k);
       em.textContent = `${b.toLocaleString("ko-KR")}B`; bar.style.width = `${(b / 1500) * 100}%`;
-      if (k >= 1) { clearInterval(w); finishRow(r, el); }
+      if (k >= 1) { clearInterval(w); finishRow(r, el); FX.s("row", { i: r.i }); }
     }, 40);
   };
   // 1) [일괄 생성] → 첫 학생의 초안 전체가 크게 써진다
   later(() => $("#btgo").classList.add("press"), 350);
+  later(() => { FX.s("pick"); FX.thud("#btgo"); }, 350);
   later(() => {
     els[0].classList.add("run"); $(".bs", els[0]).textContent = "쓰는 중";
     $("#vlive").textContent = `● ${first.name} · 초안 전체`;
     show.hidden = false;
+    FX.s("gen");
     const p = $("#bsp"), b = $("#bsb"), s0 = performance.now();
     const w = every(() => {
       const k = reduced ? 1 : Math.min(1, (performance.now() - s0) / TYPE);
       const t = full.slice(0, Math.ceil(full.length * k));
       p.textContent = t; b.textContent = `${bytes(t).toLocaleString("ko-KR")}/1,500B`;
+      FX.s("key");
       if (k >= 1) clearInterval(w);
     }, 30);
   }, START);
   // 2) 잠깐 보여 준 뒤 그 학생의 줄 크기로 줄어들며 들어간다
   later(() => {
+    FX.s("send");
     const host = $("#bt2"), sb = box(show, host), rb = box(els[0], host);
     rb.y -= list.scrollTop;
     show.style.transition = `transform ${SHRINK}ms cubic-bezier(.5,0,.2,1), opacity ${SHRINK}ms ease-in`;
@@ -1046,17 +1078,20 @@ function sBatch(root) {
   later(() => {
     show.hidden = true; finishRow(first, els[0]);
     els[0].classList.add("landed");
+    FX.s("land"); FX.shake(1);
     $("#vlive").textContent = `● 나머지 ${n - 1}명도 같은 방식으로`;
   }, START + TYPE + HOLD + SHRINK);
   // 3) 나머지 학생들
   rows.slice(1).forEach((r, k) => later(() => run(r, els[k + 1]), REST + k * GAP));
   later(() => {
     clearInterval(clock); prog.style.transform = "scaleX(1)";
+    FX.s("big"); FX.shake(3); FX.flash(); FX.burst("#bt2", { kind: "confetti", n: 34 });   // 반 전체가 끝난 순간
+    S.batchSeen = true;
     $("#vlive").textContent = `● 끝 · ${n}명`; $("#vtime").textContent = `${(total / 1000).toFixed(1)}초`;
     $("#vreplay").hidden = false; $("#btnext").hidden = false; $("#btnext").classList.add("hinted");
     later(() => list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }), 600);   // 끝나면 맨 위(첫 학생 · 방금 쓴 학생)로
   }, total);
-  $("#vreplay").addEventListener("click", () => go(S.k, true));
+  $("#vreplay").addEventListener("click", () => { S.batchReplay = true; go(S.k, true); });
   $("#btnext").addEventListener("click", () => go(S.k + 1));
 }
 
@@ -1083,7 +1118,9 @@ function sPoints(root) {
       </div>
       <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div></section>`;
   $$(".pt").forEach((c, k) => later(() => c.classList.add("in"), 250 + k * 850));
+  $$(".pt").forEach((c, k) => later(() => { FX.s("pop", { i: k * 2 }); FX.thud($(".pt-n", c)); }, 430 + k * 850));
   later(() => $("#ptend").classList.add("in"), 250 + 3 * 850);
+  later(() => FX.s("win"), 250 + 3 * 850);
   $("#totalk").addEventListener("click", () => go(S.k + 1));
 }
 
@@ -1112,6 +1149,7 @@ function sTalk(root) {
   const say = (side, html, cls = "") => {
     const me = $(side === "l" ? "#bl" : "#bt"), other = $(side === "l" ? "#bt" : "#bl"), w = $(side === "l" ? "#wl" : "#wt");
     me.className = `bub ${side} ${cls}`; me.innerHTML = html; me.hidden = false;
+    if (cls === "vague") FX.s("warn"); else if (cls !== "good" && cls !== "happy") FX.s("pop", { i: side === "l" ? 2 : 5 });
     me.style.animation = "none"; void me.offsetWidth; me.style.animation = "";
     other.classList.add("old");
     w.classList.add("talking"); later(() => w.classList.remove("talking"), 1300);
@@ -1124,10 +1162,12 @@ function sTalk(root) {
     if (step === T.lines.length) {
       step++;
       $("#bt").hidden = true; $("#nuga").hidden = false; btn.hidden = true;
+      FX.s("arrive");
       hint("#nuga", "막연한 말뿐입니다. 누가기록을 꺼내 보세요", { side: "left" });
       return;
     }
     say("l", fill(T.after), "happy");
+    FX.s("big"); FX.shake(2); FX.burst("#bl", { kind: "confetti", n: 30 });   // 체험의 마지막
     $("#tkact").innerHTML = '<a class="cta" href="../">앱 소개 페이지로 <span aria-hidden="true">→</span></a>';
     $("#replay").hidden = false;
   };
@@ -1136,8 +1176,10 @@ function sTalk(root) {
     hintOff();
     $("#nuga").hidden = true;
     $(".talk2").classList.add("answered");
+    FX.s("send"); FX.shake(2); FX.flash();
+    evRecs.forEach((_, k) => later(() => FX.s("link", { i: k + 3 }), 80 + k * 180));
     $("#evs").innerHTML = `<p>누가에 쌓인 ${esc(name)}의 기록</p>` + evRecs.map((r, k) => `<div class="evc" style="animation-delay:${k * 0.18}s">${catChip(L, r[0])}<time>${r[1]}</time><span>${esc(r[2])}</span></div>`).join("");
-    later(() => { say("t", `<small>누가 기록 ${evRecs.length}건으로</small>${T.answer} ${T.tail} <mark>“${esc(S.note)}”</mark>`, "good"); $("#tnext").hidden = false; }, 800);
+    later(() => { say("t", `<small>누가 기록 ${evRecs.length}건으로</small>${T.answer} ${T.tail} <mark>“${esc(S.note)}”</mark>`, "good"); FX.s("win"); FX.burst("#bt", { n: 12 }); $("#tnext").hidden = false; }, 800);
   });
   $("#replay").addEventListener("click", () => go(S.k, true));
   later(next, 300);

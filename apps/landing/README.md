@@ -44,7 +44,9 @@ GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 
 - 안내("이것을 누르세요")는 driver.js 로 띄운다. 안내가 떠 있는 동안에는 짚은 곳과 위쪽 막대만 눌린다. 파일을 못 불러왔거나 폰을 세로로 들었을 때는 같은 문구를 무대 안 말풍선으로 보여 준다.
 - 화면은 960×540 무대를 통째로 키우거나 줄인다. 폰을 세로로 들면 무대를 90° 돌려 그리므로(회전 잠금·아이폰에서도) 폰만 옆으로 돌리면 된다. 폰에서는 화면 키보드가 무대를 가리지 않게 한 줄을 예시로만 넣는다.
 - 부스 태블릿은 `?booth=1` 로 연다: 첫 화면에 '내 폰으로 체험하기' QR(assets/qr-trial.svg)이 보이고, 손대지 않으면 45초(평소 90초) 뒤 처음 화면 · 초등 예시로 돌아간다.
-- 파일: index.html(틀) · trial.css · trial.js(장면과 예시 데이터) · assets/chars(상담 캐릭터) · vendor(driver.js).
+- 파일: index.html(틀) · trial.css · trial.js(장면과 예시 데이터) · fx.js(효과음 · 흔들림) · assets/chars(상담 캐릭터) · vendor(driver.js).
+- 효과음 · 흔들림(`fx.js`): 게임 같은 손맛을 주려고 장면마다 작은 소리(번호 뿅 · 저장 딩 · 줄마다 삑 · 끝에 쿵)와 흔들림 · 불꽃 · 색종이를 건다. 소리 파일 없이 브라우저에서 바로 만들고(Web Audio), 처음 화면을 누를 때부터 난다. 위쪽 막대의 스피커 단추로 끄고 켠다(그 기기에 기억). '움직임 줄이기'를 켠 기기에서는 흔들림 · 불꽃을 내지 않는다. trial.js 에서는 `FX.s("pop")` · `FX.shake(2)` · `FX.thud(el)` · `FX.burst(el)` · `FX.flash()` 한 줄로 부른다.
+- 안내(이것을 누르세요)는 주변을 어둡게 하지만, 개인 작성 끝의 [반 전체 일괄 작성 보기]만은 어둡게 하지 않고 단추에 밝은 테두리만 두른다(초안과 연결선이 계속 보이게).
 - vendor/driver.js.iife.js · driver.css 는 [driver.js](https://github.com/kamranahmedse/driver.js) 1.14.0 (MIT, Copyright (c) Kamran Ahmed)의 배포 파일 그대로이고, 라이선스 전문은 vendor/driver.js-LICENSE.txt 에 있다. 버전을 올릴 때는 npm 의 `driver.js` 패키지에서 `dist/driver.js.iife.js` · `dist/driver.css` · `license` 를 다시 복사한다.
 - QR 을 다시 만들려면 저장소 루트에서: `node -e "require('qrcode').toFile('apps/landing/trial/assets/qr-trial.svg','https://dacisosl.github.io/NUGA/trial/',{type:'svg',margin:1,color:{dark:'#0b1d33'}})"`
 

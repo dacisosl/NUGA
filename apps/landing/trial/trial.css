@@ -82,6 +82,10 @@ textarea{user-select:text;-webkit-user-select:text}
 /* 무대 안 말풍선: driver.js 가 없거나 폰을 세로로 들었을 때, 그리고 가리지 않는 선택 안내 */
 #stage .hinted{animation:hintpulse 1.3s ease-out infinite}
 .hintr{position:absolute;z-index:60;border-radius:12px;pointer-events:none;box-shadow:0 0 0 3px var(--gold),0 0 0 2000px rgba(2,8,18,.58);animation:fade-in .25s ease both}
+/* 어둡게 하지 않는 강조: 흰 테두리 + 금빛 선이 번져 나간다 (뒤 화면은 그대로 보인다) */
+.hintr.soft{box-shadow:0 0 0 4px #fff,0 0 0 7px var(--gold),0 12px 30px rgba(11,29,51,.28);animation:fade-in .25s ease both,softbeat 1.5s ease-out .25s infinite}
+@keyframes softbeat{0%{box-shadow:0 0 0 4px #fff,0 0 0 7px var(--gold),0 0 0 7px rgba(255,215,106,.75),0 12px 30px rgba(11,29,51,.28)}100%{box-shadow:0 0 0 4px #fff,0 0 0 7px var(--gold),0 0 0 26px rgba(255,215,106,0),0 12px 30px rgba(11,29,51,.28)}}
+@media (prefers-reduced-motion:reduce){.hintr.soft{animation:none}}
 .hintb{position:absolute;z-index:61;max-width:360px;padding:10px 15px;border-radius:13px;background:#ffdf80;color:#0b1d33;font-size:18px;font-weight:800;line-height:1.35;letter-spacing:-.02em;word-break:keep-all;box-shadow:0 10px 30px rgba(0,0,0,.5);pointer-events:none;animation:pop .3s ease both}
 .hintb::after{content:"";position:absolute;width:14px;height:14px;background:#ffdf80;transform:rotate(45deg);border-radius:2px}
 .hintb[data-side=bottom]::after{top:-6px;left:calc(var(--ax) - 7px)}
@@ -636,3 +640,14 @@ textarea{user-select:text;-webkit-user-select:text}
 .bt2-show p{flex:1;min-height:0;margin:0;font-size:15.5px;line-height:1.7;color:var(--text);letter-spacing:-.01em;word-break:keep-all;overflow:hidden}
 .br.landed{animation:landed 1.1s ease-out 1}
 @keyframes landed{0%{box-shadow:inset 0 0 0 2px var(--blue);background:#e3ecfb}100%{box-shadow:inset 0 0 0 2px rgba(36,86,181,0)}}
+
+/* ---------- 효과음 단추 · 효과 층 (fx.js) ---------- */
+.tb.snd{width:36px;padding:0;justify-content:center;color:var(--accent)}
+.tb.snd.off{color:var(--muted);border-color:rgba(171,201,241,.18)}
+@media (pointer:coarse){.tb.snd{width:40px;padding:0}}
+/* 불꽃 · 번쩍: 무대 맨 위에 얹되 누름은 그대로 통과 */
+.fx-layer{position:absolute;inset:0;z-index:90;pointer-events:none;overflow:hidden}
+.fx-p{position:absolute;margin:-3px 0 0 -3px;border-radius:50%;pointer-events:none;will-change:translate,opacity}
+.fx-p.confetti{border-radius:2px}
+.fx-p.spark{box-shadow:0 0 8px rgba(255,215,106,.9)}
+.fx-flash{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 55%,#fff 0%,rgba(255,243,196,.75) 45%,rgba(255,255,255,0) 80%);opacity:0;pointer-events:none}
