@@ -80,7 +80,10 @@ textarea.ds-draft:focus { box-shadow: inset 0 0 0 2px var(--field-halo); }
 .batch-strip b { font-weight: 650; white-space: nowrap; }
 .bs-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #FF8A73; animation: bs-pulse 1s ease-in-out infinite; }
 .batch-strip.end .bs-dot { animation: none; background: #6FD3A0; }
-.bs-sec { flex: none; color: #A9BDD8; font-size: 13px; }
+.bs-sec { flex: none; color: #DCE9FC; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.batch-strip.end .bs-sec { color: #A9BDD8; font-weight: 500; }
+.bs-lanes { flex: none; padding: 1px 8px; border-radius: 999px; background: rgba(143,184,255,.16); color: #BFD6FF; font-size: 12px; white-space: nowrap; }
+.batch-conc { gap: 6px; white-space: nowrap; }
 .bs-bar { flex: 1; height: 4px; border-radius: 2px; overflow: hidden; background: rgba(255,255,255,.16); }
 .bs-bar i { display: block; height: 100%; background: #8FB8FF; transition: width .3s ease; }
 .batch-strip .btn.ghost { color: #EAF2FF; }

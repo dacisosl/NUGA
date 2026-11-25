@@ -776,6 +776,33 @@ function PerfAddModal({ student, onClose }: { student: Student; onClose: () => v
 type RowState = "idle" | "running" | "done" | "error";
 /** 일괄에서 한 학생 줄을 '쓰는 중'으로 보여 주는 가장 짧은 시간 (로직 생성은 순식간이라 줄이 차례로 채워지는 것이 보이게) */
 const BATCH_ROW_MS = 110;
+/** 일괄에서 동시에 쓰는 학생 수: 고를 수 있는 값 · 이 기기에 저장하는 자리 */
+const BATCH_CONC = [1, 2, 3, 4, 6, 8];
+const BATCH_CONC_KEY = "nuga.batchConc", BATCH_AVG_KEY = "nuga.batchAvgMs";
+/** 처음 값: 이 PC 의 로컬 모델은 한 명씩(그래픽카드 하나를 나눠 쓰면 오히려 느려진다), 그 밖에는 4명 */
+function defaultConc(local: boolean): number {
+  try { const v = Number(localStorage.getItem(BATCH_CONC_KEY)); if (BATCH_CONC.includes(v)) return v; } catch { /* 저장소 없음 */ }
+  return local ? 1 : 4;
+}
+/** 지난번 일괄에서 한 명에 걸린 평균 시간 (첫 학생이 끝나기 전의 남은 시간 어림에 쓴다) */
+function lastAvgMs(mode: DraftMode): number {
+  try { return Number((JSON.parse(localStorage.getItem(BATCH_AVG_KEY) || "{}") as Record<string, number>)[mode]) || 0; } catch { return 0; }
+}
+function saveAvgMs(mode: DraftMode, ms: number) {
+  try { localStorage.setItem(BATCH_AVG_KEY, JSON.stringify({ ...(JSON.parse(localStorage.getItem(BATCH_AVG_KEY) || "{}") as Record<string, number>), [mode]: Math.round(ms) })); } catch { /* 저장소 없음 */ }
+}
+/** 남은 시간: 어림이라 10초 단위로 (1분 미만은 5초 단위) */
+function fmtLeft(ms: number): string {
+  const s = Math.ceil(ms / 1000);
+  if (s <= 2) return "곧 끝남";
+  if (s < 60) return `약 ${s < 10 ? s : Math.ceil(s / 5) * 5}초 남음`;
+  const t = Math.round(s / 10) * 10, m = Math.floor(t / 60), r = t % 60;
+  return r ? `약 ${m}분 ${r}초 남음` : `약 ${m}분 남음`;
+}
+function fmtTook(ms: number): string {
+  const s = ms / 1000;
+  return s < 60 ? `${s.toFixed(1)}초 걸림` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초 걸림`;
+}
 
 function Batch() {
   const doc = useStore((s) => s.doc);
@@ -812,34 +839,73 @@ function Batch() {
     </button>
   );
   const stopRef = useRef(false);
+  const busyRef = useRef(false);
+  /** 지금 보고 있는 반: 일괄이 도는 동안 반을 바꾸면, 앞 반 학생의 진행 표시를 이 반의 같은 번호 줄에 그리지 않는다 */
+  const clsRef = useRef(cls);
+  clsRef.current = cls;
+  const mark = (s: Student, v: { st: RowState; msg?: string }) => { if (clsRef.current === s.class) setState((x) => ({ ...x, [s.no]: v })); };
+  // 화면을 떠나면(다른 탭 · 다른 페이지) 새 학생을 시작하지 않는다. 쓰던 학생은 마저 쓰고 저장된다
+  useEffect(() => () => { stopRef.current = true; }, []);
   const target = limitOf(doc);
 
   // 체험판처럼 [일괄 생성]만 누르면 되게: 기록(또는 PDF기록)이 있는 학생을 처음부터 골라 둔다
   useEffect(() => {
     const d = useStore.getState().doc;
+    stopRef.current = true;   // 앞 반에서 돌던 일괄은 여기서 멈춘다
     setSel(new Set(studentsOf(d, cls).filter((s) => recordsOf(d, s.class, s.no).some(usable) || perfsOf(d, s.class, s.no).length > 0).map((s) => s.no)));
     setState({}); setRun(null);
   }, [cls]);
-  /** 일괄 진행: 몇 명 가운데 몇 명 · 걸린 시간. 끝난 뒤에도 아래 띠에 남겨 둔다 */
-  const [run, setRun] = useState<{ total: number; done: number; t0: number; ms: number; end: boolean; stopped: boolean } | null>(null);
+  /** 일괄 진행: 몇 명 가운데 몇 명 · 남은 시간(left, 모르면 null) · 걸린 시간. 끝난 뒤에도 아래 띠에 남겨 둔다 */
+  const [run, setRun] = useState<{ total: number; done: number; t0: number; ms: number; left: number | null; lanes: number; end: boolean; stopped: boolean; stopping: boolean } | null>(null);
+  /** 동시에 쓰는 학생 수 (이 기기에 저장) */
+  const localAi = doc.settings.ai.provider === "local";
+  const [conc, setConcState] = useState(() => defaultConc(localAi));
+  const setConc = (n: number) => { setConcState(n); try { localStorage.setItem(BATCH_CONC_KEY, String(n)); } catch { /* 저장소 없음 */ } };
+  /** 남은 시간 어림의 재료 (그릴 때마다 바뀌는 값이 아니라 ref) */
+  const live = useRef({ queued: 0, limit: 1, flying: new Map<number, number>(), genDone: 0, genMs: 0, guess: 0 });
+  /**
+   * 남은 시간(ms). 한 명에 걸리는 평균 × 남은 일 ÷ 동시에 쓰는 수.
+   * 쓰는 중인 학생은 지난 만큼 덜 남은 것으로 치고, 아직 한 명도 안 끝났으면 지난번 평균으로 어림한다 (그것도 없으면 null = 계산 중).
+   */
+  const leftMs = (): number | null => {
+    const L = live.current;
+    const avg = L.genDone ? L.genMs / L.genDone : L.guess;
+    if (!avg) return null;
+    const now = Date.now();
+    let units = L.queued;
+    for (const t of L.flying.values()) units += Math.max(0.15, 1 - (now - t) / avg);
+    return (avg * units) / Math.max(1, Math.min(L.limit, L.queued + L.flying.size));
+  };
   useEffect(() => {
     if (!running) return;
-    const t = window.setInterval(() => setRun((r) => (r && !r.end ? { ...r, ms: Date.now() - r.t0 } : r)), 100);
+    const t = window.setInterval(() => setRun((r) => (r && !r.end ? { ...r, ms: Date.now() - r.t0, left: leftMs(), lanes: live.current.limit } : r)), 250);
     return () => window.clearInterval(t);
   }, [running]);
 
-  const runOne = async (s: Student) => {
+  /** 쓸 것이 없는 학생: 이미 초안이 있거나(덮어쓰기 꺼짐) 기록이 없음. 바로 표시만 하고 넘어간다 */
+  const skipOf = (s: Student): { st: RowState; msg: string } | null => {
+    const d = useStore.getState().doc;
+    if (draftOf(d, s.class, s.no)?.text && !overwrite) return { st: "done", msg: "기존 유지" };
+    if (!recordsOf(d, s.class, s.no).some(usable) && !perfsOf(d, s.class, s.no).length) return { st: "error", msg: "기록 없음" };
+    return null;
+  };
+  /** @returns ok 성공(건너뜀 포함) · ms 쓰는 데 걸린 시간(건너뛰었으면 0) · rate 요청 한도에 걸려 실패 */
+  const runOne = async (s: Student): Promise<{ ok: boolean; ms: number; rate?: boolean }> => {
     const recs = recordsOf(doc, s.class, s.no).map((r) => fillLesson(doc, r)).filter(usable);
     const perfs = perfsOf(doc, s.class, s.no);
     const prev = draftOf(useStore.getState().doc, s.class, s.no);
-    if (prev?.text && !overwrite) { setState((x) => ({ ...x, [s.no]: { st: "done", msg: "기존 유지" } })); return true; }
-    if (!recs.length && !perfs.length) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: "기록 없음" } })); return true; }
-    setState((x) => ({ ...x, [s.no]: { st: "running" } }));
+    const skip = skipOf(s);
+    if (skip) { mark(s, skip); return { ok: true, ms: 0 }; }
+    mark(s, { st: "running" });
     requestAnimationFrame(() => document.querySelector(`tr[data-no="${s.no}"]`)?.scrollIntoView({ block: "nearest" }));
+    const began = Date.now();
     try {
-      const began = Date.now();
+      // 개발 서버의 자동 검사: 고른 학생을 'AI 요청 한도' 실패로 만든다
+      if (import.meta.env.DEV && (globalThis as { __nugaBatchFail?: (no: number) => boolean }).__nugaBatchFail?.(s.no)) { await new Promise((r) => window.setTimeout(r, 300)); throw new Error("테스트: 요청 한도 초과, 잠시 후 다시 시도"); }
       const { res } = await generateChecked(s, recs, perfs, { text: "", sentences: [], history: [], dirty: false }, undefined, draftModeOf(doc.settings.ai));
-      const rest = BATCH_ROW_MS - (Date.now() - began);
+      // 개발 서버의 자동 검사: 한 명에 걸리는 시간을 늘려 동시 생성 · 남은 시간을 본다
+      const minMs = import.meta.env.DEV ? Number((globalThis as { __nugaBatchMs?: number }).__nugaBatchMs) || BATCH_ROW_MS : BATCH_ROW_MS;
+      const rest = minMs - (Date.now() - began);
       if (rest > 0 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) await new Promise((r) => window.setTimeout(r, rest));
       const w: Working = { text: res.text, sentences: res.sentences, history: [{ role: "user", text: "일괄 생성", at: nowIso() }, { role: "assistant", text: res.provider === "rules" ? "로직 생성 (AI 없이)" : `생성 (${res.model})`, at: nowIso() }], dirty: false };
       const d = useStore.getState().doc;
@@ -847,30 +913,69 @@ function Batch() {
       const review = reviewText(w.text, w.sentences, reviewCtxOf(d, s, target, recs.length, others));
       saveDraft(makeDraft(s, w, review, prev));
       workingCache.delete(keyOf(s));
-      setState((x) => ({ ...x, [s.no]: { st: "done" } }));
-    } catch (e) { setState((x) => ({ ...x, [s.no]: { st: "error", msg: aiErrorText(e) } })); return false; }
-    return true;
+      mark(s, { st: "done" });
+    } catch (e) {
+      const msg = aiErrorText(e);
+      mark(s, { st: "error", msg });
+      return { ok: false, ms: Date.now() - began, rate: /요청 한도/.test(msg) };
+    }
+    return { ok: true, ms: Date.now() - began };
   };
 
-  /** 고른 학생(또는 지난번에 실패한 학생만)을 차례로. 끝나면 성공·실패 수, 실패가 있으면 [실패만 다시] */
-  const runAll = async (only?: number[]) => {
+  /**
+   * 고른 학생(또는 지난번에 실패한 학생만)을 여러 명씩 동시에. 끝나면 성공·실패 수, 실패가 있으면 [실패만 다시].
+   * - 쓸 것이 없는 학생(기존 유지 · 기록 없음)은 먼저 표시만 하고, 나머지를 conc 명씩 동시에 쓴다 (한 명이 끝나면 다음 학생이 그 자리로).
+   * - AI 가 요청 한도에 걸려 실패하면 동시에 쓰는 수를 절반으로 줄여 이어 간다.
+   * - [중지]: 새로 시작하지 않고, 쓰던 학생은 마저 쓴다.
+   */
+  const runAll = async (only?: number[], startConc?: number) => {
+    if (busyRef.current) { toast({ text: "일괄 생성이 이미 돌고 있습니다" }); return; }
     const targets = students.filter((s) => (only ? only.includes(s.no) : sel.has(s.no)));
     if (!targets.length) { toast({ text: "선택된 학생이 없음" }); return; }
+    busyRef.current = true;
     setRunning(true); stopRef.current = false;
     const t0 = Date.now();
-    setRun({ total: targets.length, done: 0, t0, ms: 0, end: false, stopped: false });
+    const mode = draftModeOf(doc.settings.ai);
+    const work: Student[] = [];
+    let ok = 0, done = 0;
+    for (const s of targets) { const skip = skipOf(s); if (skip) { mark(s, skip); ok++; done++; } else work.push(s); }
+    const L = live.current;
+    L.queued = work.length; L.limit = Math.max(1, Math.min(startConc ?? conc, work.length || 1)); L.flying = new Map(); L.genDone = 0; L.genMs = 0; L.guess = lastAvgMs(mode);
+    setRun({ total: targets.length, done, t0, ms: 0, left: leftMs(), lanes: L.limit, end: false, stopped: false, stopping: false });
     const failed: number[] = [];
-    let ok = 0;
-    for (const s of targets) {
-      if (stopRef.current) break;
-      if (await runOne(s)) ok++; else failed.push(s.no);
-      setRun((r) => (r ? { ...r, done: r.done + 1, ms: Date.now() - t0 } : r));
-    }
+    let next = 0;
+    const limit0 = L.limit;
+    await new Promise<void>((finish) => {
+      const pump = () => {
+        while (L.flying.size < L.limit && next < work.length && !stopRef.current) {
+          const s = work[next++], startedAt = L.limit;
+          L.queued = work.length - next; L.flying.set(s.no, Date.now());
+          void runOne(s).then((r) => {
+            if (r.ok) { ok++; L.genDone++; L.genMs += r.ms; } else {
+              failed.push(s.no);
+              // 요청 한도: 동시에 쓰는 수를 절반으로 (나머지 학생이 줄줄이 실패하지 않게).
+              // 같은 때 함께 실패한 학생들이 저마다 줄여 한꺼번에 1명까지 떨어지지 않게, 지금 한도에서 시작한 학생의 실패만 센다
+              if (r.rate && L.limit > 1 && startedAt === L.limit) { L.limit = Math.max(1, Math.floor(L.limit / 2)); toast({ text: `AI 요청 한도에 걸려 동시에 ${L.limit}명씩으로 줄였습니다`, ttl: 8000 }); }
+            }
+          }).finally(() => {
+            L.flying.delete(s.no); done++;
+            setRun((x) => (x ? { ...x, done, ms: Date.now() - t0, left: leftMs(), lanes: L.limit } : x));
+            pump();
+          });
+        }
+        if (!L.flying.size && (next >= work.length || stopRef.current)) finish();
+      };
+      pump();
+    });
+    if (L.genDone) saveAvgMs(mode, L.genMs / L.genDone);
+    busyRef.current = false;
     setRunning(false);
-    setRun((r) => (r ? { ...r, ms: Date.now() - t0, end: true, stopped: stopRef.current } : r));
-    if (!failed.length) toast({ text: `일괄 생성 완료 · ${ok}명` });
-    else toast({ text: `일괄 생성 · 성공 ${ok}명 · 실패 ${failed.length}명 (${failed.join(", ")}번)`, action: { label: "실패만 다시", onClick: () => { void runAll(failed); } } });
+    setRun((r) => (r ? { ...r, done, ms: Date.now() - t0, left: 0, end: true, stopped: stopRef.current, stopping: false } : r));
+    failed.sort((a, b) => a - b);
+    if (!failed.length) toast({ text: `일괄 생성 ${stopRef.current ? "멈춤" : "완료"} · ${ok}명` });
+    else toast({ text: `일괄 생성 · 성공 ${ok}명 · 실패 ${failed.length}명 (${failed.join(", ")}번)`, action: { label: "실패만 다시", onClick: () => { void runAll(failed, L.limit < limit0 ? L.limit : undefined); } } });
   };
+  const stop = () => { stopRef.current = true; setRun((r) => (r && !r.end ? { ...r, stopping: true } : r)); };
 
   const allSel = students.length > 0 && students.every((s) => sel.has(s.no));
 
@@ -884,9 +989,12 @@ function Batch() {
           {rowMode === "fixed" && <select className="select" style={{ height: 30 }} value={rowLines} onChange={(e) => setRowLines(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6, 8].map((n) => <option key={n} value={n}>{n}줄</option>)}</select>}
         </span>
         <Switch on={overwrite} onChange={setOverwrite} label="저장된 초안 덮어쓰기" />
+        <label className="flex small muted batch-conc" title={localAi ? "이 PC의 로컬 모델은 한 명씩이 보통 가장 빠릅니다 (여러 명을 동시에 쓰면 그래픽카드를 나눠 써서 느려질 수 있습니다)" : "여러 학생의 초안을 동시에 씁니다. AI 요청 한도에 걸리면 저절로 줄입니다"}>동시에
+          <select className="select" style={{ height: 30 }} value={conc} disabled={running} onChange={(e) => setConc(Number(e.target.value))} aria-label="동시에 쓰는 학생 수">{BATCH_CONC.map((n) => <option key={n} value={n}>{n}명</option>)}</select>
+        </label>
         <span className="grow" />
         <button className="btn" onClick={() => setPerfPanel(true)}>PDF기록 일괄 등록</button>
-        {running ? <button className="btn warn" onClick={() => { stopRef.current = true; }}>중지</button> : <button className="btn primary" onClick={() => { void runAll(); }} disabled={!sel.size} title="고른 학생의 초안을 차례로 씁니다">일괄 생성{sel.size ? <span className="num"> · {sel.size}명</span> : null}</button>}
+        {running ? <button className="btn warn" onClick={stop}>중지</button> : <button className="btn primary" onClick={() => { void runAll(); }} disabled={!sel.size} title={`고른 학생의 초안을 ${conc > 1 ? `${conc}명씩 동시에` : "차례로"} 씁니다`}>일괄 생성{sel.size ? <span className="num"> · {sel.size}명</span> : null}</button>}
       </div>
       {students.length === 0 ? <Empty title="명단 없음" /> : (
         <table className="table">
@@ -912,7 +1020,7 @@ function Batch() {
                   <td>{d?.text && d.adherence ? <AdherenceChip rep={d.adherence} /> : <span className="muted">—</span>}</td>
                   <td>
                     {st?.st === "running" ? <span className="flex small"><span className="spin" />생성 중</span>
-                      : st?.st === "error" ? <span className="flex small" style={{ color: "var(--warn)" }}>{st.msg} <button className="btn sm" onClick={() => runOne(s)}>재시도</button></span>
+                      : st?.st === "error" ? <span className="flex small" style={{ color: "var(--warn)" }}>{st.msg} <button className="btn sm" onClick={() => { void runOne(s); }}>재시도</button></span>
                       : workingCache.get(keyOf(s))?.dirty ? <span className="chip check">작성 중</span>
                       : d?.text ? (d.review.result === "check" || d.review.result === "fix" ? <StatusChip result={d.review.result} /> : <span className="chip pass">✓ 완료</span>)
                       : <span className="chip none">대기</span>}
@@ -926,10 +1034,14 @@ function Batch() {
       {run && (
         <div className={`batch-strip ${run.end ? "end" : ""}`} role="status" aria-live="polite">
           <span className="bs-dot" aria-hidden />
-          <b>{run.end ? (run.stopped ? "멈춤" : "끝") : "쓰는 중"} · <span className="num">{run.done}/{run.total}</span>명</b>
-          <span className="num bs-sec">{(run.ms / 1000).toFixed(1)}초</span>
+          <b>{run.end ? (run.stopped ? "멈춤" : "끝") : run.stopping ? "멈추는 중" : "쓰는 중"} · <span className="num">{run.done}/{run.total}</span>명</b>
+          {/* 쓰는 동안은 남은 시간(어림), 끝나면 걸린 시간 */}
+          <span className="num bs-sec" title={run.end ? undefined : `${(run.ms / 1000).toFixed(0)}초 지남 · 지금까지 한 명에 걸린 시간으로 어림한 값입니다`}>
+            {run.end ? fmtTook(run.ms) : run.stopping ? "쓰던 학생은 마저 씁니다" : run.left === null ? "남은 시간 계산 중" : fmtLeft(run.left)}
+          </span>
+          {!run.end && run.lanes > 1 && <span className="bs-lanes">동시에 <span className="num">{run.lanes}</span>명</span>}
           <span className="bs-bar"><i style={{ width: `${(run.done / Math.max(1, run.total)) * 100}%` }} /></span>
-          {run.end ? <button className="btn sm ghost" onClick={() => setRun(null)}>닫기</button> : <button className="btn sm warn" onClick={() => { stopRef.current = true; }}>중지</button>}
+          {run.end ? <button className="btn sm ghost" onClick={() => setRun(null)}>닫기</button> : <button className="btn sm warn" onClick={stop} disabled={run.stopping}>중지</button>}
         </div>
       )}
       {perfPanel && <PerfBatchPanel onClose={() => setPerfPanel(false)} />}

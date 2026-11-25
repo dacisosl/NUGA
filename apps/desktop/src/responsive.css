@@ -76,21 +76,34 @@
 @media (max-width: 560px) {
   :root { --pad: 14px; }
 
-  /* 상단 바 두 줄: 로고 · 영역 · 설정 / 미반영 · 저장 · 생기부 생성 (페이지 이름은 그 아래 한 줄) */
-  .topnav { padding: 10px 12px; column-gap: 8px; row-gap: 10px; min-height: 0; }
-  .topnav .mini-link { order: 1; height: 34px; padding: 0 10px; font-size: 13px; }  /* 폰에서 바로 기록하는 문: 크게 */
+  /* 상단 바 세 줄 (줄마다 한 가지 일):
+     ① 누가 ········ 웨일 연계 · 로그인 · 도움말 · 설정      — 이 기기 · 앱
+     ② 영역 알약(넘치면 옆으로 밀기) ········ 모바일 화면     — 어디를 보는가
+     ③ 미반영 · 일괄+ · 저장▾ · 생기부 (너비를 고르게 나눔)   — 무엇을 하는가
+     ④ 페이지 이름 (현황판에는 없음)
+     줄바꿈은 높이 0 인 가름(::before · .sep)으로 한다: 가름마다 row-gap 이 한 번 더 들어가므로 row-gap 5px = 줄 사이 10px */
+  .topnav { padding: 10px 12px 8px; column-gap: 8px; row-gap: 5px; min-height: 0; }
+  .topnav::before { content: ""; order: 2; flex: 0 0 100%; height: 0; }
   .topnav .opt { display: none; }                       /* '일괄 기록+' → '일괄+', '생기부 생성' → '생기부' */
   .topnav .sync-dot { display: none; }
-  .topnav .brand { order: 0; gap: 7px; padding: 0; font-size: 18px; }
+  /* ① */
+  .topnav .brand { order: 0; gap: 7px; padding: 0; margin-right: auto; font-size: 18px; }
   .topnav .brand-en { display: none; }
-  .topnav .area-list { order: 0; flex: 1 1 0; margin-left: 2px; }
-  .topnav > .btn.icon { order: 1; }                     /* 설정 */
-  .topnav .sep { order: 2; }
-  .topnav > .split-btn { order: 3; }
-  .topnav > .btn:not(.icon) { order: 3; flex: 1 1 auto; justify-content: center; padding: 0 10px; }
-  .topnav > .btn.whale-btn { order: 1; flex: none; height: 40px; padding: 0 4px; }   /* [웨일 연계]는 첫 줄 모바일 화면 · 설정 옆에 작게 */
+  .topnav > .btn.whale-btn.whale-btn { order: 1; flex: none; height: 38px; padding: 0 2px; gap: 2px; }
   .topnav > .btn.whale-btn img { width: 22px; height: 22px; }
-  .topnav .page-title { order: 4; font-size: 20px; }
+  .topnav > .btn.icon { order: 1; flex: none; }         /* 도움말 · 설정 */
+  /* ② */
+  /* (영역 목록에 mask · filter · transform 을 걸지 말 것: [+]로 여는 '영역 추가' 창이 이 목록 안에 그려져 함께 가려진다) */
+  .topnav .area-list { order: 3; flex: 1 1 0; margin-left: -8px; margin-right: 0; }
+  .topnav .mini-link { order: 4; flex: none; height: 32px; padding: 0 10px; font-size: 13px; color: var(--ink2); }  /* 폰에서 바로 기록하는 문: 크게, 늘 오른쪽 끝 */
+  .topnav > .btn.admin-btn.admin-btn { order: 4; flex: none; padding: 0 9px; font-size: 13px; }
+  /* ③ */
+  .topnav .sep { order: 5; }
+  .topnav > .split-btn { order: 6; flex: 1 1 auto; }
+  .topnav > .split-btn .split-main { flex: 1 1 auto; justify-content: center; padding: 0 9px; }
+  .topnav > .btn:not(.icon) { order: 6; flex: 1 1 auto; justify-content: center; padding: 0 9px; white-space: nowrap; }
+  /* ④ */
+  .topnav .page-title { order: 7; font-size: 20px; }
 
   /* 내용 여백 */
   .content.board { gap: 22px; padding-top: 14px; }
@@ -152,4 +165,11 @@
 }
 @media (max-width: 380px) {
   .mp-phone:not(.full) { zoom: .8; }
+}
+
+/* ≤ 400: 좁은 폰 — 셋째 줄 네 단추가 한 줄에 들어가게 꾸밈 아이콘(✓ · 연필)을 뺀다 ('일괄+'의 +는 뜻이 있어 둔다) */
+@media (max-width: 400px) {
+  .topnav { column-gap: 6px; }
+  .topnav > .btn:not(.icon):not(.bulk-btn):not(.whale-btn):not(.login-btn) > svg, .topnav > .split-btn .split-main > svg { display: none; }
+  .topnav > .btn:not(.icon), .topnav > .split-btn .split-main { padding: 0 7px; }
 }

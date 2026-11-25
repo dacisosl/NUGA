@@ -19,10 +19,12 @@
 .topnav .login-btn .led.err { background: #ff8a65; }
 .topnav .login-btn .login-id { max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 .topnav .login-btn .login-role { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: rgba(172,205,255,.18); color: #ACCDFF; }
-/* 폰 너비: 첫 줄(로고 · 영역 · 설정 옆)에 작게 */
+/* 폰 너비: 첫 줄 오른쪽(웨일 연계 · 로그인 · 도움말 · 설정)에 작게. 아주 좁으면 PC/폰 표시는 뺀다 */
 @media (max-width: 560px) {
   .topnav > .btn.login-btn.login-btn { order: 1; flex: none; height: 34px; padding: 0 10px; font-size: 13px; }
+  .topnav .login-btn .login-id { max-width: 92px; }
 }
+@media (max-width: 350px) { .topnav .login-btn .login-role { display: none; } }
 /* 첫 화면(시작 화면)의 '로그인해서 PC와 연결' */
 .onb-login { margin-top: 10px; align-self: flex-start; background: none; border: 1px solid rgba(172,205,255,.45); color: #DCE9FC; border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
 .onb-login:hover { background: rgba(172,205,255,.12); }
