@@ -1,10 +1,12 @@
-import { NtfyClient, RelayClient, applyTombstones, buildConfigMessage, isTestLogin, mergeRecords, nowIso, lessonFor, routeRecordArea, type ConfigMessage, type NugaRecord, type SyncMessage, type SyncTransport, type TranscriptPart } from "@nuga/core";
+import { NTFY_DAILY, NtfyClient, RelayClient, TEST_LOGIN, normalizeLoginId, testIdNo, applyTombstones, buildConfigMessage, isTestLogin, mergeRecords, nowIso, lessonFor, routeRecordArea, type ConfigMessage, type NugaRecord, type SyncMessage, type SyncTransport, type TranscriptPart } from "@nuga/core";
 import { useTranscripts } from "./transcripts";
 import { runSuggestions } from "./suggestFlow";
 import { PHONE_AREA, arrivalModeOf, onQueued, readAreaDoc, useStore, writeAreaDoc } from "../store";
 import type { NugaDoc } from "@nuga/core";
 import { notify } from "./platform";
 import { demoInfo } from "./demo";
+import { relayStream } from "./relayStream";
+import { noteSeatActivity, pollSeatsIfQuiet, resumeSeat } from "./seats";
 
 /** 폰에서 온 기록 id (PC 가 고친 것 중 이것만 폰으로 되보낸다: 공개 중계의 하루 메시지 수를 아끼려고) */
 const FROM_PHONE_KEY = "nuga.fromPhone";
@@ -26,8 +28,7 @@ class SyncEngine {
   private running = false;
   private lastConfigJson = "";
   private client: SyncTransport | null = null;
-  private es: EventSource | null = null;
-  private esUrl = "";
+  private sseKey = "";
   private pinged = "";
   private busy = false;
   private again = false;
@@ -79,11 +80,13 @@ class SyncEngine {
 
   private schedule() {
     if (!this.running) return;
-    // ntfy: 새 메시지는 EventSource 로 바로 오니 확인용 폴링은 드물게 (공개 서버 요청 한도: IP당 5초에 1건 꼴)
+    // ntfy: 새 메시지는 실시간 연결로 바로 오니 확인용 조회는 드물게 (공개 서버 요청 한도: 인터넷 주소 하나에 5초에 1건 꼴.
+    // 같은 와이파이의 기기가 모두 나눠 쓴다). 연결이 살아 있으면 5분에 한 번, 끊겼으면 1분에 한 번.
     // 막혔다가 풀리는 때가 있으면 그때 곧바로 다시 (놓친 알림을 받으러)
+    const seen = document.visibilityState === "visible";
     const ms = this.isNtfy()
-      ? (this.backoffUntil > Date.now() ? this.backoffUntil - Date.now() + 200 : document.visibilityState === "visible" ? 60000 : 180000)
-      : (document.visibilityState === "visible" ? 5000 : 30000);
+      ? (this.backoffUntil > Date.now() ? this.backoffUntil - Date.now() + 200 : relayStream.alive() ? (seen ? 300000 : 900000) : (seen ? 60000 : 180000))
+      : (seen ? 5000 : 30000);
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => this.loop(), ms);
   }
@@ -97,22 +100,22 @@ class SyncEngine {
     return this.client;
   }
 
-  /** ntfy: 내가 받는 통로를 EventSource 로 지켜보다가 새 메시지가 오면 바로 한 바퀴 */
+  /** ntfy: 내가 받는 통로를 실시간 연결(relayStream)로 지켜보다가 새 메시지가 오면 바로 한 바퀴 */
   private ensureSse(client: SyncTransport | null) {
     const role = useStore.getState().role;
-    const url = client instanceof NtfyClient && typeof EventSource === "function" ? client.sseUrl(role) : "";
-    if (url === this.esUrl) return;
-    this.closeSse();
-    if (!url) return;
-    this.esUrl = url;
-    try {
-      const es = new EventSource(url);
+    const key = client instanceof NtfyClient ? `${client.baseUrl}|${client.topic(role)}` : "";
+    if (key === this.sseKey) return;
+    this.sseKey = key;
+    if (!(client instanceof NtfyClient)) { relayStream.clear("sync"); return; }
+    relayStream.set("sync", {
+      base: client.baseUrl, topics: [client.topic(role)],
       // 알림에 실린 메시지를 바로 넘긴다: 공개 서버는 새 메시지를 조회 결과에 약 1초 늦게 넣어서, 알림 직후 조회로는 못 볼 수 있다
-      es.onmessage = (e) => { if (client instanceof NtfyClient) client.feed(role, String(e.data || "")); this.kick(); };
-      this.es = es;
-    } catch { this.es = null; }
+      onLine: (_line, raw) => { if (this.client === client) { client.feed(role, raw); this.kick(); } },
+      // (다시) 열리면 그사이 온 것을 조회로 받는다 (듣는 통로가 바뀌어 새로 연 때도)
+      onOpen: () => { if (this.client === client) this.kick(); },
+    });
   }
-  private closeSse() { try { this.es?.close(); } catch { /* 이미 닫힘 */ } this.es = null; this.esUrl = ""; }
+  private closeSse() { relayStream.clear("sync"); this.sseKey = ""; }
 
   async loop() {
     // 한 바퀴가 도는 동안 또 불리면, 끝나고 한 번 더 (겹쳐 돌지 않게)
@@ -121,6 +124,7 @@ class SyncEngine {
     this.lastRun = Date.now();
     const st = useStore.getState();
     const client = this.getClient();
+    if (this.checkSeat(client)) { this.busy = false; this.kick(); return; }
     this.ensureSse(client);
     try {
       if (!client) { st.setSyncStatus({ state: "off", message: "연결 안 됨" }); return; }
@@ -128,22 +132,48 @@ class SyncEngine {
       try {
         if (st.role === "phone") await this.phoneRound(client);
         else {
-          await this.pushConfigIfChanged(client);
-          await this.pushOutbox(client);
+          // 보내기가 막혀도(하루 메시지 한도 등) 받기는 한다: 폰에서 온 기록은 계속 팝업으로
+          let sendErr: unknown = null;
+          try { await this.pushConfigIfChanged(client); await this.pushOutbox(client); } catch (e) { sendErr = e; }
           const pinged = await this.pull(client);
-          // 새 기기가 인사했으면 config 를 바로 보낸다 (다음 바퀴를 기다리지 않게)
-          if (pinged) await this.pushConfigIfChanged(client, true);
+          // 새 기기가 인사했으면 config 를 바로 보낸다 (다음 바퀴를 기다리지 않게. 못 보내면 다음 바퀴에 — 인사를 받으면 lastConfigJson 을 비운다)
+          if (pinged && !sendErr) await this.pushConfigIfChanged(client, true);
+          if (sendErr) throw sendErr;
         }
         useStore.getState().setSyncStatus({ state: "idle", message: "연결됨", lastAt: nowIso() });
       } catch (e) {
-        // 중계가 막았으면(429) 20초 쉬었다가 다시 (그사이 알림은 모아 두었다가 한 번에)
-        if (e instanceof Error && /바쁨/.test(e.message)) this.backoffUntil = Date.now() + 20000;
+        // 중계가 막았으면(429) 20초 쉬었다가 다시 (그사이 알림은 모아 두었다가 한 번에). 하루 한도를 다 썼으면 10분 뒤에
+        // 하루 메시지 한도는 보내기만 막으므로 받기(조회)는 1분 뒤 다시
+        if (e instanceof Error && /바쁨/.test(e.message)) this.backoffUntil = Date.now() + (e.message.includes(NTFY_DAILY) ? 60000 : 20000);
         useStore.getState().setSyncStatus({ state: "error", message: e instanceof Error ? e.message : "오류", lastAt: st.syncStatus.lastAt });
       }
     } finally {
       this.busy = false;
       if (this.again) { this.again = false; this.kick(); } else this.schedule();
     }
+  }
+
+  /**
+   * 테스트 아이디: 이 기기의 자리를 이어 쓴다 (앱을 다시 열었을 때 · 역할이 바뀌었을 때). 자리를 잃었으면 seats 가 로그아웃시킨다.
+   * 아이디가 하나뿐이던 예전 테스트 아이디로 로그인해 있으면 로그아웃시키고 다시 고르게 한다.
+   * @returns 로그아웃시켰는지 (그러면 이번 바퀴는 다시)
+   */
+  private checkSeat(client: SyncTransport | null): boolean {
+    const st = useStore.getState();
+    const lid = st.doc.settings.sync?.transport === "ntfy" ? st.doc.settings.sync.login?.id : "";
+    if (!lid || !(client instanceof NtfyClient)) return false;
+    if (normalizeLoginId(lid) === TEST_LOGIN.id) {
+      st.setSettings((s) => ({ ...s, sync: null }));
+      this.restart();
+      st.toast({ text: "테스트 아이디가 10개(테스트 01~10)로 바뀌었습니다. 다시 로그인해 번호를 골라 주세요", kind: "notice", ttl: 15000 });
+      return true;
+    }
+    const n = testIdNo(lid);
+    if (!n) return false;
+    resumeSeat(n, st.role, client.topic(st.role));
+    if (!useStore.getState().doc.settings.sync) { this.restart(); return true; }
+    pollSeatsIfQuiet();
+    return false;
   }
 
   /* ---------------- 폰 역할 ---------------- */
@@ -170,6 +200,7 @@ class SyncEngine {
       else if (message.type === "tombstones") tombs.push(...message.payload);
     }
     if (cfg) this.applyConfigOnPhone(cfg);
+    if (incoming.length) noteSeatActivity();
     if (incoming.length || tombs.length) {
       // PC 가 채운 기록이 되돌아오면 폰의 미반영이 줄어든다 (같은 id, 늦은 updatedAt 우선)
       useStore.getState().update((d) => { d.records = applyTombstones(mergeRecords(d.records, incoming).records, tombs).records; });
@@ -292,6 +323,7 @@ class SyncEngine {
       await client.ack(item.id);
     }
     if (client instanceof NtfyClient) rememberFromPhone(incoming.map((r) => r.id));
+    if (incoming.length) noteSeatActivity();
     await this.apply(incoming, tombs);
     await this.applyTranscripts(client, parts);
     useStore.getState().setSettings((s) => ({ ...s, sync: s.sync ? { ...s.sync, lastPulledId: lastId, lastSyncAt: nowIso() } : null }));

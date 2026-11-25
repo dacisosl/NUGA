@@ -120,9 +120,22 @@ Base: 릴레이 URL. 모든 응답 JSON, CORS 전체 허용(`*`). 서버는 `key
 - 통로(topic): PC 가 받는 것 `nuga-<keyId>-pc`, 폰이 받는 것 `nuga-<keyId>-ph`. 메시지 본문 = 2장의 봉투 JSON 그대로 (`POST https://ntfy.sh/<통로>`, text/plain).
 - 조각: 봉투 글이 3500자를 넘으면 `{"nuga":"c1","m":<묶음 id>,"i":<0..n-1>,"n":<개수>,"d":<글 조각>}` 로 나눠 보낸다(ntfy 메시지 한도 4KB). 받는 쪽은 `m` 으로 모아 합친다. 머리(i=0) 조각이 없는 묶음은 건너뛰고, 머리가 있는데 45초 넘게 덜 온 묶음도 건너뛴다(막히지 않게).
 - 받기: `GET https://ntfy.sh/<통로>/json?poll=1&since=<유닉스 초>` (줄 단위 JSON, `event = "message"` 만). ntfy 는 since 의 그 초를 포함해 돌려주므로, 받는 쪽은 '이어 받을 위치' = `c:<초>:<그 초에 받은 id,…>` 를 `sync.lastPulledId` 에 두고 그 초에 이미 받은 id 는 뺀다. 서버에서 지우지 않는다(ack 없음, 12시간 뒤 사라짐). 같은 기록이 다시 와도 id 로 합쳐진다(3.1).
-- 바로 받기: `EventSource(https://ntfy.sh/<통로>/sse)` 에 메시지가 오면 한 바퀴(1초에 한 번까지). 확인용 폴링은 60초(화면이 가려지면 180초). 429(요청이 많음)를 받으면 20초 쉬었다가 다시.
+- 바로 받기: 기기마다 실시간 연결 하나 `EventSource(https://ntfy.sh/<통로>[,<자리표>]/sse)` (여러 통로를 쉼표로 묶어 한 연결, `apps/desktop/src/lib/relayStream.ts`). 내 통로에 메시지가 오면 한 바퀴(1초에 한 번까지). 연결의 open · keepalive(45초) 에 실린 `time` 으로 중계 서버 시각을 안다. 확인용 폴링은 연결이 살아 있으면 5분(가려지면 15분), 없으면 60초(가려지면 180초). 429(요청이 많음)를 받으면 20초, 하루 메시지 한도(code 42908)면 보내기만 막히므로 받기는 계속하고 1분 뒤 다시.
 - 흐름: 폰이 처음 `ping` → PC 가 config 를 곧바로 보냄(폰은 받은 반·시간표·진도·이름을 '폰 연결' 영역에 채움) → 폰에서 저장한 기록은 `records`(from=phone) → PC 는 쉬는 시간 기록 팝업 → PC 가 채운 기록은 `records`(from=pc)로 되돌림. PC 는 폰에서 온 기록 id 만 되보내고 기록 메시지는 한 번에 묶는다(하루 메시지 수 절약).
-- 공개 테스트 계정(`TEST_LOGIN`)으로 연결한 PC 는 데모 데이터가 아니면 config 의 `roster` 를 null 로 보낸다.
+- 공개 테스트 계정으로 연결한 PC 는 데모 데이터가 아니면 config 의 `roster` 를 null 로 보낸다.
+
+### 4.2 테스트 아이디의 자리 (중복 로그인 막기 · 관리자 로그아웃)
+테스트 아이디는 `nuga-test-01` … `nuga-test-10` (비밀번호는 `TEST_LOGIN.password`, 예전 `nuga-test` 는 다시 고르게 한다). 아이디 하나 = PC 자리 1 + 폰 자리 1. 구현: `packages/core/src/seats.ts`(규칙), `admin.ts`(서명), `apps/desktop/src/lib/seats.ts`(중계와 잇기).
+- 자리표: 공개 통로 `SEAT_TOPIC` 하나 (암호화하지 않음). 줄 세 가지:
+  - `{"nuga":"s1","t":"hold","n":1..10,"r":"pc"|"ph","sid":<16 hex>,"dev":<브라우저 · OS, 24자>}` — 이 자리를 쓴다. `sid = SHA-256("nuga-seat-v1|" + secret)` 앞 8바이트, secret(32 hex)은 그 기기에만(`localStorage["nuga.seat"]`).
+  - `{"nuga":"s1","t":"free","key":<secret>}` — 뗀다. secret 을 가진 기기만 자기 자리를 뗄 수 있다.
+  - `{"nuga":"adm1","p":<정해진 순서의 JSON 글자>,"s":<ECDSA P-256 / SHA-256 서명 r||s, base64url>}`, p = `{"act":"logout","sids":[…],"v":1}` — 관리자 로그아웃. 코드의 관리자 공개키(`adminKey.ts`)로 서명이 맞는 것만 따른다. sid 는 로그인마다 새로 생기므로 같은 명령을 누가 다시 보내도 그 뒤 로그인은 영향이 없다.
+- 계산(`foldSeats`): 줄을 (중계 시각, hold→kick→free, 줄 id) 순서로 읽는다. 빈 자리(또는 마지막 hold 뒤 60분(`SEAT_TTL`)이 지난 자리)의 hold 는 그 sid 의 것, 같은 sid 의 hold 는 시간 연장, 다른 sid 가 쓰는 중이면 무시(= 중복 로그인 막힘). free · kick 된 sid 는 끝나 다시 못 쓰고, sid 하나는 자리 하나에만. '지금' = max(중계 서버 시각, 마지막 줄 시각).
+- 로그인: 실시간 연결(자리표 + 내 통로)을 먼저 열고 → 자리표 전체 조회(`since=all`) → 비었으면 hold → 2초 뒤 다시 조회해 내 것이면 로그인. 동시에 잡으면 위 순서로 한쪽만.
+- 쓰는 동안: 누름 · 입력 · 기록 도착 때 마지막 hold 가 30분(`SEAT_RENEW_AFTER`)보다 오래됐으면 hold 를 다시 적는다 → 마지막으로 쓴 뒤 30분 안에는 풀리지 않고, 늦어도 60분이면 풀린다. 안 쓰는 기기는 아무것도 보내지 않는다.
+- 자리를 잃었는지는 '빠짐없는 자리표'(연결이 열린 뒤 시작한 조회가 성공했고 그 뒤 연결이 다시 열리지 않음)에서만 판단해 로그아웃시킨다: 관리자 로그아웃 · 다른 기기가 먼저 잡음 · 오래 안 써서 풀린 뒤 다른 기기가 씀.
+- 관리자 키: `tools/admin-key.mjs rotate` 가 P-256 키 쌍과 무작위 26자(130비트) 비밀번호를 만든다. 코드에는 공개키(65바이트)와 `blob` = 1(판) + 4(PBKDF2 반복 60만) + 16(소금) + 12(iv) + AES-256-GCM(개인키 스칼라 d 32 + 표 16)만, 비밀번호는 관리자 PC 의 `~/.nuga/admin-password.txt` 에만. 키를 바꾸면 새 키 쌍을 만든다(옛 blob 은 git 기록에 남으므로).
+- 한계: 테스트 비밀번호가 공개돼 있어 코드를 고쳐 쓰는 사람은 빈 자리를 잡거나 hold 를 계속 적어 자리를 붙잡을 수 있다(관리자가 sid 를 로그아웃시키면 그 sid 는 끝난다). 막는 것은 남의 자리 떼기와 관리자 흉내다.
 
 ## 5. 워치 ↔ 폰 (Wear OS Data Layer)
 - 워치 → 폰: MessageClient path `/nuga/record`, 본문 = Record JSON (UTF-8). 실패 시 워치 로컬 큐(Room/DataStore)에 보관 후 재시도.

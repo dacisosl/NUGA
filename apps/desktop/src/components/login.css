@@ -45,3 +45,51 @@
 .app.phone-mode .mp-phone.full { height: calc(100dvh - 60px); min-height: 0; }
 .app.phone-mode .mp-sheet { padding-bottom: 14px; }
 .app.phone-mode .toasts { top: 58px; bottom: auto; left: 8px; right: 8px; }
+
+/* 테스트 아이디 10개 (자리: PC · 폰) */
+.tid { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; background: #f4f8fe; border: 1px solid #dbe6f5; }
+.tid-head { display: flex; align-items: center; gap: 8px; }
+.tid-head .grow { flex: 1; }
+.tid-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.tid-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 7px; border-radius: 10px; border: 1px solid #cddcf5; background: #fff; color: #14253D; cursor: pointer; font: inherit; min-width: 0; }
+.tid-cell:hover:not(:disabled) { border-color: #3b74d6; box-shadow: 0 0 0 2px rgba(59,116,214,.15); }
+.tid-cell:disabled { cursor: default; }
+.tid-no { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.tid-dots { display: flex; align-items: center; gap: 3px; font-size: 10.5px; color: #5b6f8c; }
+.tid-dots i { width: 7px; height: 7px; border-radius: 50%; background: #d3dceb; margin-left: 3px; }
+.tid-dots i:first-child { margin-left: 0; }
+.tid-dots i.on { background: #e0833a; }
+.tid-st { font-size: 11.5px; font-weight: 650; color: #2f7d55; white-space: nowrap; }
+.tid-cell.pick { border-color: #3b74d6; background: #eaf2ff; }
+.tid-cell.wait { border-color: #e0a23a; background: #fff8ec; }
+.tid-cell.wait .tid-st { color: #a0620c; }
+.tid-cell.taken { background: #f1f3f6; border-color: #e1e6ee; color: #8794a8; }
+.tid-cell.taken .tid-st { color: #b3261e; }
+.tid-cell.mine { border-color: #3ecf8e; background: #ecfbf3; }
+.tid-cell.mine .tid-st { color: #1d7a4c; }
+.tid-note { line-height: 1.5; word-break: keep-all; }
+.login-busy { display: flex; align-items: center; gap: 6px; }
+.login-notice { padding: 9px 11px; border-radius: 9px; background: #fff4e5; border: 1px solid #f3c98b; color: #7a4a06; font-size: 13.5px; font-weight: 600; word-break: keep-all; }
+.login-own { border-top: 1px solid #e3eaf4; padding-top: 8px; }
+.login-own summary { cursor: pointer; font-size: 13px; font-weight: 650; color: var(--text-2, #3c5374); }
+.login-own[open] { display: flex; flex-direction: column; gap: 10px; }
+.login-own[open] summary { margin-bottom: 2px; }
+@media (max-width: 420px) { .tid-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; } .tid-no { font-size: 15px; } .tid-dots { font-size: 9.5px; } .tid-st { font-size: 10.5px; } }
+
+/* 관리자 화면 */
+.topnav .admin-btn { color: #ffd9bd; border-color: rgba(255,170,120,.5); }
+.adm { display: flex; flex-direction: column; gap: 10px; }
+.adm-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.adm-bar .grow { flex: 1; }
+.adm-msg { padding: 8px 10px; border-radius: 8px; background: #ecfbf3; color: #1d6b44; font-size: 13px; }
+.adm-wrap { overflow-x: auto; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.adm-table th, .adm-table td { padding: 8px; border-bottom: 1px solid #e6ecf4; text-align: left; vertical-align: top; }
+.adm-table thead th { font-size: 12px; color: #5b6f8c; font-weight: 650; }
+.adm-table tbody th { white-space: nowrap; }
+.adm-table tr.on tbody th, .adm-table tr.on > th { color: #14253D; }
+.adm-free { color: #9aa7b8; }
+.adm-used .adm-dev { font-weight: 650; }
+.adm-used .btn { margin-top: 4px; }
+.login .field input.secret { -webkit-text-security: disc; font-family: text-security-disc, inherit; letter-spacing: .1em; }
+.login-admin { align-self: flex-start; }

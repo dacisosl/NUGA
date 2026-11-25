@@ -21,3 +21,6 @@ export * from "./pipeline";
 export * from "./bulk";
 export * from "./help";
 export * from "./login";
+export * from "./admin";
+export { ADMIN_KEY } from "./adminKey";
+export * from "./seats";

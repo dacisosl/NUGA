@@ -116,7 +116,7 @@ export function chunkForNtfy(text: string, mid: string, size = NTFY_CHUNK): stri
   return Array.from({ length: n }, (_, i) => JSON.stringify({ nuga: "c1", m: mid, i, n, d: text.slice(i * size, (i + 1) * size) } satisfies NtfyChunk));
 }
 
-export interface NtfyLine { id: string; time?: number; event: string; message?: string }
+export interface NtfyLine { id: string; time?: number; event: string; topic?: string; message?: string }
 /** ntfy 의 줄 단위 JSON 응답 → 메시지 줄 (open·keepalive 는 뺀다) */
 export function parseNtfyLines(body: string): NtfyLine[] {
   const out: NtfyLine[] = [];
@@ -187,6 +187,15 @@ export function parseNtfyCursor(c: string | undefined): { time: number; ids: str
   return m ? { time: Number(m[1]), ids: m[2] ? m[2].split(",") : [] } : null;
 }
 
+/** ntfy 가 요청을 막았을 때(429)의 이유. 42908 = 하루 메시지 수를 다 씀 (같은 인터넷 주소를 쓰는 기기 모두 합쳐 250건) */
+export const NTFY_DAILY = "오늘 보낼 수 있는 양을 다 썼습니다";
+async function ntfyBusy(r: Response, tail = ""): Promise<string> {
+  let code = 0;
+  try { code = Number(((await r.json()) as { code?: number }).code) || 0; } catch { /* 본문 없음 */ }
+  if (code === 42908) return `중계가 바쁨: ${NTFY_DAILY} (공개 중계의 하루 한도). 내일 다시 보냅니다`;
+  return `중계가 잠시 바쁨 (요청이 많음)${tail ? `. ${tail}` : ""}`;
+}
+
 export class NtfyClient implements SyncTransport {
   /** @param since 처음 받을 때의 기준(유닉스 초) — 로그인한 때. 그 전 메시지는 받지 않는다 */
   constructor(public baseUrl: string, public keyId: string, private key: Uint8Array, private since: number, private fetchImpl: typeof fetch = fetch.bind(globalThis)) {}
@@ -197,8 +206,8 @@ export class NtfyClient implements SyncTransport {
 
   private url(path: string): string { return this.baseUrl.replace(/\/+$/, "") + path; }
   topic(forWho: "pc" | "phone"): string { return ntfyTopic(this.keyId, forWho); }
-  /** 새 메시지가 오면 바로 알려 주는 주소 (EventSource) */
-  sseUrl(forWho: "pc" | "phone"): string { return this.url(`/${this.topic(forWho)}/sse`); }
+  /** 새 메시지가 오면 바로 알려 주는 주소 (EventSource). extra = 같은 연결로 함께 들을 다른 통로 */
+  sseUrl(forWho: "pc" | "phone", extra: string[] = []): string { return this.url(`/${[this.topic(forWho), ...extra].join(",")}/sse`); }
 
   /** 알림(EventSource)으로 받은 메시지 줄. ntfy.sh 는 새 메시지를 조회 결과에 조금(약 1초) 늦게 넣으므로, 알림 직후 조회에 없으면 이것을 쓴다 */
   private fed: Record<"pc" | "phone", NtfyLine[]> = { pc: [], phone: [] };
@@ -206,6 +215,8 @@ export class NtfyClient implements SyncTransport {
   feed(forWho: "pc" | "phone", data: string): boolean {
     const [l] = parseNtfyLines(data);
     if (!l) return false;
+    // 여러 통로를 한 연결로 들을 때: 내 통로의 것만
+    if (l.topic && l.topic !== this.topic(forWho)) return false;
     const list = this.fed[forWho];
     if (!list.some((x) => x.id === l.id)) { list.push(l); if (list.length > 200) list.splice(0, list.length - 200); }
     return true;
@@ -223,7 +234,7 @@ export class NtfyClient implements SyncTransport {
     for (const body of chunkForNtfy(JSON.stringify(env), mid)) {
       // text/plain 본문 하나 = 단순 요청 (CORS 사전 확인 없이)
       const r = await this.fetchImpl(this.url(`/${this.topic(to)}`), { method: "POST", body });
-      if (r.status === 429) throw new Error("중계가 잠시 바쁨 (요청이 많음). 잠시 뒤 다시 보냅니다");
+      if (r.status === 429) throw new Error(await ntfyBusy(r, "잠시 뒤 다시 보냅니다"));
       if (!r.ok) throw new Error(`중계 전송 실패 ${r.status}`);
       try { last = ((await r.json()) as { id?: string }).id || last; } catch { /* id 없이도 계속 */ }
     }
@@ -235,7 +246,7 @@ export class NtfyClient implements SyncTransport {
     const cur = parseNtfyCursor(after);
     const since = cur ? cur.time : this.since;
     const r = await this.fetchImpl(this.url(`/${this.topic(forWho)}/json?poll=1&since=${since}`));
-    if (r.status === 429) throw new Error("중계가 잠시 바쁨 (요청이 많음)");
+    if (r.status === 429) throw new Error(await ntfyBusy(r));
     if (!r.ok) throw new Error(`중계 조회 실패 ${r.status}`);
     // 이미 받은 것(앞 초 · 그 초에 받은 id)은 뺀다
     const seen = new Set(cur?.ids || []);

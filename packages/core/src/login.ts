@@ -8,14 +8,25 @@ import { keyIdOf, toB64 } from "./crypto";
  */
 export const LOGIN_ITERATIONS = 210_000;
 export const LOGIN_SALT_PREFIX = "nuga-login-v1|";
-/** 공개 테스트 계정 (부스·시연용). 누구나 같은 통로에 들어올 수 있으므로 실제 학생 이름은 보내지 않는다 */
+/**
+ * 공개 테스트 계정 (부스·시연용). 누구나 같은 통로에 들어올 수 있으므로 실제 학생 이름은 보내지 않는다.
+ * 여러 사람이 동시에 시험할 수 있게 테스트 아이디는 10개(TEST_IDS)이고, 아이디 하나는 PC 1대 + 폰 1대가 쓴다 (seats.ts).
+ * TEST_LOGIN.id 는 아이디가 하나뿐이던 때의 것: 지금도 로그인은 되지만 자리(중복 로그인 막기)는 없다.
+ */
 export const TEST_LOGIN = { id: "nuga-test", password: "4wq7b8tjb7gqzps3" } as const;
 
 const enc = new TextEncoder();
 const buf = (u: Uint8Array): ArrayBuffer => u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer;
 
 export function normalizeLoginId(id: string): string { return id.trim().toLowerCase(); }
-export function isTestLogin(id: string | undefined | null): boolean { return !!id && normalizeLoginId(id) === TEST_LOGIN.id; }
+/** 테스트 아이디 10개: nuga-test-01 … nuga-test-10 (비밀번호는 TEST_LOGIN.password 와 같다) */
+export const TEST_IDS: readonly string[] = Array.from({ length: 10 }, (_, i) => `nuga-test-${String(i + 1).padStart(2, "0")}`);
+/** 테스트 아이디의 번호 1~10. 테스트 아이디가 아니면 0 */
+export function testIdNo(id: string | undefined | null): number { return id ? TEST_IDS.indexOf(normalizeLoginId(id)) + 1 : 0; }
+export function testIdOf(n: number): string { return TEST_IDS[n - 1] || ""; }
+/** 화면에 보이는 이름: "테스트 03" */
+export function testIdLabel(n: number): string { return `테스트 ${String(n).padStart(2, "0")}`; }
+export function isTestLogin(id: string | undefined | null): boolean { return !!id && (normalizeLoginId(id) === TEST_LOGIN.id || testIdNo(id) > 0); }
 
 /** 입력 검사: 아이디 2~40자, 비밀번호 4자 이상. 문제가 없으면 null */
 export function checkLogin(id: string, password: string): string | null {

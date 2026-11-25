@@ -4,7 +4,6 @@ import {
   WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, isSchoolRoster, toB64, toExportJson,
   LEGACY_LEVEL_SCORE, LENGTH_PRESET, lengthSlack, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
   type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
-  isTestLogin,
 } from "@nuga/core";
 import { Sheet, TopBar } from "../App";
 import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup, arrivalModeOf } from "../store";
@@ -17,7 +16,7 @@ import { modelOf, testProvider } from "../lib/providers";
 import { hasKey, keyStoreLabel, onSecretsChange, setKey, setWebRemember, webRemember } from "../lib/secrets";
 import { isTauri } from "../lib/platform";
 import { syncEngine } from "../lib/syncEngine";
-import { logout, openLogin } from "../components/LoginModal";
+import { loginLabel, logout, openLogin } from "../components/LoginModal";
 import { RecordingSection } from "./RecordingSettings";
 import { ModelCompare } from "../components/ModelCompare";
 import { LocalLlmCard } from "../components/LocalLlm";
@@ -628,7 +627,7 @@ export function SyncSection() {
         <div className="muted small" style={{ marginTop: 6 }}>폰과 PC에서 같은 아이디·비밀번호로 로그인하면, 폰에서 저장한 번호가 이 PC에 쉬는 시간 기록 팝업으로 뜹니다. 회원 가입 없이 암호문만 공개 중계(ntfy.sh)로 오갑니다.</div>
         <div className="flex" style={{ marginTop: 10 }}>
           {loginId
-            ? <><span className="small"><b>{isTestLogin(loginId) ? "테스트 아이디" : loginId}</b> · 이 기기는 {role === "phone" ? "폰" : "PC"}</span><button className="btn" onClick={openLogin}>바꾸기</button><button className="btn ghost" onClick={logout}>로그아웃</button></>
+            ? <><span className="small"><b>{loginLabel(loginId)}</b> · 이 기기는 {role === "phone" ? "폰" : "PC"}</span><button className="btn" onClick={openLogin}>바꾸기</button><button className="btn ghost" onClick={logout}>로그아웃</button></>
             : <button className="btn primary" onClick={openLogin}>로그인</button>}
         </div>
       </div>
