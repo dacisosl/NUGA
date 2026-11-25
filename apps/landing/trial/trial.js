@@ -831,6 +831,8 @@ function sDraft(root) {
     $$("#recs .rec").forEach((x) => x.addEventListener("click", () => selR(Number(x.dataset.k))));
     draft.scrollTop = 0;
     selAll();
+    // 개인 작성이 끝나면 화면을 어둡게 하고 [반 전체 일괄 작성 보기]를 짚는다 (잠깐 초안과 연결선을 본 뒤)
+    later(() => hint("#tobatch", "반 전체도 한 번에 써 볼까요?", { side: "top", align: "end", opacity: 0.55 }), 1700);
   };
   /** 한 문단이 타자 치듯 채워진다 (instant = 이미 만든 초안을 다시 열 때) */
   const typeOut = (instant) => {
@@ -925,8 +927,8 @@ const FIRST = {
     "전해질 수용액의 전기 전도성을 반복 측정하며 결과의 신뢰도를 높이려는 태도를 보여줌.",
   ],
 };
-// 기록이 없는 학생 · 기록이 적은 학생 (현황판에서 '기록 부족'이던 자리)
-const BATCH_ZERO = 0, BATCH_SHORT = 12;
+// 기록이 없는 학생 · 기록이 적은 학생 (현황판에서 '기록 부족'이던 자리, 첫 줄은 초안 전체를 보여 줄 학생이라 비워 둔다)
+const BATCH_ZERO = 18, BATCH_SHORT = 12;
 /** 반 전체 초안 목록: 방금 쓴 학생은 그 초안, 기록이 없으면 쓰지 않고, 적으면 짧게 */
 function batchRows(L) {
   const mine = S.pick ? S.pick.i : -1, D = draftData(L), pool = FIRST[S.level];
@@ -938,25 +940,71 @@ function batchRows(L) {
     return { i, name, n: 8 + ((i * 7) % 9), first, bytes: 1330 + ((i * 137) % 165) };
   });
 }
+// 첫 번째 학생의 초안 전체 (첫 문장 뒤에 이어지는 문장들, 체험용 합성). 분량 1,500B 를 넘으면 뒤에서부터 덜어 낸다
+const SHOW_REST = {
+  elem: [
+    "쉬는 시간에 혼자 있는 친구에게 먼저 다가가 함께 놀이를 제안하며 친구 관계를 넓혀 감.",
+    "국어 시간에 이야기의 장면을 바꾸어 쓰는 활동에서 인물의 마음을 섬세하게 살펴 표현하는 힘이 돋보임.",
+    "과학 시간에 식물의 자람을 관찰하며 날마다 키를 재어 표로 정리하는 꼼꼼함을 보여 줌.",
+    "학급 역할인 칠판 정리를 한 학기 동안 빠짐없이 맡아 책임감 있게 해냄.",
+    "수학 시간에 어려운 문제를 만나도 그림을 그려 가며 끝까지 해결하려는 끈기를 보임.",
+    "체육 시간에 경기 규칙을 지키며 친구들을 응원하는 모습에서 바른 운동 태도가 드러남.",
+    "미술 시간에 친구의 작품에서 좋은 점을 찾아 칭찬하며 서로를 북돋우는 분위기를 만듦.",
+    "학급 문고를 맡아 친구들이 읽은 책을 기록하고 추천 목록을 만들어 나눔.",
+    "사회 시간에 우리 동네 지도를 그리며 자신이 사는 곳에 대한 관심을 넓혀 감.",
+    "수업이 끝난 뒤 모둠 자리를 스스로 정리하며 함께 쓰는 공간을 아끼는 태도를 보임.",
+  ],
+  mid: [
+    "촉매가 활성화 에너지를 낮추는 원리를 에너지 도표로 그려 모둠원에게 설명하며 개념을 구조화하는 능력을 보여줌.",
+    "동적 평형 단원에서 평형 상태의 조건을 묻는 질문을 하며 원리를 정확히 알고자 하는 탐구적 태도를 보임.",
+    "산·염기 중화 실험에서 지시약의 색 변화를 꼼꼼히 기록하고 오차의 원인을 스스로 분석함.",
+    "모둠 탐구에서 실험 설계를 맡아 변인을 체계적으로 통제하며 공동 과제를 책임 있게 이끎.",
+    "전기 화학 단원에서 전지의 원리를 실생활 기기와 연결해 발표하며 배운 개념을 적용하는 능력이 돋보임.",
+    "화학 반응식의 계수를 맞추는 문제를 친구들과 함께 풀며 서로의 풀이 과정을 비교하고 다듬음.",
+    "산화수 변화를 표로 정리한 학습지를 스스로 만들어 복습하며 자기주도적으로 학습함.",
+    "실험 보고서에서 그래프의 경향을 근거로 결론을 이끌어 내며 논리적으로 서술하는 능력을 보임.",
+    "모둠 발표에서 받은 질문에 답하며 실험 결과의 한계를 솔직하게 인정하고 보완할 방향을 스스로 제시함.",
+  ],
+};
+const SHOW_CLOSE = { elem: "친구를 배려하는 따뜻한 마음과 맡은 일을 끝까지 해내는 책임감이 고르게 자라고 있어 앞으로의 성장이 더욱 기대됨.", mid: "자료를 해석하는 능력과 탐구적 태도를 고루 갖춘 성실한 학습자임." };
+/** 첫 학생의 초안 전체 (방금 쓴 학생이면 그 초안 그대로) */
+function showcaseText(L, r) {
+  if (r.mine) return draftData(L).sens.map((s) => s.t).join(" ");
+  const sens = [r.first, ...SHOW_REST[S.level], SHOW_CLOSE[S.level]];
+  const total = () => bytes(sens.join(" "));
+  while (total() > 1500 && sens.length > 3) sens.splice(sens.length - 2, 1);
+  return sens.join(" ");
+}
 function sBatch(root) {
   const L = ensure(), rows = batchRows(L), n = rows.length;
+  // 첫 학생: 초안 전체를 크게 보여 준 뒤 자기 줄로 줄어든다. 나머지는 줄에서 같은 방식으로 채워진다
+  const first = rows[0], full = showcaseText(L, first);
+  if (!first.mine) first.bytes = bytes(full);
   const row = (r) => `<div class="br${r.mine ? " mine" : ""}${r.zero ? " zero" : ""}" data-i="${r.i}"><b>${String(r.i + 1).padStart(2, "0")}</b><span class="nm">${r.name}</span><span class="ev">${r.n ? `기록 ${r.n}건` : "기록 없음"}</span><span class="tx"></span><span class="bl"><i></i><em>–</em></span><span class="bs">대기</span></div>`;
-  root.innerHTML = `<section class="stg deskstage"><div class="cam" id="cam">${monitor(L, `<div class="bt2">
+  root.innerHTML = `<section class="stg deskstage"><div class="cam" id="cam">${monitor(L, `<div class="bt2" id="bt2">
         <div class="bt2-h"><b>생기부 생성</b><span class="tabs"><i>개별</i><i class="on">일괄</i><i>검토</i></span><span class="it">${L.item} · ${L.cls} ${n}명</span><span class="g"></span><span class="cnt"><b id="btdone">0</b>/${n}명</span><button class="cta bt2-go" id="btgo" type="button" tabindex="-1">일괄 생성</button></div>
         <div class="bt2-cols"><span>번호</span><span>이름</span><span>근거</span><span>초안 (첫 문장)</span><span>분량</span><span>상태</span></div>
-        <div class="bt2-list" id="btlist">${rows.map(row).join("")}</div></div>`)}</div>
+        <div class="bt2-list" id="btlist">${rows.map(row).join("")}</div>
+        <div class="bt2-show${first.mine ? " mine" : ""}" id="btshow" hidden><div class="bs-h"><span class="bs-tag">1명째 · 초안 전체</span><b>${String(first.i + 1).padStart(2, "0")} ${first.name}</b><span>기록 ${first.n}건 · ${L.item}</span><span class="g"></span><em id="bsb">0/1,500B</em></div><p id="bsp"></p></div></div>`)}</div>
       <div class="vbar" id="vbar"><span class="live" id="vlive">● 반 전체 일괄 작성</span><span id="vtime">0.0초</span><i class="prog"><i id="vprog"></i></i><button type="button" id="vreplay" hidden>다시 보기 ↺</button><button class="cta" id="btnext" type="button" hidden>강점 3가지 보기 <span aria-hidden="true">→</span></button></div>
       <div class="mon-label" id="monlabel">${monLabel()}</div></section>`;
   $("#mkdraft").classList.add("on");
-  const list = $("#btlist"), els = $$(".br", list), prog = $("#vprog"), t0 = performance.now();
-  const START = 900, GAP = 190, WRITE = 520, total = START + (n - 1) * GAP + WRITE + 150;
+  const list = $("#btlist"), els = $$(".br", list), prog = $("#vprog"), show = $("#btshow"), t0 = performance.now();
+  const START = 700, TYPE = 2600, HOLD = 900, SHRINK = 950, REST = START + TYPE + HOLD + SHRINK + 150, GAP = 170, WRITE = 480;
+  const total = REST + (n - 2) * GAP + WRITE + 150;
   let processed = 0;
   const count = () => { processed++; $("#btdone").textContent = processed; };
   const clock = every(() => {
     const t = Math.min(performance.now() - t0, total);
     prog.style.transform = `scaleX(${t / total})`; $("#vtime").textContent = `${(t / 1000).toFixed(1)}초`;
   }, 100);
-  /** 한 학생: '쓰는 중' → 첫 문장이 채워지고 분량이 오른 뒤 '완료' */
+  const finishRow = (r, el) => {
+    $(".tx", el).textContent = r.first; $(".bl em", el).textContent = `${r.bytes.toLocaleString("ko-KR")}B`; $(".bl i", el).style.width = `${(r.bytes / 1500) * 100}%`;
+    el.classList.remove("run"); el.classList.add("done");
+    $(".bs", el).textContent = r.mine ? "완료 · 방금 쓴 초안" : r.short ? "완료 · 기록만큼 짧게" : "완료";
+    count();
+  };
+  /** 나머지 학생: 줄에서 '쓰는 중' → 첫 문장이 채워지고 분량이 오른 뒤 '완료' */
   const run = (r, el) => {
     const top = el.offsetTop - list.clientHeight + el.offsetHeight * 2.6;   // 이 줄이 화면 아래 영상 막대 위에 보이게
     if (top > list.scrollTop) list.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
@@ -969,19 +1017,44 @@ function sBatch(root) {
       tx.textContent = r.first.slice(0, Math.ceil(r.first.length * k));
       const b = Math.round(r.bytes * k);
       em.textContent = `${b.toLocaleString("ko-KR")}B`; bar.style.width = `${(b / 1500) * 100}%`;
-      if (k < 1) return;
-      clearInterval(w); el.classList.remove("run"); el.classList.add("done");
-      st.textContent = r.mine ? "완료 · 방금 쓴 초안" : r.short ? "완료 · 기록만큼 짧게" : "완료";
-      count();
+      if (k >= 1) { clearInterval(w); finishRow(r, el); }
     }, 40);
   };
-  later(() => $("#btgo").classList.add("press"), 500);
-  rows.forEach((r, k) => later(() => run(r, els[k]), START + k * GAP));
+  // 1) [일괄 생성] → 첫 학생의 초안 전체가 크게 써진다
+  later(() => $("#btgo").classList.add("press"), 350);
+  later(() => {
+    els[0].classList.add("run"); $(".bs", els[0]).textContent = "쓰는 중";
+    $("#vlive").textContent = `● ${first.name} · 초안 전체`;
+    show.hidden = false;
+    const p = $("#bsp"), b = $("#bsb"), s0 = performance.now();
+    const w = every(() => {
+      const k = reduced ? 1 : Math.min(1, (performance.now() - s0) / TYPE);
+      const t = full.slice(0, Math.ceil(full.length * k));
+      p.textContent = t; b.textContent = `${bytes(t).toLocaleString("ko-KR")}/1,500B`;
+      if (k >= 1) clearInterval(w);
+    }, 30);
+  }, START);
+  // 2) 잠깐 보여 준 뒤 그 학생의 줄 크기로 줄어들며 들어간다
+  later(() => {
+    const host = $("#bt2"), sb = box(show, host), rb = box(els[0], host);
+    rb.y -= list.scrollTop;
+    show.style.transition = `transform ${SHRINK}ms cubic-bezier(.5,0,.2,1), opacity ${SHRINK}ms ease-in`;
+    show.style.transformOrigin = "0 0";
+    show.style.transform = `translate(${rb.x - sb.x}px, ${rb.y - sb.y}px) scale(${rb.w / sb.w}, ${rb.h / sb.h})`;
+    show.style.opacity = "0.15";
+  }, START + TYPE + HOLD);
+  later(() => {
+    show.hidden = true; finishRow(first, els[0]);
+    els[0].classList.add("landed");
+    $("#vlive").textContent = `● 나머지 ${n - 1}명도 같은 방식으로`;
+  }, START + TYPE + HOLD + SHRINK);
+  // 3) 나머지 학생들
+  rows.slice(1).forEach((r, k) => later(() => run(r, els[k + 1]), REST + k * GAP));
   later(() => {
     clearInterval(clock); prog.style.transform = "scaleX(1)";
     $("#vlive").textContent = `● 끝 · ${n}명`; $("#vtime").textContent = `${(total / 1000).toFixed(1)}초`;
     $("#vreplay").hidden = false; $("#btnext").hidden = false; $("#btnext").classList.add("hinted");
-    later(() => list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }), 600);   // 끝나면 맨 위(방금 쓴 학생 · 기록 없는 학생)로
+    later(() => list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }), 600);   // 끝나면 맨 위(첫 학생 · 방금 쓴 학생)로
   }, total);
   $("#vreplay").addEventListener("click", () => go(S.k, true));
   $("#btnext").addEventListener("click", () => go(S.k + 1));
