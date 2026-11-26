@@ -429,6 +429,13 @@ textarea{user-select:text;-webkit-user-select:text}
 .dp-h .nm{padding:3px 10px;border-radius:8px;background:linear-gradient(180deg,#a9b5c9,#8794ab);font-size:16px;font-weight:800;color:#0b1d33}
 .dp-h .it{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap}
 .dp-h .g{flex:1}
+/* 중·고등: [과세특 | 행특] 두 탭 (같은 기록으로) */
+.dtabs{display:inline-flex;gap:2px;margin-left:2px;padding:3px;border-radius:10px;background:#e6ecf6}
+.dtab{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 15px;border:0;border-radius:8px;background:none;font:inherit;font-size:14.5px;font-weight:800;color:var(--text2);white-space:nowrap;cursor:pointer;transition:background .15s,color .15s}
+.dtab small{font-size:12px;font-weight:700;opacity:.75}
+.dtab.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(11,29,51,.2)}
+.dtab:not(.on):not(:disabled):hover{color:var(--blue);background:rgba(255,255,255,.55)}
+.dtab:disabled{opacity:.45;cursor:default}
 .swl{display:flex;align-items:center;gap:7px;padding:4px 6px 4px 11px;border-radius:11px;font-size:14.5px;font-weight:750;color:var(--text2);opacity:.45;white-space:nowrap;transition:opacity .3s,background .3s}
 .swl.ready{opacity:1;cursor:pointer}
 .sw{position:relative;width:48px;height:30px;border-radius:999px;background:#c5d0e0;transition:background .2s}
