@@ -40,6 +40,13 @@ textarea{user-select:text;-webkit-user-select:text}
 .lvsw button.on{background:linear-gradient(180deg,#e6efff,#c2d6fb);color:#0b1d33;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 #lvsw{margin-left:auto}
 #stage[data-scene=pick] #home,#stage[data-scene=pick] .steps{visibility:hidden}
+/* 첫 화면: 학교급 스위치에 금빛 테두리가 맥박처럼 퍼지고, 왼쪽 금빛 말풍선이 '학교급을 골라 주세요.'로 짚는다 */
+.lvtip{display:none}
+#stage[data-scene=pick] .lvtip{display:inline-flex;align-items:center;position:relative;margin-left:auto;margin-right:8px;height:28px;padding:0 12px;border-radius:999px;background:var(--gold);color:#0b1d33;font-size:14px;font-weight:800;letter-spacing:-.03em;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.35);animation:lvnudge 1.6s ease-in-out infinite}
+#stage[data-scene=pick] .lvtip::after{content:"";position:absolute;right:-6px;top:50%;margin-top:-6px;border:6px solid transparent;border-right:0;border-left-color:var(--gold)}
+#stage[data-scene=pick] #lvsw{margin-left:0;border-color:var(--gold);animation:lvbeat 1.6s ease-out infinite}
+@keyframes lvbeat{0%{box-shadow:0 0 0 1px var(--gold),0 0 0 1px rgba(255,215,106,.75)}100%{box-shadow:0 0 0 1px var(--gold),0 0 0 13px rgba(255,215,106,0)}}
+@keyframes lvnudge{50%{transform:translateX(3px)}}
 @media (pointer:coarse){.tb{height:40px;padding:0 16px;font-size:16px}.lvsw button{height:34px;padding:0 13px;font-size:15.5px}}
 #scene{grid-row:2;position:relative;min-height:0;overflow:hidden}
 .stg{position:absolute;inset:0;overflow:hidden}
@@ -113,6 +120,14 @@ textarea{user-select:text;-webkit-user-select:text}
 .modes button:hover .art svg,.modes button:focus-visible .art svg{transform:scale(1.07)}
 .modes:hover button:not(:hover){opacity:.55;filter:saturate(.7)}
 .modes button:active{transform:translateY(-4px) scale(.99)}
+/* 방식 카드 테두리를 왼쪽부터 하나씩 천천히 번갈아 금빛으로 짚는다 (한 장에 2.5초, 마우스를 올리거나 고르면 멈춘다) */
+.modes button{animation:modeturn 7.5s ease-in-out infinite}
+.modes button:nth-child(1){animation-delay:.6s}
+.modes button:nth-child(2){animation-delay:3.1s}
+.modes button:nth-child(3){animation-delay:5.6s}
+@keyframes modeturn{0%,36%,100%{border-color:rgba(172,205,255,.35);box-shadow:0 18px 50px rgba(0,0,0,.4)}10%,26%{border-color:var(--gold);box-shadow:0 0 0 5px rgba(255,215,106,.2),0 18px 50px rgba(0,0,0,.4),0 0 48px rgba(255,215,106,.26)}}
+.modes:hover button,.modes:focus-within button{animation:none}
+@media (prefers-reduced-motion:reduce){.modes button,#stage[data-scene=pick] #lvsw,#stage[data-scene=pick] .lvtip{animation:none}}
 .qr{position:absolute;right:14px;top:6px;display:flex;align-items:center;gap:9px;padding:6px 12px 6px 6px;border-radius:13px;background:#fff;color:#0b1d33;font-size:13px;font-weight:800;line-height:1.3;text-align:left;box-shadow:0 10px 30px rgba(0,0,0,.45)}
 .qr img{display:block;width:60px;height:60px;border-radius:4px}
 /* 부스 QR 이 있으면 카드를 그만큼 내린다 (QR 이 카드 모서리를 가리지 않게) */
