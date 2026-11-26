@@ -46,6 +46,7 @@ GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 
 - 부스 태블릿은 `?booth=1` 로 연다: 첫 화면에 '내 폰으로 체험하기' QR(assets/qr-trial.svg)이 보이고, 손대지 않으면 45초(평소 90초) 뒤 처음 화면 · 초등 예시로 돌아간다.
 - 파일: index.html(틀) · trial.css · trial.js(장면과 예시 데이터) · fx.js(효과음 · 흔들림) · assets/chars(상담 캐릭터) · vendor(driver.js).
 - 효과음 · 흔들림(`fx.js`): 게임 같은 손맛을 주려고 장면마다 작은 소리(번호 뿅 · 저장 딩 · 줄마다 삑 · 끝에 쿵)와 흔들림 · 불꽃 · 색종이를 건다. 소리 파일 없이 브라우저에서 바로 만들고(Web Audio), 처음 화면을 누를 때부터 난다. 위쪽 막대의 스피커 단추로 끄고 켠다(그 기기에 기억). '움직임 줄이기'를 켠 기기에서는 흔들림 · 불꽃을 내지 않는다. trial.js 에서는 `FX.s("pop")` · `FX.shake(2)` · `FX.thud(el)` · `FX.burst(el)` · `FX.flash()` 한 줄로 부른다.
+- 배경음악도 fx.js 가 만든다(파일 없음): 효과음과 같은 다장조 5음 음계의 짧은 반복 곡(C-Am-F-G, 104bpm). 장면마다 분위기가 바뀐다 — 차분(calm: 수업 영상 · 생기부 · 강점 · 상담) · 집중(focus: 쉬는 시간 기록 · 현황판) · 두근(hurry: 기록 시간을 재는 동안 · 반 전체 일괄 작성). 큰 효과음(저장 · 성공 · 쿵)이 날 때는 잠깐 물러난다. 첫 화면과 [처음으로](부스 자동 처음으로 포함)에서는 멈추고, 스피커 단추 하나로 효과음과 함께 끈다. 장면별 분위기는 trial.js 의 `MUSIC` 표, 시간 재기는 `FX.music("hurry")`.
 - 안내(이것을 누르세요)는 주변을 어둡게 하지만, 개인 작성 끝의 [반 전체 일괄 작성 보기]만은 어둡게 하지 않고 단추에 밝은 테두리만 두른다(초안과 연결선이 계속 보이게).
 - vendor/driver.js.iife.js · driver.css 는 [driver.js](https://github.com/kamranahmedse/driver.js) 1.14.0 (MIT, Copyright (c) Kamran Ahmed)의 배포 파일 그대로이고, 라이선스 전문은 vendor/driver.js-LICENSE.txt 에 있다. 버전을 올릴 때는 npm 의 `driver.js` 패키지에서 `dist/driver.js.iife.js` · `dist/driver.css` · `license` 를 다시 복사한다.
 - QR 을 다시 만들려면 저장소 루트에서: `node -e "require('qrcode').toFile('apps/landing/trial/assets/qr-trial.svg','https://dacisosl.github.io/NUGA/trial/',{type:'svg',margin:1,color:{dark:'#0b1d33'}})"`

@@ -5,6 +5,8 @@
 //   '움직임 줄이기'를 켠 기기에서는 흔들림 · 불꽃을 내지 않는다. 소리는 나지만, 그런 기기에서는 장면이 한꺼번에 지나가므로
 //   잔소리는 빼고 겹치는 소리 가운데 가장 중요한 것 하나만 낸다.
 // - 큰 소리(쿵 · 화음 · 저장)끼리는 0.3초 안에 겹치지 않게 뒤의 것을 늦춘다. 이미 본 장면을 다시 볼 때는 조용히(calm).
+// - 배경음악도 여기서 만든다(파일 없음): 효과음과 같은 다장조 5음 음계의 짧은 반복 곡. 장면에 따라 차분(calm) · 집중(focus) · 두근(hurry)으로
+//   바뀌고, 큰 효과음이 날 때는 잠깐 물러난다. 첫 화면(방식 고르기)과 부스 자동 처음으로에서는 멈춘다. 스피커 단추 하나로 함께 끈다.
 // trial.js 는 FX.s("pop") 처럼 부르기만 한다. 이 파일이 없어도 체험은 그대로 돈다(trial.js 맨 위의 빈 FX).
 "use strict";
 (() => {
@@ -15,13 +17,14 @@
   const stage = document.getElementById("stage"), scene = document.getElementById("scene");
 
   /* ================= 소리 ================= */
-  let ctx = null, bus = null, comp = null, noiseBuf = null;
+  let ctx = null, bus = null, comp = null, noiseBuf = null, mus = null;
   const VOL = 0.55;
   /** 새 음량 단: 앞서 예약해 둔 소리는 옛 단에 남아 들리지 않게 된다 (탭을 떠날 때 · 다시 그릴 때) */
   function freshBus() {
     try { bus?.disconnect(); } catch { /* 이미 끊김 */ }
     bus = ctx.createGain(); bus.gain.value = on ? VOL : 0;
     bus.connect(comp);
+    if (mus) { try { mus.disconnect(); } catch { /* 이미 끊김 */ } mus.connect(bus); }
   }
   function open() {
     if (ctx || !on) return;
@@ -45,6 +48,7 @@
     if (!on) return;
     open();
     if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+    if (ctx) musicRun();
   }
   for (const ev of ["pointerdown", "touchend", "keydown", "click"]) addEventListener(ev, unlock, { capture: true, passive: true });
   document.addEventListener("visibilitychange", () => {
@@ -164,6 +168,7 @@
       return;
     }
     if (LOUD.has(name)) {
+      duck(name === "big" ? 2200 : 1100);
       // 큰 소리끼리는 0.3초 안에 겹치지 않게: 뒤의 것을 그만큼 늦춘다
       const at = Math.max(now, loudAt + 300);
       loudAt = at;
@@ -178,6 +183,98 @@
     const at = performance.now();
     setTimeout(() => { if (specificAt < at) s("tap"); }, 0);
   }, true);
+
+  /* ================= 배경음악 ================= */
+  // 4마디(16분음표 64칸)를 되풀이: 다장조 C - Am - F - G. 마디마다 [근음, 화음 구성음] (MIDI 번호)
+  const BPM = 104, STEP = 60 / BPM / 4;
+  const BARS = [[48, [60, 64, 67, 72]], [45, [57, 60, 64, 69]], [41, [57, 60, 65, 69]], [43, [55, 59, 62, 67]]];
+  // 톡톡 아르페지오 무늬 (16분음표 16칸, 숫자 = 화음 구성음 번호, -1 = 쉼)
+  const ARP = {
+    calm:  [0, -1, -1, -1, 2, -1, -1, -1, 1, -1, -1, -1, 3, -1, -1, -1],
+    focus: [0, -1, 2, -1, 1, -1, 3, -1, 2, -1, 1, -1, 3, -1, 2, -1],
+    hurry: [0, 2, 1, 3, 2, 1, 3, 2, 0, 2, 1, 3, 2, 3, 1, 2],
+  };
+  const MUS_VOL = 0.42;            // 효과음보다 작게 깔린다
+  const hz = (n) => 440 * 2 ** ((n - 69) / 12);
+  let musMode = "off", musTimer = null, musStep = 0, musT = 0, duckUntil = 0;
+  function mVoice(type, f, t, dur, peak, glideTo) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (glideTo) o.frequency.exponentialRampToValueAtTime(glideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(mus);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function mPad(freqs, t, dur, peak) {
+    for (const f of freqs) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = "sawtooth"; o.frequency.value = f; o.detune.value = (Math.random() - 0.5) * 10;
+      lp.type = "lowpass"; lp.frequency.value = 900; lp.Q.value = 0.3;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peak, t + dur * 0.35);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(lp); lp.connect(g); g.connect(mus);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+  function mHat(t, peak) {
+    const src = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf; hp.type = "highpass"; hp.frequency.value = 7000;
+    g.gain.setValueAtTime(peak, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    src.connect(hp); hp.connect(g); g.connect(mus);
+    src.start(t, Math.random() * 0.3); src.stop(t + 0.06);
+  }
+  /** 16분음표 한 칸 */
+  function mPlay(i, t) {
+    const [root, chord] = BARS[Math.floor(i / 16) % 4], k = i % 16, m = musMode;
+    if (k === 0) mPad(chord.slice(0, 3).map(hz), t, STEP * 16, m === "calm" ? 0.05 : 0.035);       // 마디 첫 칸: 부드러운 화음 판
+    const bassOn = m === "calm" ? k === 0 : m === "focus" ? k % 8 === 0 : k % 2 === 0;              // 낮은음: 마디 · 1·3박 · 8분음표마다
+    if (bassOn) mVoice("triangle", hz(root), t, STEP * (m === "hurry" ? 1.6 : 5), m === "hurry" ? 0.16 : 0.2);
+    const a = ARP[m][k];
+    if (a >= 0) mVoice("triangle", hz(chord[a] + 12), t, m === "hurry" ? 0.12 : 0.22, 0.06);      // 톡톡
+    if (m === "hurry" && k % 2 === 1) mHat(t, 0.05);                                                 // 두근: 엇박 똑딱
+    if (m === "hurry" && k % 4 === 0) mVoice("sine", 110, t, 0.22, 0.22, 42);                        // 두근: 박마다 아주 작은 쿵
+  }
+  function musTick() {
+    if (!ctx || ctx.state !== "running") return;
+    // 꺼져 있거나 숨겨진 동안에는 만들지 않고 자리만 옮긴다 (다시 켜면 그 자리에서 이어진다)
+    if (!on || document.hidden || musMode === "off") { musT = ctx.currentTime + 0.05; return; }
+    if (musT < ctx.currentTime) musT = ctx.currentTime + 0.03;   // 오래 멈췄다 돌아왔으면 지금부터
+    while (musT < ctx.currentTime + 0.12) { mPlay(musStep, musT); musT += STEP; musStep = (musStep + 1) % 64; }
+  }
+  /** 음악 단을 만들고 일정표를 돌린다 (소리 장치가 열린 뒤에만) */
+  function musicRun() {
+    if (!ctx || musMode === "off") return;
+    if (!mus) { mus = ctx.createGain(); mus.gain.value = 0; mus.connect(bus); }
+    if (!musTimer) { musStep = 0; musT = ctx.currentTime + 0.08; musTimer = setInterval(musTick, 25); }
+    if (performance.now() >= duckUntil) { mus.gain.cancelScheduledValues(ctx.currentTime); mus.gain.setTargetAtTime(MUS_VOL, ctx.currentTime, 0.35); }   // 서서히 들어온다
+  }
+  /** 장면의 분위기: "calm" 차분 · "focus" 집중 · "hurry" 두근(시간을 잴 때) · "off" 멈춤 (서서히 빠진다) */
+  function music(mode) {
+    const m = mode === "calm" || mode === "focus" || mode === "hurry" ? mode : "off";
+    if (m === musMode) return;
+    const was = musMode;
+    musMode = m;
+    if (!ctx) return;   // 손대기 전: 소리 장치가 열리면 시작한다
+    if (m === "off") {
+      if (mus) { mus.gain.cancelScheduledValues(ctx.currentTime); mus.gain.setTargetAtTime(0, ctx.currentTime, 0.25); }
+      const t = musTimer; musTimer = null;
+      if (t) setTimeout(() => clearInterval(t), 900);   // 빠지는 동안 이미 잡아 둔 음은 그대로 울리게 조금 뒤에 멈춘다
+      return;
+    }
+    if (was === "off" || !musTimer) musicRun();
+  }
+  /** 큰 순간: 음악이 잠깐 물러났다가 돌아온다 (효과음이 돋보이게) */
+  function duck(ms = 1200) {
+    if (!ctx || !mus || musMode === "off") return;
+    const now = ctx.currentTime;
+    duckUntil = performance.now() + ms;
+    mus.gain.cancelScheduledValues(now);
+    mus.gain.setTargetAtTime(MUS_VOL * 0.18, now, 0.03);
+    mus.gain.setTargetAtTime(MUS_VOL, now + ms / 1000, 0.45);
+  }
 
   /* ================= 움직임 ================= */
   const buzz = (ms) => { if (on && !reduced) { try { navigator.vibrate?.(ms); } catch { /* 진동 없는 기기 */ } } };
@@ -257,8 +354,8 @@
   function paint(btn) {
     btn.innerHTML = on ? ICON_ON : ICON_OFF;
     btn.setAttribute("aria-pressed", String(on));
-    btn.setAttribute("aria-label", on ? "효과음 끄기" : "효과음 켜기");
-    btn.title = on ? "효과음 끄기" : "효과음 켜기";
+    btn.setAttribute("aria-label", on ? "효과음 · 음악 끄기" : "효과음 · 음악 켜기");
+    btn.title = on ? "효과음 · 음악 끄기" : "효과음 · 음악 켜기";
     btn.classList.toggle("off", !on);
   }
   function mount() {
@@ -282,5 +379,5 @@
   mount();
 
   // state · errors · names 는 자동 검사용 (소리 장치 상태, 소리를 만들다 난 오류 수, 소리 이름)
-  window.FX = { s, shake, thud, burst, flash, calm: setCalm, get on() { return on; }, get state() { return ctx ? ctx.state : "none"; }, get errors() { return errors; }, names: Object.keys(SOUNDS) };
+  window.FX = { s, shake, thud, burst, flash, calm: setCalm, music, duck, get musicMode() { return musMode; }, get on() { return on; }, get state() { return ctx ? ctx.state : "none"; }, get errors() { return errors; }, names: Object.keys(SOUNDS) };
 })();

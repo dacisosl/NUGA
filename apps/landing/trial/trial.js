@@ -16,7 +16,9 @@ const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25h7v-7h7v
 const BOOTH = new URLSearchParams(location.search).has("booth");
 const DRV = window.driver?.js?.driver;
 // 효과음 · 흔들림 · 쿵 (fx.js). 그 파일이 없거나 막혀도 체험은 그대로 돌게 빈 것으로 받는다
-/*fx*/ const FX = window.FX || { s() {}, shake() {}, thud() {}, burst() {}, flash() {}, calm() {} };
+/*fx*/ const FX = window.FX || { s() {}, shake() {}, thud() {}, burst() {}, flash() {}, calm() {}, music() {}, duck() {} };
+/** 장면마다 배경음악의 분위기 (첫 화면은 조용히: 부스에서 아무도 없을 때 음악이 계속 돌지 않게) */
+const MUSIC = { pick: "off", "m-phone": "calm", "m-desk": "focus", "w-desk": "focus", "a-rec": "calm", "a-desk": "focus", board: "focus", draft: "calm", batch: "hurry", points: "calm", talk: "calm" };
 let drv = null, hintEls = [], proxy = null, proxyFor = null;
 
 /* ---------- 무대 맞춤 ---------- */
@@ -382,6 +384,7 @@ function go(k, fromHistory) {
   $$("#steps li").forEach((li, i) => { if (st === i && !li.classList.contains("on")) FX.thud(li); li.className = st === i ? "on" : st > i ? "done" : ""; });
   $$("#lvsw button").forEach((b) => b.classList.toggle("on", b.dataset.lv === S.level));
   scene.innerHTML = "";
+  FX.music(MUSIC[id] || "calm");
   SCREEN[id](scene);
   rotPrompt();
 }
@@ -451,6 +454,7 @@ function wireEntry(L, onDone) {
   const startLine = () => {
     if (t1) return;
     t1 = performance.now();
+    FX.music("hurry");
     tick = every(() => { const el = $("#tm"); if (el) el.textContent = `${((performance.now() - t1) / 1000).toFixed(1)}초`; }, 100);
   };
   const check = () => { ns.disabled = !note.value.trim(); ns.classList.toggle("glow", !ns.disabled); };
@@ -470,7 +474,7 @@ function wireEntry(L, onDone) {
   });
   const done = () => {
     if (fin || !note.value.trim()) return;
-    fin = true; hintOff(); startLine(); clearInterval(tick);
+    fin = true; hintOff(); startLine(); clearInterval(tick); FX.music("calm");
     FX.s("save");
     const sec = (performance.now() - t1) / 1000;
     S.note = note.value.trim(); S.noteCat = cat; S.sec = sec;
@@ -598,7 +602,7 @@ function sPhone(root) {
   beat(end, CLIP_MS);
   // 폰: 칸을 누르면 바로 고르고, [저장]으로 남긴다. 고른 뒤에도 다른 칸으로 바꿀 수 있다
   const grid = $("#pgrid"), save = $("#psave"), cells = $$(".pc", grid);
-  const begin = () => { if (!t0) t0 = performance.now(); };
+  const begin = () => { if (!t0) { t0 = performance.now(); FX.music("hurry"); } };
   ["pointerdown", "wheel", "touchstart"].forEach((t) => grid.addEventListener(t, begin, { passive: true }));
   if (prev >= 0) { cells[prev].classList.add("sel"); save.disabled = false; save.textContent = `저장 · ${prev + 1}번`; }
   cells.forEach((c) => c.addEventListener("click", () => {
@@ -615,7 +619,7 @@ function sPhone(root) {
     if (t0) S.phoneSec = (performance.now() - t0) / 1000;
     S.pick = who(sel);
     $(".scr").insertAdjacentHTML("beforeend", `<div class="ph-snack"><span>저장 · ${L.cls} · ${S.pick.no}번</span><i>취소</i></div>`);
-    FX.s("save"); FX.thud(".ph-snack"); FX.shake(1);
+    FX.s("save"); FX.thud(".ph-snack"); FX.shake(1); FX.music("calm");
     later(() => breakTime(() => go(S.k + 1)), 700);
   });
 }
@@ -872,7 +876,7 @@ function sDraft(root) {
       $("#lent").textContent = `${Math.max(0, b).toLocaleString("ko-KR")}/1,500B`; $("#lenb").style.width = `${Math.min(100, (Math.max(0, b) / 1500) * 100)}%`;
     };
     if (instant) { paint(); done(); return; }
-    const tick = every(() => { n += 5; FX.s("key"); paint(); draft.scrollTop = draft.scrollHeight; if (n >= all) { clearInterval(tick); done(); FX.s("win"); FX.burst("#para .sn.mine", { n: 14 }); FX.shake(1); } }, 16);
+    const tick = every(() => { n += 5; FX.s("key"); paint(); draft.scrollTop = draft.scrollHeight; if (n >= all) { clearInterval(tick); done(); FX.music("calm"); FX.s("win"); FX.burst("#para .sn.mine", { n: 14 }); FX.shake(1); } }, 16);
   };
   $("#split").addEventListener("click", () => {
     S.split = !S.split; hintOff();
@@ -886,7 +890,7 @@ function sDraft(root) {
   if (S.made) { $("#split").classList.toggle("on", S.split); typeOut(true); return; }
   $("#gen").addEventListener("click", () => {
     hintOff();
-    $("#gen").disabled = true; $("#gen").textContent = "쓰는 중";
+    $("#gen").disabled = true; $("#gen").textContent = "쓰는 중"; FX.music("focus");
     FX.s("gen");
     draft.innerHTML = `<div class="dl"><i></i><i></i><i></i><i></i><b>초안을 쓰는 중 · 기록 ${D.recs.length}건을 엮고 있어요</b></div>`;
     later(() => typeOut(false), 1100);
@@ -1086,7 +1090,7 @@ function sBatch(root) {
   later(() => {
     clearInterval(clock); prog.style.transform = "scaleX(1)";
     FX.s("big"); FX.shake(3); FX.flash(); FX.burst("#bt2", { kind: "confetti", n: 34 });   // 반 전체가 끝난 순간
-    S.batchSeen = true;
+    S.batchSeen = true; FX.music("calm");
     $("#vlive").textContent = `● 끝 · ${n}명`; $("#vtime").textContent = `${(total / 1000).toFixed(1)}초`;
     $("#vreplay").hidden = false; $("#btnext").hidden = false; $("#btnext").classList.add("hinted");
     later(() => list.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" }), 600);   // 끝나면 맨 위(첫 학생 · 방금 쓴 학생)로
