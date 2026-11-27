@@ -1240,32 +1240,30 @@ function sBatch(root) {
   $("#btnext").addEventListener("click", () => go(S.k + 1));
 }
 
-/* ---------- 3-3 · 강점 3가지 ---------- */
+/* ---------- 3-3 · 강점 3가지: 왼쪽 강점 세 줄 | 오른쪽 기록의 계단(소개 페이지 첫 화면 영상), 아래 투표 부탁 ---------- */
+const BALLOT = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 17h22v11H5z" fill="#0b1d33"/><path d="M9 4h14v13H9z" fill="#fff" stroke="#0b1d33" stroke-width="2.2" stroke-linejoin="round"/><path d="m12.5 10.5 2.6 2.6 4.6-5.2" fill="none" stroke="#2456b5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17h26" stroke="#0b1d33" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function sPoints(root) {
   const L = ensure(), rows = batchRows(L);
   const written = rows.filter((r) => !r.zero), sum = written.reduce((a, r) => a + r.n, 0);
-  const three = rows.filter((r) => !r.mine && !r.zero && !r.short).slice(0, 3);
-  // 첫 문장의 '무엇을 했는지'(…며 앞)를 칠해 학생마다 다른 곳이 보이게
-  const lit = (t) => { const k = t.indexOf("며 "); return k > 0 ? `<mark>${esc(t.slice(0, k + 1))}</mark>${esc(t.slice(k + 1))}` : esc(t); };
-  const bars = rows.map((r) => `<i class="${r.mine ? "mine" : ""}" style="height:${Math.max(3, (r.bytes / 1500) * 100)}%"></i>`).join("");
+  const n = (v) => `<em>${v.toLocaleString("ko-KR")}</em>`;
+  const PTS = [
+    ["실제 기록으로 씁니다", `선생님 기록 ${n(sum)}건만으로 · 없는 말은 만들지 않아요`],
+    ["학생마다 모두 다릅니다", `${n(written.length)}명이면 ${n(written.length)}가지 초안`],
+    ["반 전체를 한 번에", `버튼 한 번 · ${n(rows.length)}명 모두 <em>1,500B</em> 안`],
+  ];
   root.innerHTML = `<section class="pts">
-      <h2>누가 생기부 초안의 <em>강점 3가지</em></h2>
-      <div class="pt-cards">
-        <article class="pt"><p class="pt-n">1</p><h3>실제 기록으로 씁니다</h3>
-          <div class="pt-body"><span class="rc">${esc(S.note)}</span><i class="pt-ar" aria-hidden="true">↓</i><p class="pt-sen">${esc(S.mineS)}</p></div>
-          <p class="pt-cap">선생님이 남긴 기록 <b>${sum.toLocaleString("ko-KR")}건</b>으로 <b>${written.length}명</b> · 없는 내용은 만들지 않아요</p></article>
-        <article class="pt"><p class="pt-n">2</p><h3>학생마다 모두 다릅니다</h3>
-          <div class="pt-body">${three.map((r) => `<p class="pt-one"><b>${r.i + 1} ${r.name}</b>${lit(r.first)}</p>`).join("")}</div>
-          <p class="pt-cap">각자의 기록으로 쓰니 <b>${written.length}명 ${written.length}가지</b> 초안</p></article>
-        <article class="pt"><p class="pt-n">3</p><h3>한 번에 반 전체, 분량까지</h3>
-          <div class="pt-body"><p class="pt-big"><b>${rows.length}</b>명</p><div class="pt-bars" aria-hidden="true"><span class="lim">1,500B</span>${bars}</div></div>
-          <p class="pt-cap">[일괄 생성] 한 번 · 모두 <b>1,500B 안</b>에 · 기록이 적으면 억지로 늘리지 않아요</p></article>
+      <div class="pa-art" aria-hidden="true"><video muted loop playsinline preload="auto" poster="assets/stairs.webp"><source src="../assets/growth-motion.mp4" type="video/mp4"></video></div>
+      <div class="pa-copy">
+        <h2><small>누가 생기부 초안의</small><em>강점 3가지</em></h2>
+        <ol class="pa-list">${PTS.map(([h, t], k) => `<li class="pa"><i>${k + 1}</i><p><b>${h}</b><span>${t}</span></p></li>`).join("")}</ol>
+        <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div>
       </div>
-      <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div></section>`;
-  $$(".pt").forEach((c, k) => later(() => c.classList.add("in"), 250 + k * 850));
-  $$(".pt").forEach((c, k) => later(() => { FX.s("pop", { i: k * 2 }); FX.thud($(".pt-n", c)); }, 430 + k * 850));
-  later(() => $("#ptend").classList.add("in"), 250 + 3 * 850);
-  later(() => FX.s("win"), 250 + 3 * 850);
+      <p class="vote" id="vote">${BALLOT}<span class="v-lead">체험이 마음에 드셨다면</span><b class="v-no">3번</b><b class="v-name">'NUGA 누가'</b><span class="v-ask">투표 부탁드립니다!</span></p></section>`;
+  const v = $(".pa-art video");
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) v.play().catch(() => {});
+  $$(".pa").forEach((c, k) => later(() => { c.classList.add("in"); FX.s("pop", { i: k * 2 }); FX.thud($("i", c)); }, 350 + k * 700));
+  later(() => $("#ptend").classList.add("in"), 350 + 3 * 700);
+  later(() => { $("#vote").classList.add("in"); FX.s("win"); FX.burst("#vote", { n: 14 }); }, 350 + 3 * 700 + 350);
   $("#totalk").addEventListener("click", () => go(S.k + 1));
 }
 
