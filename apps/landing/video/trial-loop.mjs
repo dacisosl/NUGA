@@ -1,14 +1,14 @@
 // 부스에서 계속 틀어 둘 '체험하기' 시연 영상.
 // 실제 체험 페이지(trial/?booth=1)를 사람이 하듯 눌러 가며 화면을 그대로 녹화하고(커서 · 누름 표시만 덧붙임),
 // '처음으로'를 눌러 첫 화면이 다시 그려진 1초 뒤에서 자르므로 처음과 끝이 같은 장면이라 반복 재생이 끊기지 않는다.
-//   node apps/landing/video/trial-loop.mjs                       → video/out/trial-loop.mp4
+//   node apps/landing/video/trial-loop.mjs                       → video/out/trial-loop.mp4 + 왼쪽 위에 체험 QR 을 띄운 trial-loop-qr.mp4 (부스용)
 //   node apps/landing/video/trial-loop.mjs --out D:/booth.mp4 --crf 20
 // 필요: Node 22+, Chrome(또는 Edge, CHROME_PATH), ffmpeg (PATH). 녹화는 실제 시간으로 약 1분 30초 걸린다.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { launch, sleep } from "./cdp.mjs";
 
@@ -206,3 +206,6 @@ try {
   server.close();
   try { for (const f of fs.readdirSync(frameDir)) fs.unlinkSync(path.join(frameDir, f)); fs.rmdirSync(frameDir); } catch {}
 }
+
+// 부스용: 체험 화면을 오른쪽에 조금 줄여 놓고 왼쪽 위에 체험 QR 을 계속 띄운 판 (--no-qr 이면 만들지 않는다)
+if (!args.includes("--no-qr")) spawnSync(process.execPath, [path.join(here, "trial-loop-qr.mjs"), out], { stdio: "inherit" });
