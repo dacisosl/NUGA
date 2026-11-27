@@ -6,7 +6,7 @@ GitHub Pages 의 첫 화면(https://dacisosl.github.io/NUGA/)이다. 웹 앱은 
 - index.html: 11개 화면의 내용과 구조
 - site.css: 반응형 레이아웃, 색상, 글꼴, 모션 스타일
 - site.js: 숫자 릴, 화면 이동, FAQ, 영상 및 마우스 반응, 앱으로 넘어가기
-- assets/stairs-climb.mp4: 첫 화면 계단 영상(교사가 '교사의 피드백' 카드를 놓고 학생이 계단을 오른다, 4.4초 · 끝 0.8초가 처음 장면으로 겹쳐 돌아가 반복 재생이 끊기지 않는다). 데스크톱은 오른쪽 63%에 꽉 채우고, 폭 800px 이하에서는 16:9 그대로 넓게 깔아 학생과 교사가 모두 보이게 한다
+- assets/stairs-climb.mp4: 첫 화면 계단 영상(교사가 '교사의 피드백' 카드를 놓고 학생이 계단을 오른다, 7.7초: 4.4초 오르고 → 학생이 교사 쪽으로 한 발 올린 장면에서 2.5초 멈춤 → 0.8초 동안 처음 장면으로 겹쳐 돌아가 반복 재생이 끊기지 않는다). 데스크톱은 오른쪽 63%에 꽉 채우고, 폭 800px 이하에서는 16:9 그대로 넓게 깔아 학생과 교사가 모두 보이게 한다
 - assets/stairs-climb-poster.jpg: 그 영상의 첫 장면(재생 전에 보이는 그림)
 - assets/record-manual.mp4 · record-auto.mp4 (+ 포스터): '기록 방법' 두 화면의 영상. 실제 앱 화면으로 만들며, 만드는 법은 [video/README.md](video/README.md)
 - assets/whale-1~4.jpg: '웨일 연계' 화면의 실제 앱 사진 4장 (`video/capture-whale.mjs`로 찍는다), assets/whale-logo.png: [웨일 연계] 버튼의 웨일 로고
