@@ -1,7 +1,9 @@
 /**
  * 앱 안 도움말: 핵심만 담은 사용설명서 + '묻고 답하기' 챗봇의 자료와 답 찾기.
  * - 챗봇은 앱 사용법만 답한다. 학생 기록은 읽지 않는다.
- * - AI 가 없으면 searchHelp 로 설명서에서 답을 찾고(외부 전송 없음), AI 가 있으면 helpChatRequest 로 설명서만 근거로 묻는다.
+ * - 답 찾기는 늘 searchHelp 가 먼저 한다(AI 없이 · 외부 전송 없음 · 즉시). 자주 묻는 질문과 그 다른 말투는 여기서 바로 답한다.
+ * - 설명서로 확실히 답할 수 없는 지엽적인 질문·엉뚱한 질문은 '제작자에게 물어봐주세요'로 돌린다.
+ * - AI 가 있으면 애매한 질문(kind: "unsure")만 helpChatRequest 로 설명서를 근거로 묻는다.
  * - 화면 이름은 앱의 실제 버튼 이름과 같게 쓴다 (미반영 · 일괄 기록 + · 생기부 생성 · 모바일 화면 · 저장 ▾ …).
  */
 
@@ -25,8 +27,10 @@ export interface HelpFaq {
   id: string;
   q: string;
   a: string;
-  /** 같은 뜻의 말 (질문에 들어 있으면 이 항목으로) */
+  /** 같은 뜻의 말 (질문에 들어 있으면 이 항목으로). 한 글자 말은 조사만 붙은 꼴로, 여러 낱말은 띄어쓰기를 무시하고 찾는다 */
   keys: string[];
+  /** 선생님이 실제로 물을 법한 다른 말투 (글자가 비슷하면 이 항목으로) */
+  ex?: string[];
   links?: HelpLink[];
   /** 학생 기록을 묻는 질문 (챗봇이 답하지 않는 범위를 안내) */
   data?: boolean;
@@ -73,67 +77,109 @@ export const HELP_SECTIONS: HelpSection[] = [
 ];
 
 export const HELP_FAQ: HelpFaq[] = [
-  { id: "roster", q: "반·명단은 어떻게 넣나요?", keys: ["명단", "학생 목록", "학생 등록", "명렬", "반 만들", "반 추가", "이름 넣", "출석부", "학생 추가"],
+  { id: "roster", q: "반·명단은 어떻게 넣나요?",
+    keys: ["명단", "명렬", "명부", "학생 목록", "학생 등록", "학생 추가", "학생 넣", "학생을 넣", "애들 이름", "아이들 이름", "이름 넣", "이름을 넣", "이름 입력", "이름 등록", "이름 붙여", "반 만들", "반을 만들", "반 추가", "반을 추가", "새 반", "반 하나", "반을 하나", "반 더", "반 생성", "반 설정", "반 세팅", "반 이름", "학급 만들", "학급 추가", "학급 설정", "새 학기", "출석부", "전학", "전입", "학생 번호"],
+    ex: ["새 학기에 반이랑 학생 이름 넣는 법", "엑셀 명렬표 불러오기", "전학생 들어오면 어떻게 추가해", "학생 목록 붙여넣기", "반 만들기"],
     a: "설정 → 반·명단에서 반을 만들고 엑셀 파일을 가져오거나 이름을 붙여 넣으면 돼요. 웨일 스페이스 관리자 명단 파일도 그대로 읽어요.",
     links: [{ label: "반·명단", go: "settings:roster" }] },
-  { id: "timetable", q: "시간표는 왜 넣나요?", keys: ["시간표", "교시", "수업 시간", "진도"],
+  { id: "timetable", q: "시간표는 왜 넣나요?",
+    keys: ["시간표", "교시", "수업 시간", "요일", "진도", "지금 수업", "수업하는 반"],
+    ex: ["시간표 꼭 넣어야 돼", "몇 교시에 어느 반인지 등록", "요일별 수업 반 지정하기"],
     a: "시간표가 있으면 폰과 모바일 화면이 지금 수업하는 반을 먼저 띄워서 번호만 누르면 돼요. 설정 → 시간표에서 칸에 반을 지정해요.",
     links: [{ label: "시간표", go: "settings:timetable" }] },
-  { id: "phone", q: "폰과는 어떻게 연결하나요?", keys: ["폰", "핸드폰", "휴대폰", "스마트폰", "연결", "동기화", "qr", "페어링", "위젯", "안드로이드", "아이폰", "로그인", "아이디"],
+  { id: "phone", q: "폰과는 어떻게 연결하나요?",
+    keys: ["폰", "핸드폰", "휴대폰", "스마트폰", "모바일", "연동", "연결", "동기화", "싱크", "sync", "qr", "큐알", "페어링", "위젯", "안드로이드", "갤럭시", "아이폰", "로그인", "아이디", "같이 쓰", "함께 쓰", "안 떠", "안 넘어", "안 와"],
+    ex: ["폰이랑 컴퓨터 같이 쓰려면", "휴대폰에서 기록한 게 PC에 안 떠요", "QR로 연결하기", "핸드폰 로그인 하는 법"],
     a: "폰과 PC에서 이 앱을 열고 위쪽 [로그인]에 같은 아이디·비밀번호를 넣으면 바로 이어져요(폰은 '폰', PC는 'PC'로). 시험해 볼 때는 로그인 창의 테스트 아이디(01~10) 가운데 같은 번호를 PC와 폰에서 누르면 돼요. 번호 하나는 PC 1대 · 폰 1대만 쓰고, 30분 넘게 안 쓰면 풀려요. 폰에서 번호를 눌러 저장하면 PC에 쉬는 시간 기록 팝업이 떠요. 안드로이드 앱은 설정 → 동기화의 QR로 연결해요.",
     links: [{ label: "로그인", go: "login" }, { label: "동기화", go: "settings:sync" }] },
-  { id: "watch", q: "워치에서도 기록되나요?", keys: ["워치", "시계", "갤럭시 워치", "wear"],
+  { id: "watch", q: "워치에서도 기록되나요?",
+    keys: ["워치", "시계", "손목", "갤럭시 워치", "wear", "웨어"],
+    ex: ["손목시계로 기록할 수 있어", "갤럭시 워치 연동"],
     a: "네. Wear OS 워치에서 [기록] → 번호 → 저장하면 폰 기록과 같이 PC의 미반영으로 모여요.",
     links: [{ label: "동기화", go: "settings:sync" }] },
-  { id: "pc-record", q: "PC에서 바로 기록하려면?", keys: ["pc에서", "컴퓨터", "바로 기록", "직접 입력", "기록 추가", "기록하", "기록 남기", "입력"],
+  { id: "pc-record", q: "PC에서 바로 기록하려면?",
+    keys: ["pc에서", "pc로", "컴퓨터에서", "컴퓨터로", "노트북에서", "노트북으로", "데스크탑", "바로 기록", "직접 기록", "직접 입력", "내용 입력", "기록 추가", "기록하", "기록 남기", "기록을 남기", "기록 쓰", "기록을 쓰", "기록 적어", "기록을 적", "기록 적기", "기록 적는", "관찰 내용", "한 줄 쓰", "학생 카드", "모바일 화면"],
+    ex: ["컴퓨터에서 바로 기록하려면", "노트북으로 관찰 내용 적기", "학생 카드에 기록 쓰는 법", "기록은 어디에 써요"],
     a: "현황판에서 학생 카드를 눌러 맨 위 칸에 한 줄 쓰고 Enter 하면 돼요. 번호만 빠르게 남기려면 로고 아래 [모바일 화면]을 쓰세요.",
     links: [{ label: "현황판", go: "main" }, { label: "모바일 화면", go: "mobile" }] },
-  { id: "edit", q: "기록을 고치거나 지우려면?", keys: ["수정", "고치", "고쳐", "삭제", "지우", "잘못", "편집", "취소"],
+  { id: "edit", q: "기록을 고치거나 지우려면?",
+    keys: ["수정", "내용 바꾸", "내용을 바꾸", "기록 바꾸", "기록을 바꾸", "적은 내용", "쓴 내용", "고치", "고쳐", "고칠", "정정", "오타", "틀렸", "틀린", "잘못", "편집", "바로잡", "삭제", "지우", "지워", "없애", "취소", "되돌리"],
+    ex: ["기록 잘못 썼는데 수정 어떻게 해요", "오타 고치기", "기록 지우는 법"],
     a: "학생 카드를 눌러 기록 창을 열고, 항목을 누르면 고칠 수 있어요. 지울 때는 그 항목의 [삭제]를 눌러요.",
     links: [{ label: "현황판", go: "main" }] },
-  { id: "inbox", q: "미반영이 뭔가요?", keys: ["미반영", "쉬는 시간", "보완", "처리", "대기", "알림", "팝업"],
+  { id: "inbox", q: "미반영이 뭔가요?",
+    keys: ["미반영", "쉬는 시간", "보완", "처리", "대기", "알림", "팝업", "빨간 숫자", "숫자 뜨", "숫자가 뜨", "빨간 점", "배지", "번호만", "채우"],
+    ex: ["미반영이 뭐예요", "위에 빨간 숫자 뜨는 거 뭐야", "번호만 찍은 기록 채우기"],
     a: "폰·워치에서 번호만 남긴 기록과 녹음 추천처럼 아직 내용을 채우지 않은 것들이에요. 위쪽 [미반영]을 눌러 한 줄씩 채우면 학생 기록이 돼요.",
     links: [{ label: "미반영 열기", go: "inbox" }] },
-  { id: "recording", q: "수업 녹음은 어떻게 켜나요?", keys: ["녹음", "음성", "자동 기록", "자동녹음", "받아쓰기", "마이크", "스크립트", "자동 추천", "녹음 추천"],
+  { id: "recording", q: "수업 녹음은 어떻게 켜나요?",
+    keys: ["녹음", "녹음 파일", "음성 파일", "녹취", "음성", "목소리", "말한 거", "말한 것", "말한 내용", "발언", "자동 기록", "자동으로 기록", "자동으로 적", "받아쓰기", "마이크", "스크립트", "자동 추천", "stt"],
+    ex: ["수업 녹음 켜는 법", "수업 중에 말한 거 자동으로 기록돼", "녹취 기능 있어", "자동녹음 기록은 어떻게 하나요"],
     a: "설정 → 녹음에서 사용 조건 4가지(학교 승인, 사전 안내·동의, 외부 전송 검토, 녹음 표시·즉시 중단)를 확인한 뒤 켜요. 기본은 꺼짐이고, 음성은 폰에만 두었다가 24시간 뒤 지워요.",
     links: [{ label: "녹음", go: "settings:recording" }] },
-  { id: "bulk", q: "기록 여러 건을 한꺼번에 넣을 수 있나요?", keys: ["한꺼번에", "여러 건", "여러 개", "일괄 기록", "한 번에", "한글 문서", "pdf", "사진", "스캔", "ocr", "메모장"],
+  { id: "bulk", q: "기록 여러 건을 한꺼번에 넣을 수 있나요?",
+    keys: ["한꺼번에", "여러 건", "여러 개", "일괄 기록", "일괄 입력", "일괄 등록", "한 번에", "대량", "통째로", "붙여넣", "붙여 넣", "한글 문서", "한글 파일", "hwp", "pdf", "사진", "사진으로", "이미지", "스캔", "캡처", "ocr", "메모장", "메모", "종이", "수기", "관찰기록"],
+    ex: ["관찰기록 여러 개 한 번에 넣기", "종이에 적은 거 사진 찍어서 올리기", "메모해 둔 기록 통째로 붙여넣기", "스캔한 PDF도 읽어요"],
     a: "위쪽 [일괄 기록 +]에 엑셀·한글·메모를 붙여 넣거나 PDF·사진을 올리면 돼요. 한 줄이 기록 하나이고, 줄 앞의 번호·이름·날짜·분류를 함께 읽어요.",
     links: [{ label: "일괄 기록", go: "bulk" }] },
-  { id: "draft", q: "생기부 초안은 어떻게 만드나요?", keys: ["생기부", "세특", "초안", "생성", "행특", "종합의견", "행동특성", "작성", "써 줘", "써줘"],
+  { id: "draft", q: "생기부 초안은 어떻게 만드나요?",
+    keys: ["생기부", "생활기록부", "학생부", "세특", "세부능력", "초안", "행특", "행발", "행동특성", "종합의견", "자율활동", "동아리활동", "진로활동", "특기사항", "일괄 생성", "개별 생성", "문장 만들", "문장 생성", "자동으로 써", "써 줘", "작성", "생성"],
+    ex: ["세특 초안 만들기", "학생부 자동으로 써 줘", "반 전체 생기부 한꺼번에 쓰기", "행동특성 및 종합의견 쓰기"],
     a: "위쪽 [생기부 생성] → 개별 탭에서 학생을 고르면 왼쪽에 초안, 오른쪽에 기록이 나란히 보여요. [생성]을 누르면 체크한 기록으로 초안을 써요. 반 전체는 [일괄]에서 [일괄 생성] 한 번, 다 쓴 뒤 확인은 [검토] 탭이에요.",
     links: [{ label: "생기부 생성", go: "draft" }] },
-  { id: "no-ai", q: "AI 없이도 되나요?", keys: ["ai 없이", "키 없이", "무료", "규칙", "오프라인", "인터넷 없"],
+  { id: "no-ai", q: "AI 없이도 되나요?",
+    keys: ["ai 없", "ai를 안", "ai 안", "인공지능 없", "인공지능 안", "키 없", "키가 없", "api 없", "무료로", "공짜", "규칙 기반", "규칙", "오프라인", "인터넷 없", "인터넷이 없", "인터넷 안"],
+    ex: ["AI 없이도 쓸 수 있나요", "인공지능 안 쓰고도 돼", "API 키 없으면 못 써", "인터넷 없어도 돼"],
     a: "네. AI 키가 없으면 규칙 기반으로 초안을 써요. 생성 창의 [AI 생성] 스위치로 AI와 규칙 기반을 번갈아 비교할 수 있어요.",
     links: [{ label: "생기부 생성", go: "draft" }, { label: "AI 설정", go: "settings:ai" }] },
-  { id: "ai-key", q: "AI 키는 어디에 넣나요?", keys: ["api", "키", "claude", "gemini", "제미나이", "클로드", "gpt", "openrouter", "로컬 llm", "모델", "ai 설정"],
+  { id: "ai-key", q: "AI 키는 어디에 넣나요?",
+    keys: ["api", "키", "claude", "클로드", "gemini", "제미나이", "제미니", "gpt", "지피티", "openai", "오픈ai", "openrouter", "llm", "ollama", "올라마", "모델", "ai 설정", "ai 연결", "ai를 연결", "인공지능 연결", "연결 테스트", "제공자"],
+    ex: ["제미나이 키 어디에 넣어요", "챗gpt 연결하고 싶어", "클로드 api 등록하기", "AI 설정은 어디서 해"],
     a: "설정 → AI에서 제공자를 고르고 키를 넣은 뒤 [연결 테스트]를 눌러요. 키는 PC 보안 저장소에 두고 백업 파일에는 넣지 않아요.",
     links: [{ label: "AI 설정", go: "settings:ai" }] },
-  { id: "length", q: "글자 수(바이트)는 어떻게 맞추나요?", keys: ["바이트", "글자 수", "글자수", "분량", "길이", "1500", "1,500", "500자", "넘쳐", "넘어", "줄이"],
+  { id: "length", q: "글자 수(바이트)는 어떻게 맞추나요?",
+    keys: ["바이트", "byte", "글자 수", "글자수", "자수", "분량", "길이", "1500", "500자", "넘쳐", "넘어", "넘침", "초과", "줄이", "줄여", "길게", "길어", "너무 길", "짧게", "짧아", "늘리"],
+    ex: ["1500바이트 넘어요", "글자수 제한 맞추기", "초안이 너무 길게 써져요"],
     a: "설정 → 항목·분량에서 NEIS 바이트 한도를 정하면 초안이 그 안에 맞춰 써져요. 초안 위에 '1,452/1,500B'처럼 지금 분량이 보여요.",
     links: [{ label: "항목·분량", go: "settings:length" }] },
-  { id: "evidence", q: "어떤 기록이 어떤 문장이 됐는지 볼 수 있나요?", keys: ["근거", "출처", "어느 기록", "어떤 기록", "연결", "반영도", "검토"],
+  { id: "evidence", q: "어떤 기록이 어떤 문장이 됐는지 볼 수 있나요?",
+    keys: ["근거", "출처", "어느 기록", "어떤 기록", "무슨 기록", "반영도", "연결도", "어디서 나온", "어디서 온", "검토 탭", "선으로"],
+    ex: ["어떤 기록이 문장 근거인지 보고 싶어", "이 문장 어디서 나온 거야", "반영도 체크리스트 보기"],
     a: "초안의 문장을 누르면 근거가 된 기록이 선으로 이어져 보여요. 반대로 기록을 누르면 그 기록이 쓰인 문장이 이어져요. 방금 남긴 기록은 빨강으로 보여요. [검토] 탭에서는 문장–근거 연결도와 반영도 체크리스트를 봐요.",
     links: [{ label: "생기부 생성", go: "draft" }] },
-  { id: "neis", q: "NEIS에는 어떻게 옮기나요?", keys: ["neis", "나이스", "복사", "옮기", "내보내", "엑셀로 저장", "엑셀 저장"],
+  { id: "neis", q: "NEIS에는 어떻게 옮기나요?",
+    keys: ["neis", "나이스", "나이스 붙여", "나이스 입력", "나이스로", "neis 붙여", "복사", "옮기", "내보내", "엑셀로 저장", "엑셀 저장", "엑셀로 뽑", "엑셀 파일로", "엑셀로 받", "엑셀 다운", "엑셀로 내려"],
+    ex: ["나이스에 옮기는 법", "기록 엑셀로 뽑고 싶어", "초안 복사해서 붙이기"],
     a: "초안의 [복사]로 NEIS 입력칸에 붙여 넣으면 돼요. 기록 전체는 위쪽 [저장 ▾] → 누가기록 엑셀로 내보내기.",
     links: [{ label: "생기부 생성", go: "draft" }] },
-  { id: "backup", q: "백업은 어떻게 하나요?", keys: ["백업", "복원", "다른 pc", "다른 컴퓨터", "옮겨", "날아", "잃어", "저장"],
+  { id: "backup", q: "백업은 어떻게 하나요?",
+    keys: ["백업", "복원", "복구", "다른 pc", "다른 컴퓨터", "다른 노트북", "새 컴퓨터", "새 pc", "새 노트북", "컴퓨터 바꾸", "컴퓨터를 바꾸", "pc 바꾸", "노트북 바꾸", "기기 변경", "옮겨", "날아", "사라지", "사라져", "사라졌", "없어지", "없어졌", "없어져", "잃어", "포맷", "json", "저장 메뉴", "저장 버튼", "파일로 저장", "전체 저장"],
+    ex: ["백업은 어떻게 해요", "컴퓨터 바꾸면 기록 다 사라져", "다른 PC로 기록 옮기기", "기록 날아가면 어떡해"],
     a: "위쪽 [저장 ▾] → 전체 백업(JSON)으로 설정과 기록을 한 파일로 저장해요. 다른 PC에서는 설정 → 백업에서 불러와요.",
     links: [{ label: "백업", go: "settings:backup" }] },
-  { id: "privacy", q: "학생 개인정보는 안전한가요?", keys: ["개인정보", "보안", "유출", "서버", "암호화", "안전", "이름이 밖"],
+  { id: "privacy", q: "학생 개인정보는 안전한가요?",
+    keys: ["개인정보", "보안", "유출", "서버", "암호화", "안전", "이름이 밖", "이름이 서버", "이름 저장", "이름이 저장", "외부로", "밖으로", "새나", "해킹", "학생 정보", "정보 보호"],
+    ex: ["학생 이름이 서버로 가나요", "학생 정보 외부로 나가", "개인정보 안전해요"],
     a: "학생 이름은 PC에만 있어요. 폰·워치·서버에는 반·번호만 종단간 암호화로 오가고, AI 초안 요청에도 이름이 들어가지 않아요.",
     links: [{ label: "개인정보 처리방침", go: "settings:privacy" }] },
-  { id: "whale", q: "네이버 웨일에서도 쓸 수 있나요?", keys: ["웨일", "웨일 스페이스", "웨일 클래스", "팀보드", "사이드바", "네이버", "웨일북"],
+  { id: "whale", q: "네이버 웨일에서도 쓸 수 있나요?",
+    keys: ["웨일", "웨일 스페이스", "웨일 클래스", "팀보드", "사이드바", "네이버", "웨일북"],
+    ex: ["웨일 사이드바에서 쓸 수 있어", "웨일북에서 돼"],
     a: "웨일 브라우저 사이드바에 모바일 화면을 띄워 기록할 수 있고, 웨일 스페이스 명단 파일을 그대로 가져와요. 위쪽 [웨일 연계]에서 서비스별로 둘러볼 수 있어요.",
     links: [{ label: "웨일 연계", go: "whale" }] },
-  { id: "stairs", q: "기록 계단은 무엇인가요?", keys: ["계단", "출발선", "이름표", "그래프", "기록 흐름"],
+  { id: "stairs", q: "기록 계단은 무엇인가요?",
+    keys: ["계단", "출발선", "이름표", "그래프", "기록 흐름"],
+    ex: ["출발선이 뭐야", "기록 계단 보는 법", "계단 그래프 의미"],
     a: "기록 수에 따라 학생 이름표가 출발선(0건)부터 계단을 올라요. 아래쪽에 남은 학생이 다음 수업에서 눈여겨볼 학생이에요.",
     links: [{ label: "현황판", go: "main" }] },
-  { id: "counsel", q: "상담에 기록을 쓸 수 있나요?", keys: ["상담", "학부모", "면담", "진로"],
+  { id: "counsel", q: "상담에 기록을 쓸 수 있나요?",
+    keys: ["상담", "학부모", "면담"],
+    ex: ["학부모 상담할 때 쓸 수 있어", "면담할 때 기록 활용하기"],
     a: "학생 카드를 눌러 날짜별 기록을 보며 이야기하면 돼요. '9월 18일 모둠 활동에서…'처럼 구체적인 장면으로 말할 수 있어요.",
     links: [{ label: "현황판", go: "main" }] },
-  { id: "student-data", data: true, q: "기록이 부족한 학생은 누구인가요?", keys: ["누구", "몇 명", "어떤 학생", "우리 반", "부족한 학생", "기록 많은", "기록 적은", "가장 많", "가장 적"],
+  { id: "student-data", data: true, q: "기록이 부족한 학생은 누구인가요?",
+    keys: ["누구", "몇 명", "어떤 학생", "어느 학생", "부족한 학생", "적은 학생", "많은 학생", "없는 학생", "부족한", "기록 많은", "기록 적은", "기록이 많은", "기록이 적은", "가장 많", "가장 적", "제일 많", "제일 적", "누가 제일", "누가 가장", "순위", "통계"],
+    ex: ["기록 부족한 학생 누구야", "누가 기록이 제일 적어"],
     a: "챗봇은 학생 기록을 보지 않아요. 현황판의 옅은 붉은 카드와 기록 계단의 출발선 이름표에서 바로 확인하세요.",
     links: [{ label: "현황판", go: "main" }] },
 ];
@@ -141,51 +187,212 @@ export const HELP_FAQ: HelpFaq[] = [
 /** 처음 칩으로 보여 줄 질문 */
 export const HELP_STARTERS = ["roster", "phone", "draft", "no-ai"];
 
-/* ---------- 설명서에서 답 찾기 (AI 없이) ---------- */
+/** 설명서로 답할 수 없을 때의 안내 (지엽적인 질문·엉뚱한 질문) */
+export const HELP_ASK_MAKER = "제작자에게 물어봐주세요.";
 
-// 질문에 흔히 붙는 말 (답을 가르는 데 쓰지 않는다)
-const FILLER = /(어떻게|어디서|어디에|어디|무엇을|무엇|뭐예요|뭔가요|뭐야|뭐지|하나요|할까요|되나요|있나요|인가요|해야|하면|하려면|방법|알려\s*줘|싶어요|싶은데|궁금해요|궁금|주세요|좀|이거|그거|해요|돼요|가요|나요|까요|어요|아요|요|\?|!|\.)/g;
-const flat = (s: string) => s.toLowerCase().replace(/\s+/g, "");
-const clean = (s: string) => flat(s.toLowerCase().replace(FILLER, " "));
-const bigrams = (s: string): Set<string> => { const a = Array.from(s); const out = new Set<string>(); for (let i = 0; i < a.length - 1; i++) out.add(a[i] + a[i + 1]); return out; };
+/**
+ * 설명서 밖이라 챗봇이 짐작으로 답하면 안 되는 것들 → 바로 '제작자에게'.
+ * 앱 오류·설치·가격·계정·지원 기기·화면 꾸미기·설명서에 없는 기능·제작자 정보.
+ */
+const MAKER_HARD = [
+  "오류", "에러", "error", "버그", "튕기", "튕겨", "튕김", "먹통", "멈춰", "멈춤", "멈췄", "렉 걸", "느려", "깨져", "깨짐", "실패", "작동 안", "작동을 안", "안 열려", "안 켜져", "꺼져",
+];
+/** 설치·버전처럼 설명서 답과 함께 나올 수도 있는 말: 설명서 답이 뚜렷하면 그 답을 준다 ('폰 앱 설치 후 연결' → 폰 연결) */
+const MAKER_SOFT = [
+  "설치", "업데이트", "버전", "가격", "요금", "결제", "유료", "돈", "환불", "구독", "라이선스", "저작권",
+  "비밀번호 찾", "비밀번호를 잊", "비밀번호 잊", "비번", "잊어버", "까먹", "분실", "탈퇴", "계정 삭제", "회원가입", "회원 가입",
+  "다크", "테마", "글꼴", "폰트", "글씨 크기", "글자 크기", "화면 크기", "맥", "맥북", "mac", "아이패드", "태블릿", "크롬북", "리눅스", "ios",
+  "학생 사진", "프로필 사진", "얼굴 사진", "출결", "성적", "점수", "채점", "수행평가", "중간고사", "기말고사", "시험 문제",
+  "메신저", "카톡", "카카오", "밴드", "클래스룸", "하이클래스", "알리미", "줌", "팀즈",
+  "제작자", "개발자", "만든 사람", "누가 만들", "만든 곳", "건의", "기능 추가", "신고", "문의", "연락처", "이메일", "전화번호",
+];
 
-export interface HelpHit { faq: HelpFaq; score: number }
-export interface HelpAnswer {
-  /** 가장 맞는 항목 (기준에 못 미치면 null) */
-  best: HelpFaq | null;
-  /** 함께 보여 줄 관련 질문 (최대 2개) */
-  related: HelpFaq[];
+/* ---------- 설명서에서 답 찾기 (AI 없이 · 즉시) ---------- */
+
+// 한 글자 말(폰·키·돈·맥) 뒤에 붙어도 같은 말로 보는 조사 ('폰트'·'키우기'는 다른 말)
+const JOSA = new Set(["은", "는", "이", "가", "을", "를", "에", "로", "으로", "랑", "이랑", "도", "만", "의", "와", "과", "에서", "에서는", "에서도", "에는", "에도", "으로는", "로는", "한테", "에게", "까지", "부터", "처럼", "이나", "나", "요", "이요", "은요", "는요", "이에요", "예요", "이야", "야", "하고", "이고", "엔", "인데", "이라", "이랑은", "들", "들이", "들은", "들을", "들도", "들의"]);
+// 답을 가르지 않는 말 (낱말 전체가 이것이면 버린다)
+const FILLER_WORDS = new Set(["어떻게", "어떡해", "어떻게요", "어디서", "어디에", "어디다", "어디", "어디서요", "뭐", "뭐예요", "뭔가요", "뭐야", "뭐지", "뭐에요", "무엇", "무엇을", "무엇인가요", "방법", "방법은", "좀", "혹시", "그냥", "근데", "그런데", "이거", "그거", "저거", "이건", "그건", "알려줘", "알려", "줘", "주세요", "궁금해요", "궁금해", "궁금", "싶어요", "싶어", "싶은데", "하나요", "하는", "하는법", "법", "할", "수", "있나요", "있어", "있어요", "되나요", "돼", "돼요", "되요", "해", "해요", "하면", "하려면", "나요", "가요", "요", "선생님", "쌤", "저", "제가", "나", "내가", "네", "응", "그리고", "또", "다"]);
+// 이 말 하나만 물으면 무엇을 원하는지 되묻는다
+const GENERIC = new Set(["기록", "설정", "앱", "누가", "사용법", "사용", "도움", "도움말", "학생", "메뉴", "기능", "화면", "버튼", "질문"]);
+const GREET = /^(안녕|안녕하세요|안녕하십니까|하이|hi|hello|헬로|반가워|반갑습니다|반가워요)$/;
+const THANKS = /^(고마워|고마워요|고맙습니다|감사|감사해요|감사합니다|땡큐|thanks|thank you|ㄱㅅ|ㄳ|오케이|ok|알겠어|알겠어요|알겠습니다)$/;
+const QEND = /(이에요|예요|인가요|인데요|인지|나요|까요|어요|아요|해요|돼요|되요|가요|세요|에요|이야|이니|니|냐|죠|지|요)+$/;
+
+interface Query { toks: string[]; compact: string; core: string }
+const normText = (s: string) => s.toLowerCase().replace(/(\d),(\d)/g, "$1$2").replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+const chars = (s: string) => Array.from(s).length;
+function readQuery(s: string): Query {
+  const toks = normText(s).split(" ").filter(Boolean);
+  const coreToks = toks.filter((t) => !FILLER_WORDS.has(t)).map((t) => t.replace(QEND, "") || t);
+  return { toks, compact: toks.join(""), core: coreToks.join("") };
 }
 
-/** 질문 하나를 항목마다 점수로: 같은 뜻의 말(keys) 일치 + 글자 두 개씩 겹침 */
-export function scoreHelp(question: string): HelpHit[] {
-  const q = flat(question), qc = clean(question);
-  const qb = bigrams(qc);
-  return HELP_FAQ.map((faq) => {
-    let score = 0;
-    for (const k of faq.keys) { const kf = flat(k); if (kf && q.includes(kf)) score += 2 + Math.min(Array.from(kf).length, 4) * 0.5; }
-    if (qb.size) {
-      const fb = bigrams(clean(`${faq.q} ${faq.keys.join(" ")}`));
-      let hit = 0; qb.forEach((b) => { if (fb.has(b)) hit++; });
-      score += (hit / qb.size) * 4;
+/** 낱말 하나가 질문 낱말 하나에 들어 있나 (두 글자 이상은 붙어 있어도, 한 글자는 조사만 붙은 꼴 · 끝에 붙은 꼴만) */
+function tokHit(t: string, w: string): boolean {
+  if (w === t) return true;
+  if (w.startsWith(t) && JOSA.has(w.slice(t.length))) return true;
+  if (chars(t) >= 2) return w.includes(t);
+  return chars(w) <= 4 && w.endsWith(t);
+}
+interface Key { raw: string; parts: string[]; joined: string; w: number }
+function toKey(raw: string): Key {
+  const parts = normText(raw).split(" ").filter(Boolean);
+  const joined = parts.join("");
+  const n = chars(joined);
+  return { raw, parts, joined, w: parts.length > 1 ? 3.5 : n === 1 ? 1.5 : n === 2 ? 2.5 : 3 };
+}
+/** 여러 낱말: 붙여 쓴 꼴이 있거나, 차례대로 나오되 사이에 낱말이 하나까지 끼어도 된다 ('학생들 어떻게 등록해요' → 학생 등록) */
+function seqHit(parts: string[], toks: string[]): boolean {
+  for (let i = 0; i < toks.length; i++) {
+    if (!tokHit(parts[0], toks[i])) continue;
+    let at = i, ok = true;
+    for (const p of parts.slice(1)) {
+      const next = [at + 1, at + 2].find((k) => k < toks.length && tokHit(p, toks[k]));
+      if (next === undefined) { ok = false; break; }
+      at = next;
     }
-    return { faq, score };
+    if (ok) return true;
+  }
+  return false;
+}
+const keyHit = (k: Key, q: Query) => (k.parts.length === 1 ? q.toks.some((w) => tokHit(k.parts[0], w)) : q.compact.includes(k.joined) || seqHit(k.parts, q.toks));
+
+const bigrams = (s: string): Set<string> => { const a = Array.from(s); const out = new Set<string>(); for (let i = 0; i < a.length - 1; i++) out.add(a[i] + a[i + 1]); return out; };
+function dice(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let hit = 0; a.forEach((x) => { if (b.has(x)) hit++; });
+  return (2 * hit) / (a.size + b.size);
+}
+
+interface FaqIndex { faq: HelpFaq; keys: Key[]; samples: { core: string; bg: Set<string> }[] }
+let INDEX: FaqIndex[] | null = null;
+let MAKER: { hard: Key[]; soft: Key[] } | null = null;
+function index(): FaqIndex[] {
+  if (!INDEX) {
+    INDEX = HELP_FAQ.map((faq) => ({
+      faq,
+      keys: faq.keys.map(toKey).sort((a, b) => b.joined.length - a.joined.length),
+      samples: [faq.q, ...(faq.ex ?? [])].map((s) => { const core = readQuery(s).core; return { core, bg: bigrams(core) }; }),
+    }));
+    MAKER = { hard: MAKER_HARD.map(toKey), soft: MAKER_SOFT.map(toKey) };
+  }
+  return INDEX;
+}
+
+export interface HelpHit { faq: HelpFaq; score: number; keys: string[]; sim: number }
+
+// 질문에 흔한 움직씨 줄기 (모르는 낱말로 세지 않는다)
+const VERBS = ["넣", "올리", "올려", "쓰", "써", "쓸", "적", "보", "봐", "볼", "만들", "읽", "바꾸", "바꿔", "받", "가져", "붙이", "붙여", "찍", "누르", "눌러", "켜", "끄", "꺼", "열", "고르", "골라", "하", "할", "했", "되", "돼", "될", "됐", "나와", "나오", "나가", "가능", "지원", "사용", "알", "확인", "등록", "추가", "활용", "정리", "남기", "남겨", "싶", "없", "있", "안", "못", "잘", "더", "다시", "같이", "자꾸", "남길", "정해", "정하", "들어오", "들어와", "들어왔", "괜찮", "업로드", "다운로드", "권한", "실수", "자료", "파일", "메뉴", "화면", "버튼", "목록", "내용", "문장", "수업", "학기", "학교", "교사", "번호", "날짜", "시간", "활동", "관찰", "모둠", "처음", "지금", "매번", "한번", "때문", "부분", "기능", "문제", "형식", "양식", "언제", "많", "적", "연계", "뭐로", "어떤", "무슨", "새로", "전체", "모두", "각각", "위치", "어디", "제일", "가장", "너무", "여기", "거기", "이", "그", "저", "우리", "내", "제"];
+let VOCAB: string[] | null = null;
+/** 챗봇이 아는 말인가 (항목 낱말·예시 질문·흔한 움직씨) */
+function known(w: string): boolean {
+  if (!VOCAB) {
+    const words = new Set<string>();
+    const add = (s: string) => readQuery(s).toks.forEach((t) => { const b = t.replace(QEND, "") || t; if (chars(b) >= 2) words.add(b); });
+    for (const f of HELP_FAQ) { f.keys.forEach(add); (f.ex ?? []).forEach(add); add(f.q); }
+    for (const s of HELP_SECTIONS) { add(s.title); s.lines.forEach(add); }
+    [...MAKER_HARD, ...MAKER_SOFT].forEach(add);
+    VOCAB = [...words];
+  }
+  let b = w.replace(QEND, "") || w;
+  for (const j of [...JOSA].sort((x, y) => y.length - x.length)) if (b.endsWith(j) && chars(b) - chars(j) >= 1) { b = b.slice(0, b.length - j.length); break; }
+  if (FILLER_WORDS.has(w) || GENERIC.has(b) || chars(b) < 2 || /^\d+(반|번|교시|월|일|명|건|개|학기)?$/.test(b)) return true;
+  if (VERBS.some((v) => b.startsWith(v))) return true;
+  return VOCAB.some((v) => b.includes(v) || (chars(b) >= 2 && v.startsWith(b)));
+}
+/** 질문 속 모르는 낱말 수 ('교육청 공문 써 줘' → 교육청·공문) */
+function unknownWords(question: string): string[] {
+  return readQuery(question).toks.filter((t) => !known(t));
+}
+
+/** 질문 하나를 항목마다 점수로: 같은 뜻의 말(keys) 일치 + 예시 질문과 글자 두 개씩 겹친 정도 */
+export function scoreHelp(question: string): HelpHit[] {
+  const q = readQuery(question);
+  const qb = bigrams(q.core);
+  return index().map(({ faq, keys, samples }) => {
+    let score = 0;
+    const got: string[] = [];
+    for (const k of keys) {
+      // 이미 센 긴 말에 들어 있는 짧은 말은 다시 세지 않는다 ('녹음 추천' 뒤의 '녹음')
+      if (got.some((g) => g.includes(k.joined)) || !keyHit(k, q)) continue;
+      got.push(k.joined);
+      score += k.w;
+    }
+    let sim = 0;
+    for (const s of samples) { if (s.core && s.core === q.core) { sim = 2; break; } sim = Math.max(sim, dice(qb, s.bg)); }
+    // 두 글자짜리 짧은 질문은 글자 겹침으로 가르지 않는다 ('기록' 한 낱말이 아무 항목에나 붙지 않게)
+    if (qb.size >= 2 && sim >= 0.3) score += sim * 5;
+    return { faq, score, keys: got, sim };
   }).sort((a, b) => b.score - a.score);
 }
 
-const THRESHOLD = 2.4;
-/** 설명서에서 답 찾기. 학생 기록을 묻는 질문(누구·몇 명 …)은 사용법 낱말이 없을 때만 그 안내로 */
+/**
+ * - answer: 설명서에 맞는 답이 있다
+ * - data: 학생 기록을 묻는다 (챗봇은 기록을 보지 않으니 현황판 안내)
+ * - unsure: 비슷한 항목은 있지만 확실하지 않다 (AI 가 있으면 AI 에 묻고, 없으면 '제작자에게' + 비슷한 질문)
+ * - maker: 설명서 밖 (지엽적인 질문·앱 오류·엉뚱한 질문) → '제작자에게 물어봐주세요'
+ * - ambiguous: '기록'처럼 한 낱말만 물어 무엇을 원하는지 되묻는다
+ * - chat: 인사·고맙다는 말
+ */
+export type HelpKind = "answer" | "data" | "unsure" | "maker" | "ambiguous" | "chat";
+export interface HelpAnswer {
+  kind: HelpKind;
+  /** 답으로 쓴 항목 (answer · data 일 때만) */
+  best: HelpFaq | null;
+  /** 함께 보여 줄 질문 (최대 2개, ambiguous 는 3개) */
+  related: HelpFaq[];
+  /** 챗봇이 보여 줄 답 */
+  text: string;
+  /** 가장 높은 점수 (확인용) */
+  score: number;
+}
+
+const SURE = 2.4;   // 이 점수부터 설명서 답
+const NEAR = 1.2;   // 이 점수부터 '비슷한 항목'으로 보여 준다
+const starters = () => HELP_STARTERS.map((id) => HELP_FAQ.find((f) => f.id === id)!);
+const fill = (list: HelpFaq[], n: number, skip?: HelpFaq | null) => {
+  for (const f of starters()) if (list.length < n && f !== skip && !list.includes(f)) list.push(f);
+  return list;
+};
+
+/** 설명서에서 답 찾기 (외부 전송 없음 · 즉시). 학생 기록을 묻는 질문(누구·몇 명 …)은 사용법 낱말이 없을 때만 그 안내로 */
 export function searchHelp(question: string): HelpAnswer {
-  if (!question.trim()) return { best: null, related: HELP_STARTERS.map((id) => HELP_FAQ.find((f) => f.id === id)!).slice(0, 2) };
+  const q = readQuery(question);
+  if (!q.compact) return { kind: "ambiguous", best: null, related: starters().slice(0, 2), text: "누가 사용법을 물어보세요.", score: 0 };
   const hits = scoreHelp(question);
   const howTo = /(어떻게|방법|하려면|어디)/.test(question);
-  let ranked = hits;
-  if (howTo) ranked = hits.filter((h) => !h.faq.data || h.score >= THRESHOLD * 2).concat(hits.filter((h) => h.faq.data && h.score < THRESHOLD * 2));
+  const ranked = howTo ? hits.filter((h) => !h.faq.data || h.score >= SURE * 2).concat(hits.filter((h) => h.faq.data && h.score < SURE * 2)) : hits;
   const top = ranked[0];
-  const best = top && top.score >= THRESHOLD ? top.faq : null;
-  const related = ranked.filter((h) => h.faq !== best && !h.faq.data && h.score > 0.6).slice(0, 2).map((h) => h.faq);
-  if (related.length < 2) for (const id of HELP_STARTERS) { const f = HELP_FAQ.find((x) => x.id === id)!; if (f !== best && !related.includes(f) && related.length < 2) related.push(f); }
-  return { best, related };
+  const near = (n: number, skip?: HelpFaq | null) => ranked.filter((h) => h.faq !== skip && !h.faq.data && h.score >= NEAR).slice(0, n).map((h) => h.faq);
+
+  // 앱 오류·가격·지원 기기처럼 설명서 밖이 분명한 질문은 짐작하지 않고 제작자에게
+  index();
+  if (MAKER!.hard.some((k) => keyHit(k, q)) || (MAKER!.soft.some((k) => keyHit(k, q)) && top.score < SURE + 1.5)) {
+    const rel = near(2);
+    return { kind: "maker", best: null, related: rel, score: top.score,
+      text: `그 내용은 설명서에 없어서 제가 확실히 답하기 어려워요. ${HELP_ASK_MAKER}` };
+  }
+  if (top.score < SURE) {
+    if (GREET.test(q.core) || GREET.test(q.compact)) return { kind: "chat", best: null, related: starters().slice(0, 2), score: top.score, text: "안녕하세요! 누가 사용법을 물어보세요. 답과 함께 그 화면으로 가는 버튼을 드려요." };
+    if (THANKS.test(q.core) || THANKS.test(q.compact)) return { kind: "chat", best: null, related: [], score: top.score, text: "도움이 됐다니 다행이에요. 더 궁금한 것이 있으면 언제든 물어보세요." };
+    if (GENERIC.has(q.core) || GENERIC.has(q.compact)) {
+      const word = GENERIC.has(q.core) ? q.core : q.compact;
+      const rel = HELP_FAQ.filter((f) => !f.data && (f.q.includes(word) || f.keys.some((k) => k.includes(word)))).slice(0, 3);
+      return { kind: "ambiguous", best: null, related: fill(rel, 3), score: top.score, text: `'${word}'의 무엇이 궁금하세요? 아래에서 고르거나 조금 더 자세히 물어봐 주세요.` };
+    }
+  }
+  // 낱말 하나만 걸렸는데 모르는 낱말이 섞여 있으면 지엽적인 질문으로 본다 ('학년 올라가면 기록 넘어가?' → '넘어'만 분량 항목)
+  const thin = top.keys.length <= 1 && top.sim < 0.45 && top.score < SURE * 2;
+  if (top.score >= SURE && !(thin && unknownWords(question).length > 0)) {
+    const best = top.faq;
+    return { kind: best.data ? "data" : "answer", best, related: fill(near(2, best), 2, best), text: best.a, score: top.score };
+  }
+  if (top.score >= NEAR) {
+    return { kind: "unsure", best: null, related: fill(near(2), 1), score: top.score,
+      text: `딱 맞는 답을 설명서에서 찾지 못했어요. 아래 질문이 아니라면 ${HELP_ASK_MAKER}` };
+  }
+  return { kind: "maker", best: null, related: [], score: top.score, text: `그 내용은 제가 답할 수 있는 범위(누가 사용법) 밖이에요. ${HELP_ASK_MAKER}` };
 }
 
 /* ---------- AI 로 답하기 (키가 있을 때) ---------- */
@@ -212,7 +419,7 @@ export function helpChatRequest(question: string, history: HelpTurn[], names: st
   const system = [
     "너는 교사용 기록 앱 '누가'의 도움말 도우미다.",
     "아래 설명서에 있는 내용만 근거로, 한국어 존댓말 2~4문장으로 짧게 답한다. 버튼·메뉴 이름은 설명서에 쓰인 그대로 [ ]로 적는다.",
-    "설명서에 없는 기능은 지어내지 말고 '설명서에서 찾지 못했어요'라고 한 뒤 가장 가까운 항목을 안내한다.",
+    `설명서로 답할 수 없는 질문(설명서에 없는 기능·앱 오류·지엽적인 내용·앱과 상관없는 질문)은 지어내지 말고 '그 내용은 설명서에 없어요. ${HELP_ASK_MAKER}'라고만 답한다.`,
     "학생 기록·성적·특정 학생에 대한 질문에는 답하지 않고, 현황판에서 확인하라고 안내한다.",
     "",
     helpManualText(),

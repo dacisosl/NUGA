@@ -1,13 +1,14 @@
 // 도움말: 위쪽 막대 [?](또는 F1) → 오른쪽 칸. [사용설명서 | 묻고 답하기]
 // - 사용설명서: 핵심 7절, 절마다 [바로 가기]로 그 화면을 연다.
-// - 묻고 답하기: 앱 사용법만 답한다. AI 가 없으면 설명서에서 찾아 답하고(외부 전송 없음),
-//   AI 가 있으면 설명서만 근거로 AI 가 답한다(질문 속 학생 이름은 '학생'으로 가려 보낸다). 학생 기록은 읽지 않는다.
+// - 묻고 답하기: 앱 사용법만 답한다. 늘 설명서에서 먼저 찾아 바로 답한다(외부 전송 없음 · AI 를 기다리지 않음).
+//   설명서 밖의 지엽적인 질문·엉뚱한 질문은 '제작자에게 물어봐주세요'로 안내한다.
+//   AI 가 있으면 애매한 질문만 설명서를 근거로 AI 에 묻는다(질문 속 학생 이름은 '학생'으로 가려 보낸다). 학생 기록은 읽지 않는다.
 // 대화는 이 실행 동안만 남고 저장하지 않는다.
 import React, { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import {
   HELP_FAQ, HELP_FLOW, HELP_SECTIONS, HELP_STARTERS, PROVIDER_INFO, helpChatRequest, searchHelp,
-  type HelpFaq, type HelpGo, type HelpLink, type HelpTurn,
+  type HelpAnswer, type HelpFaq, type HelpGo, type HelpLink, type HelpTurn,
 } from "@nuga/core";
 import { useStore } from "../store";
 import { aiErrorText, aiReady } from "../lib/ai";
@@ -18,11 +19,12 @@ import { Icon } from "./ui";
 import "./help.css";
 
 type Tab = "manual" | "chat";
-interface Msg { id: number; role: "user" | "bot"; text: string; src?: string; note?: string; links?: HelpLink[]; related?: HelpFaq[]; pending?: boolean }
+interface Msg { id: number; role: "user" | "bot"; text: string; src?: string; note?: string; links?: HelpLink[]; related?: HelpFaq[]; relLabel?: string; pending?: boolean }
 interface HelpState { tab: Tab | null; msgs: Msg[]; useAi: boolean }
 export const useHelp = create<HelpState>(() => ({ tab: null, msgs: [], useAi: true }));
 
 let seq = 0;
+const REL_LABEL: Partial<Record<HelpAnswer["kind"], string>> = { unsure: "혹시 이 질문인가요?", ambiguous: "이런 걸 물어보실 수 있어요", chat: "이런 걸 물어보실 수 있어요" };
 const narrow = () => window.matchMedia("(max-width: 760px)").matches;
 
 /** 도움말 열기·닫기 (오른쪽 칸은 하나만: 열면 웨일 둘러보기 칸은 알약으로 접는다) */
@@ -124,13 +126,11 @@ function Chat() {
 
   const push = (m: Omit<Msg, "id">) => { const id = ++seq; useHelp.setState((s) => ({ msgs: [...s.msgs, { ...m, id }] })); return id; };
   const replace = (id: number, m: Omit<Msg, "id">) => useHelp.setState((s) => ({ msgs: s.msgs.map((x) => (x.id === id ? { ...m, id } : x)) }));
-  /** 설명서에서 찾은 답 */
-  const local = (q: string, note?: string): Omit<Msg, "id"> => {
-    const r = searchHelp(q);
-    return r.best
-      ? { role: "bot", text: r.best.a, src: `설명서 · ${r.best.q}`, links: r.best.links, related: r.related, note }
-      : { role: "bot", text: "설명서에서 찾지 못했어요. 이런 질문은 어떨까요?", src: "설명서", related: r.related, note };
-  };
+  /** 설명서에서 찾은 답 (또는 제작자 안내 · 되묻기 · 인사) */
+  const local = (r: HelpAnswer, note?: string): Omit<Msg, "id"> => ({
+    role: "bot", text: r.text, links: r.best?.links, related: r.related, relLabel: REL_LABEL[r.kind], note,
+    src: r.kind === "answer" && r.best ? `설명서 · ${r.best.q}` : r.kind === "data" ? "설명서" : r.kind === "maker" || r.kind === "unsure" ? "설명서에 없는 내용" : undefined,
+  });
 
   const ask = async (raw: string) => {
     const q = raw.trim();
@@ -139,17 +139,17 @@ function Chat() {
     const history: HelpTurn[] = useHelp.getState().msgs.filter((m) => !m.pending).map((m) => ({ role: m.role, text: m.text }));
     push({ role: "user", text: q });
     const found = searchHelp(q);
-    // 학생 기록을 묻는 질문은 AI 에 보내지 않고 안내만
-    if (!(useAi && prov) || found.best?.data) { push(local(q)); return; }
+    // 설명서에 있는 답 · 학생 기록 안내 · 제작자 안내 · 인사는 AI 를 기다리지 않고 바로. AI 는 애매한 질문에만
+    if (found.kind !== "unsure" || !(useAi && prov)) { push(local(found)); return; }
     const id = push({ role: "bot", text: "", pending: true });
     try {
       const names = useStore.getState().doc.students.map((s) => s.name);
       const req = helpChatRequest(q, history, names);
       const out = (await prov.generate({ system: req.system, user: req.user, maxTokens: 600 })).trim();
       if (!out) throw new Error("빈 답");
-      replace(id, { role: "bot", text: out, src: `AI · ${provName}`, links: found.best?.links, related: found.related, note: req.masked ? "학생 이름은 '학생'으로 바꿔 보냈어요" : undefined });
+      replace(id, { role: "bot", text: out, src: `AI · ${provName}`, related: found.related, relLabel: REL_LABEL.unsure, note: req.masked ? "학생 이름은 '학생'으로 바꿔 보냈어요" : undefined });
     } catch (e) {
-      replace(id, local(q, `AI 연결 실패(${aiErrorText(e)}) · 설명서에서 찾은 답`));
+      replace(id, local(found, `AI 연결 실패(${aiErrorText(e)})`));
     }
   };
   const starters = HELP_STARTERS.map((id) => HELP_FAQ.find((f) => f.id === id)!).filter(Boolean);
@@ -167,7 +167,7 @@ function Chat() {
               <Links links={m.links} />
               {m.src && <small className="hp-src">{m.src}</small>}
               {m.note && <small className="hp-note">{m.note}</small>}
-              {!!m.related?.length && <div className="hp-chips rel"><span>관련 질문</span>{m.related.map((f) => <button key={f.id} type="button" onClick={() => void ask(f.q)}>{f.q}</button>)}</div>}
+              {!!m.related?.length && <div className="hp-chips rel"><span>{m.relLabel ?? "관련 질문"}</span>{m.related.map((f) => <button key={f.id} type="button" onClick={() => void ask(f.q)}>{f.q}</button>)}</div>}
             </>}
           </div>
         ))}
@@ -181,7 +181,7 @@ function Chat() {
       <div className="hp-foot">
         {prov ? <>
           <label className="hp-sw"><input type="checkbox" checked={useAi} onChange={(e) => useHelp.setState({ useAi: e.target.checked })} />AI로 답하기</label>
-          <span>{useAi ? `질문만 ${provName}로 보냅니다 · 학생 이름은 빼고` : "설명서에서 찾아 답합니다 · 외부로 보내지 않음"}</span>
+          <span>{useAi ? `설명서에 있는 답은 바로 · 애매한 질문만 ${provName}로 (학생 이름은 빼고)` : "설명서에서 찾아 답합니다 · 외부로 보내지 않음"}</span>
         </> : <span>설명서에서 찾아 답합니다 · 외부로 보내지 않음</span>}
         {!!msgs.length && <button type="button" className="hp-clear" onClick={() => useHelp.setState({ msgs: [] })} disabled={busy}>지우기</button>}
       </div>
