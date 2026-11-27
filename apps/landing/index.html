@@ -11,13 +11,16 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
   <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="ask.css">
   <script src="site.js" defer></script>
+  <script src="ask-data.js" defer></script>
+  <script src="ask.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">본문으로</a>
   <header class="header">
     <a class="brand" href="#hero" aria-label="누가 처음으로"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 26h9v-8h8v-8h9"/></svg>누가<span>NUGA</span></a>
-    <nav aria-label="주요 메뉴"><a href="#method-manual">기록 방법</a><a href="#privacy">보호 원칙</a><a class="header-whale" href="#whale" title="웨일 연계: 웨일 스페이스·웨일 클래스·팀보드·웨일 브라우저 (데모)"><img src="assets/whale-logo.png" width="86" height="86" alt=""><small>웨일 연계</small></a><a class="header-cta" href="https://dacisosl.github.io/NUGA/app/" data-app-link>앱 열기 <span aria-hidden="true">→</span></a></nav>
+    <nav aria-label="주요 메뉴"><a href="#method-manual">기록 방법</a><a href="#privacy">보호 원칙</a><a class="header-whale" href="#whale" title="웨일 연계: 웨일 스페이스·웨일 클래스·팀보드·웨일 브라우저 (데모)"><img src="assets/whale-logo.png" width="86" height="86" alt=""><small>웨일 연계</small></a><button class="header-ask" id="ask-button" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="ask-panel" aria-label="궁금한 것 물어보기" title="궁금한 것 물어보기">?</button><a class="header-cta" href="https://dacisosl.github.io/NUGA/app/" data-app-link>앱 열기 <span aria-hidden="true">→</span></a></nav>
   </header>
   <main id="main">
     <section class="screen hero" id="hero" aria-labelledby="hero-title" data-name="좋은 기록">

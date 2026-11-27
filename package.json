@@ -7,6 +7,7 @@
     "dev": "npm run dev -w @nuga/desktop",
     "build": "node tools/build-privacy.mjs && npm run build -w @nuga/desktop",
     "privacy": "node tools/build-privacy.mjs",
+    "landing-help": "node tools/build-landing-help.mjs",
     "tauri": "npm run tauri -w @nuga/desktop",
     "relay": "npm start -w @nuga/relay",
     "test": "npm test -w @nuga/core && npm test -w @nuga/relay"

@@ -14,6 +14,8 @@ const bytes = (t) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 127 ? 3 : 1)
 const LOGO = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 25h7v-7h7v-7h8" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
 // 부스 태블릿은 ?booth=1 로 연다: 첫 화면에 QR, 손대지 않으면 더 빨리 처음으로
 const BOOTH = new URLSearchParams(location.search).has("booth");
+// [앱 소개 페이지로]: 소개 페이지가 '체험에서 왔다'를 알고 [?]·아래로 둘러보기를 처음 한 번 짚어 준다 (부스는 매번)
+const INTRO = BOOTH ? "../?from=trial&booth=1" : "../?from=trial";
 const DRV = window.driver?.js?.driver;
 // 효과음 · 흔들림 · 쿵 (fx.js). 그 파일이 없거나 막혀도 체험은 그대로 돌게 빈 것으로 받는다
 /*fx*/ const FX = window.FX || { s() {}, shake() {}, thud() {}, burst() {}, flash() {}, calm() {} };
@@ -1259,7 +1261,7 @@ function sPoints(root) {
       <div class="pa-copy">
         <h2><small>누가 생기부 초안의</small><em>강점 <span class="t3">3가지</span></em></h2>
         <ol class="pa-list">${PTS.map(([h, t], k) => `<li class="pa"><i>${k + 1}</i><p><b>${h}</b><span>${t}</span></p></li>`).join("")}</ol>
-        <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div>
+        <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="${INTRO}">앱 소개 페이지로 →</a></div>
       </div>
       <p class="vote" id="vote">${BALLOT}<span class="v-lead">체험이 마음에 드셨다면</span><b class="v-no">3번</b><b class="v-name">'NUGA 누가'</b><span class="v-ask">투표 부탁드립니다!</span></p></section>`;
   const v = $(".pa-art video");
@@ -1314,7 +1316,7 @@ function sTalk(root) {
     }
     say("l", fill(T.after), "happy");
     FX.s("big"); FX.shake(2); FX.burst("#bl", { kind: "confetti", n: 30 });   // 체험의 마지막
-    $("#tkact").innerHTML = '<a class="cta" href="../">앱 소개 페이지로 <span aria-hidden="true">→</span></a>';
+    $("#tkact").innerHTML = `<a class="cta" href="${INTRO}">앱 소개 페이지로 <span aria-hidden="true">→</span></a>`;
     $("#replay").hidden = false;
   };
   $("#tnext").addEventListener("click", next);

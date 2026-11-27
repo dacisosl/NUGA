@@ -83,6 +83,8 @@ const PARAPHRASES: [string, string][] = [
   ["학부모 면담 때 활용", "counsel"], ["면담 자료로 쓰기", "counsel"], ["상담 때 활용법", "counsel"], ["학부모 상담 자료", "counsel"],
   ["누가 기록이 제일 적어?", "student-data"], ["기록 제일 많은 학생", "student-data"], ["몇 명이 기록 없어?", "student-data"],
   ["기록 적은 학생 알려줘", "student-data"], ["가장 기록 적은 애", "student-data"],
+  ["누가는 어떤 앱이에요?", "about"], ["이 앱 뭐 하는 앱이야", "about"], ["누가 앱 장점이 뭐야", "about"],
+  ["어떻게 시작하면 돼?", "start"], ["데모 데이터로 먼저 보고 싶어", "start"], ["처음 설정 순서", "start"], ["체험해 볼 수 있어?", "start"],
 ];
 
 // 지엽적인 질문 · 설명서에 없는 기능 · 앱 오류 · 엉뚱한 질문 → 제작자에게 (짐작해서 답하지 않는다)

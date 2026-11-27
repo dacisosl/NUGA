@@ -59,6 +59,9 @@ jobs:
       - name: Test core + relay
         working-directory: main
         run: npm test
+      - name: Build landing help bot (same answers as the app help)
+        working-directory: main
+        run: node tools/build-landing-help.mjs
       - name: Build desktop web bundle
         working-directory: main
         run: npm run build -w @nuga/desktop
@@ -75,7 +78,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir -p site/app
-          cp main/apps/landing/index.html main/apps/landing/site.css main/apps/landing/site.js site/
+          cp main/apps/landing/index.html main/apps/landing/site.css main/apps/landing/site.js main/apps/landing/ask.css main/apps/landing/ask.js main/apps/landing/ask-data.js site/
           cp -r main/apps/landing/assets site/
           cp -r main/apps/landing/trial site/
           cp -r main/apps/desktop/dist/. site/app/
