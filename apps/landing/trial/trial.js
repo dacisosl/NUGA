@@ -273,6 +273,9 @@ const RULES = [
   { re: /경청|귀 ?기울|(끝까지|잘|차분히) ?들(어|음|었|고)|들어 ?(주|줌)/, cat: [2, 1], s: "show",
     e: ["다른 사람의 이야기를 존중하는 바른 대화 태도", "상대를 존중하는 바른 대화 태도", "친구의 마음을 헤아리는 공감 능력"],
     m: ["타인의 의견을 존중하는 의사소통 태도", "경청하는 태도"], h: ["타인의 말에 귀 기울이는 공감 능력", "상대를 존중하는 대화 태도"] },
+  // 대안 · 절충 (의견이 엇갈릴 때 '요일을 나눠 쓰자' '번갈아 하자' 같은 해결책. '나눠'를 베풂으로 읽지 않게 친구 돕기보다 먼저)
+  { re: /대안|절충|타협|중재|(나눠|나누어|번갈아|돌아가며|교대로)서? ?(쓰|써|사용|하자|하기로|정하|정해|맡)|(의견|생각)이? ?(엇갈|달라|다를|다른데)/, cat: [1, 1], s: "show",
+    e: ["서로 다른 생각을 슬기롭게 조정하는 힘", "친구들과 함께 문제를 풀어 가는 힘"], m: ["서로 다른 의견을 조율하는 문제 해결력", "합리적인 대안을 찾는 문제 해결력"], h: ["서로 다른 생각을 슬기롭게 조정하는 힘", "갈등 상황에서 해결책을 찾는 조정 능력"] },
   // 친구를 돕고 챙김
   { re: /(친구|모둠원|동료|짝|동생|후배|전학|1학년|어린)[^]*(도와|도움|돕|알려|가르|설명|챙기|챙겨|챙김|안내|데려|부축|일으|돌보|돌봐|빌려|나눠|나누어)/, cat: [2, 2], s: "show",
     e: [{ if: /나눠|나누어|빌려/, t: "가진 것을 기꺼이 베푸는 따뜻한 마음" }, "주변을 살피는 따뜻한 마음", "친구를 아끼는 다정한 마음"],
@@ -1241,7 +1244,7 @@ function sBatch(root) {
 }
 
 /* ---------- 3-3 · 강점 3가지: 왼쪽 강점 세 줄 | 오른쪽 기록의 계단(소개 페이지 첫 화면 영상), 아래 투표 부탁 ---------- */
-const BALLOT = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 17h22v11H5z" fill="#0b1d33"/><path d="M9 4h14v13H9z" fill="#fff" stroke="#0b1d33" stroke-width="2.2" stroke-linejoin="round"/><path d="m12.5 10.5 2.6 2.6 4.6-5.2" fill="none" stroke="#2456b5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17h26" stroke="#0b1d33" stroke-width="2.4" stroke-linecap="round"/></svg>';
+const BALLOT = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 17h22v11H5z" fill="#accdff"/><path d="M9 4h14v13H9z" fill="#fff" stroke="#0b1d33" stroke-width="2.2" stroke-linejoin="round"/><path d="m12.5 10.5 2.6 2.6 4.6-5.2" fill="none" stroke="#2456b5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17h26" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
 function sPoints(root) {
   const L = ensure(), rows = batchRows(L);
   const written = rows.filter((r) => !r.zero), sum = written.reduce((a, r) => a + r.n, 0);
@@ -1252,9 +1255,9 @@ function sPoints(root) {
     ["반 전체를 한 번에", `버튼 한 번 · ${n(rows.length)}명 모두 <em>1,500B</em> 안`],
   ];
   root.innerHTML = `<section class="pts">
-      <div class="pa-art" aria-hidden="true"><video muted loop playsinline preload="auto" poster="assets/stairs.webp"><source src="../assets/growth-motion.mp4" type="video/mp4"></video></div>
+      <div class="pa-art" aria-hidden="true"><video muted loop playsinline preload="auto" poster="assets/stairs.webp"><source src="../assets/stairs-climb.mp4" type="video/mp4"></video></div>
       <div class="pa-copy">
-        <h2><small>누가 생기부 초안의</small><em>강점 3가지</em></h2>
+        <h2><small>누가 생기부 초안의</small><em>강점 <span class="t3">3가지</span></em></h2>
         <ol class="pa-list">${PTS.map(([h, t], k) => `<li class="pa"><i>${k + 1}</i><p><b>${h}</b><span>${t}</span></p></li>`).join("")}</ol>
         <div class="pt-end" id="ptend"><button class="btn2" id="totalk" type="button">다른 활용 보기 · 상담</button><a class="btn2 fill" href="../">앱 소개 페이지로 →</a></div>
       </div>

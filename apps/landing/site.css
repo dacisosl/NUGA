@@ -81,3 +81,5 @@
 @media(max-width:800px){.hero .hero-actions .button.trial{min-height:66px;padding:0 10px 0 20px}.button.trial .t-txt b{font-size:20px}.button.trial .t-txt small{font-size:12px}.button.trial .t-arr{width:46px;height:46px}}
 @media(prefers-reduced-motion:reduce){.hero .hero-actions .button.trial,.hero .hero-actions .button.trial::after{animation:none}}/* 첫 화면 계단 영상: 마우스를 따라 움직일 때(살짝 확대·이동) 틀 밖으로 삐져나온 가장자리가 보이지 않게 자르고, 네 변을 부드럽게 녹인다 */
 .hero-art{overflow:hidden;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 6%,#000 96%,transparent 100%);mask-image:linear-gradient(0deg,transparent 0,#000 6%,#000 96%,transparent 100%)}
+/* 첫 화면 계단 영상(stairs-climb.mp4): 학생은 왼쪽 아래에서 오르고 교사는 오른쪽 위에 있다. 좁은 화면에서는 영상을 16:9 그대로 넓게 깔아 두 사람이 모두 보이게 한다 */
+@media(max-width:800px){.hero-art{inset:auto -14% 28px -23%;aspect-ratio:16/9}.hero-art video{object-position:50% 50%}}
