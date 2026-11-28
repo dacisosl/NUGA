@@ -20,6 +20,10 @@ textarea{user-select:text;-webkit-user-select:text}
 .tb:hover{border-color:var(--accent);background:rgba(172,205,255,.1)}
 #prev{background:rgba(172,205,255,.16);border-color:rgba(172,205,255,.55)}
 #prev span{font-size:21px;line-height:1;margin-top:-3px}
+/* 첫 화면(방식 고르기)에만 [이전] 자리에 [홈]: 소개 페이지로 */
+#tohome{display:none;text-decoration:none;background:rgba(172,205,255,.16);border-color:rgba(172,205,255,.55)}
+#tohome svg{width:18px;height:18px;margin-left:-2px}
+#stage[data-scene=pick] #tohome{display:inline-flex}
 .brand{display:flex;align-items:center;gap:6px;color:var(--ink);text-decoration:none}
 .brand svg{width:20px;height:20px;color:var(--accent)}
 .brand b{font-size:18px;font-weight:800;letter-spacing:-.04em}
