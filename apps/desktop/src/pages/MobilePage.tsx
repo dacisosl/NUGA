@@ -5,6 +5,7 @@ import {
 } from "@nuga/core";
 import { Sheet } from "../App";
 import { classList, studentsOf, useStore } from "../store";
+import { VoicePanel } from "./MobileVoice";
 import "./mobile.css";
 
 /**
@@ -15,6 +16,7 @@ import "./mobile.css";
  * 같은 아이디로 로그인한 폰에서 저장하면 PC 로 보내져 PC 에 팝업이 뜬다. 폰 너비·터치 화면에서는 팝업 없이
  * 아래 알림 띠만 보이고, 기록은 미반영에 쌓인다 (PC에서 [미반영]으로 처리).
  * 모양은 폰 앱의 '밤의 틀 · 빛나는 종이'(mobile.css)를 따른다. PC에서는 폰 틀 안에, 폰에서는 화면 가득.
+ * 맨 위 [번호 기록 | 자동녹음]: 자동녹음은 짧게 말한 것을 글로 옮겨 PC 추천 카드로 띄운다 (MobileVoice.tsx).
  */
 
 /** 기록 판 상태: 카테고리는 고르지 않는다 — 늘 0(미정), PC가 보충할 때 정한다 */
@@ -80,6 +82,7 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
   useEffect(() => { const t = setInterval(() => setTick(Date.now()), 15_000); return () => clearInterval(t); }, []);
   const now = useMemo(() => new Date(tick), [tick]);
   const [snack, setSnack] = useState<{ text: string; id?: string } | null>(null);
+  const [tab, setTab] = useState<"no" | "voice">("no");
   const snackTimer = useRef<number>();
   useEffect(() => () => window.clearTimeout(snackTimer.current), []);
   const showSnack = (text: string, id?: string) => {
@@ -135,9 +138,18 @@ export function MobilePage({ forcePhone = false }: { forcePhone?: boolean }) {
         <div className="mp-stage">
           <div className={`mp-phone ${phone ? "full" : ""}`}>
             <div className="mp-recscreen">
+              {classes.length > 0 && (
+                <div className="mp-tabs" role="tablist" aria-label="기록 방식">
+                  <button type="button" role="tab" aria-selected={tab === "no"} className={tab === "no" ? "on" : ""} onClick={() => setTab("no")}>번호 기록</button>
+                  <button type="button" role="tab" aria-selected={tab === "voice"} className={tab === "voice" ? "on" : ""} onClick={() => setTab("voice")}><i aria-hidden className="mv-dot" />자동녹음</button>
+                </div>
+              )}
               {classes.length === 0
                 ? <><TopRow cls="" classes={[]} subject={subject} now={now} onClass={() => {}} /><div className="mp-none">{role === "phone" && linked ? "PC와 연결 중… PC에서도 같은 아이디로 로그인하세요" : "PC 설정에서 반·명단을 먼저 등록하세요"}</div></>
-                : <RecordPanel doc={doc} sheet={sheet} setSheet={setSheet} reelStart={reelStart} onSave={save} subject={subject} now={now} />}
+                : tab === "voice"
+                  ? <VoicePanel cls={sheet.cls} period={resolveNow(doc.settings, now).current?.class === sheet.cls ? resolveNow(doc.settings, now).current!.period : 0} phone={phone} onDone={(t) => showSnack(t)}
+                      top={<TopRow cls={sheet.cls} classes={classes} subject={subject} now={now} onClass={(c) => { if (c !== sheet.cls) setSheet((s) => ({ ...s, cls: c, no: reelStart(c) })); }} />} />
+                  : <RecordPanel doc={doc} sheet={sheet} setSheet={setSheet} reelStart={reelStart} onSave={save} subject={subject} now={now} />}
             </div>
             {snack && (
               <div className="mp-snack" role="status"><span className="grow">{snack.text}</span>{snack.id && <button onClick={() => undo(snack.id!)}>취소</button>}</div>

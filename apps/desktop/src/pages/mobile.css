@@ -176,3 +176,34 @@
 .mp-page.phone .mp-stage { display: block; }
 .mp-phone.full { width: 100%; height: auto; min-height: calc(100dvh - 140px); border: 0; border-radius: 14px; box-shadow: none; }
 .mp-phone.full::after { display: none; }
+
+/* =====================================================================
+   맨 위 [번호 기록 | 자동녹음] + 자동녹음 판 (MobileVoice.tsx)
+   ===================================================================== */
+.mp-tabs { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 14px 0 -10px; padding: 4px; border-radius: 12px; border: 1px solid rgba(171,201,241,.2); background: rgb(172 205 255 / .05); }
+.mp-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px; border: 0; border-radius: 9px; background: none; color: #A3B7D2; font: inherit; font-size: 15px; font-weight: 700; }
+.mp-tabs button:hover { color: #EAF2FF; }
+.mp-tabs button.on { background: linear-gradient(180deg, #DEEBFF, #C9DCF8); color: #122A47; box-shadow: 0 6px 16px -8px rgb(84 149 253 / .7); }
+.mp-tabs button:focus-visible { outline: 2px solid #ACCDFF; outline-offset: 2px; }
+.mv-dot { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; background: #FF6B6B; box-shadow: 0 0 0 3px rgb(255 107 107 / .18); }
+.mp-tabs button:not(.on) .mv-dot { background: #C0798A; box-shadow: none; }
+.mv-state { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(171,201,241,.2); background: rgb(172 205 255 / .05); color: #C9DAF2; font-size: 14.5px; line-height: 20px; font-weight: 600; word-break: keep-all; }
+.mv-state.on { border-color: rgb(255 107 107 / .5); background: rgb(255 107 107 / .08); color: #FFE1E1; }
+.mv-state.on .mv-dot { animation: mvBlink 1.1s ease-in-out infinite; }
+.mv-state time { margin-left: auto; color: #fff; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mv-state small { width: 100%; color: #E8AFAF; font-size: 12px; font-weight: 600; }
+@keyframes mvBlink { 50% { opacity: .25; } }
+.mv-lines { flex: 1 1 0; min-height: 220px; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 8px; padding: 2px; scrollbar-width: none; }
+.mv-lines::-webkit-scrollbar { display: none; }
+.mv-lines p { margin: 0; display: flex; gap: 10px; padding: 11px 13px; border-radius: 12px; border: 1px solid rgba(171,201,241,.18); background: linear-gradient(180deg, rgb(172 205 255 / .09), rgb(172 205 255 / .035)); color: #EAF2FF; font-size: 16px; line-height: 23px; word-break: keep-all; animation: mpRise .2s ease both; }
+.mv-lines p span { flex: none; color: #7F95B2; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.mv-lines p.interim { color: #A3B7D2; border-style: dashed; }
+.mv-lines .mv-empty { justify-content: center; text-align: center; border: 0; background: none; color: #7F95B2; font-size: 14.5px; padding-top: 28px; animation: none; }
+.mv-rec { gap: 9px; }
+.mv-foot { margin: 0; color: #7F95B2; font-size: 12px; line-height: 17px; word-break: keep-all; }
+.mv-card { display: flex; flex-direction: column; gap: 10px; padding: 18px 16px; border-radius: 14px; border: 1px solid rgba(171,201,241,.22); background: rgb(172 205 255 / .06); color: #DCE9FC; word-break: keep-all; }
+.mv-card b { font-size: 18px; line-height: 24px; color: #fff; }
+.mv-card p { margin: 0; color: #A3B7D2; font-size: 14.5px; }
+.mv-card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; color: #C9DAF2; font-size: 14.5px; line-height: 21px; }
+.mv-main { min-height: 52px; margin-top: 6px; border-radius: 10px; font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .mv-state.on .mv-dot { animation: none; } }

@@ -90,6 +90,8 @@ interface State {
   role: Role;
   /** 모바일 화면을 보는 동안 생긴 기록: 그 화면에서는 팝업을 띄우지 않고, PC 화면으로 돌아갈 때 모아서 띄운다 */
   deferred: string[];
+  /** 모바일 화면 [자동녹음]으로 이 PC 에 넣은 스크립트: PC 화면으로 돌아갈 때 추천과 함께 띄운다 */
+  deferredTr: string[];
   syncStatus: { state: "off" | "idle" | "busy" | "error"; message: string; lastAt?: string };
   outbox: Outbox;
   deviceId: string;
@@ -114,6 +116,7 @@ interface State {
   setRole(r: Role): void;
   /** 모바일 화면에 있는 동안 생긴 기록을 모아 둔다 (모바일 화면을 떠날 때 쉬는 시간 기록 팝업으로) */
   deferInbox(ids: string[]): void;
+  deferTranscripts(ids: string[]): void;
   /** 폰 역할: 폰 연결 영역을 만들어(없으면) 그리로 옮기고 모바일 화면을 연다 */
   enterPhoneArea(): Promise<void>;
   setView(p: Partial<{ split: boolean; highlight: boolean }>): void;
@@ -209,6 +212,7 @@ export const useStore = create<State>((set, get) => ({
   bulkOpen: false,
   role: loadRole(),
   deferred: [],
+  deferredTr: [],
   syncStatus: { state: "off", message: "연결 안 됨" },
   outbox: { messages: [], tombstones: [] },
   deviceId: "",
@@ -361,10 +365,11 @@ export const useStore = create<State>((set, get) => ({
     const prev = get().page;
     set({ page });
     // 모바일 화면을 떠나 PC 화면으로 돌아오면, 그동안 저장·도착한 기록으로 쉬는 시간 기록 팝업을 띄운다
-    if (prev === "mobile" && page !== "mobile" && get().deferred.length) {
+    if (prev === "mobile" && page !== "mobile" && (get().deferred.length || get().deferredTr.length)) {
       const ids = get().deferred.filter((id) => get().doc.records.some((r) => r.id === id && r.status === "pending"));
-      set({ deferred: [] });
-      if (ids.length) get().openInbox({ records: ids });
+      const trs = get().deferredTr;
+      set({ deferred: [], deferredTr: [] });
+      if (ids.length || trs.length) get().openInbox({ records: ids, transcripts: trs });
     }
   },
   setClass: (cls) => set({ cls }),
@@ -374,6 +379,7 @@ export const useStore = create<State>((set, get) => ({
   setBulkOpen: (bulkOpen) => set({ bulkOpen }),
   setRole(role) { saveRole(role); set({ role }); },
   deferInbox(ids) { if (ids.length) set({ deferred: [...new Set([...get().deferred, ...ids])] }); },
+  deferTranscripts(ids) { if (ids.length) set({ deferredTr: [...new Set([...get().deferredTr, ...ids])] }); },
   async enterPhoneArea() {
     const st = get();
     if (st.areaId !== PHONE_AREA) {

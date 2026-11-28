@@ -125,7 +125,38 @@ export function mergeTranscriptParts(parts: TranscriptPart[]): Transcript | null
   const ordered = [...byPart.values()].sort((a, b) => a.part - b.part);
   const segments = ordered.flatMap((p) => p.transcript.segments).sort((a, b) => a.t0 - b.t0);
   const first = ordered[0].transcript;
-  return { ...first, segments, teacherSpeaker: { auto: guessTeacherSpeaker(segments), confirmed: first.teacherSpeaker.confirmed } };
+  // 브라우저 음성 인식은 화자를 가르지 못하므로 교사 추정을 하지 않는다 (모든 발언이 추천 후보)
+  const auto = first.engine.provider === BROWSER_ENGINE.provider ? null : guessTeacherSpeaker(segments);
+  return { ...first, segments, teacherSpeaker: { auto, confirmed: first.teacherSpeaker.confirmed } };
+}
+
+/* ---------------- 웹 모바일 화면의 짧은 자동녹음 (브라우저 음성 인식) ---------------- */
+
+/** 웹 모바일 화면 [자동녹음]이 쓰는 변환 표시. 음성 파일은 만들지 않고 브라우저가 글자로 바꾼 것만 쓴다 */
+export const BROWSER_ENGINE = { provider: "browser", model: "웹 음성 인식" } as const;
+
+export interface HeardLine { text: string; at: number }
+
+/**
+ * 브라우저 음성 인식으로 받아 적은 문장들 → 스크립트.
+ * - 화자를 가르지 못하므로 모두 '화자1'로 두고 교사 추정은 하지 않는다(auto: null). 그래야 짧은 발언도 추천 후보가 된다.
+ * - 각 문장의 시각은 받아 적힌 순간(at, ms) 기준: 앞 문장 끝 ~ 이 문장이 들어온 때.
+ */
+export function browserTranscript(lines: HeardLine[], meta: { id: string; class: string; period: number; startedAt: Date; endedAt: Date; createdAt?: string }, iso: (d: Date) => string = (d) => d.toISOString()): Transcript {
+  const t0 = meta.startedAt.getTime();
+  const segs: TranscriptSegment[] = [];
+  let prev = 0;
+  for (const l of lines) {
+    const text = l.text.trim();
+    if (!text) continue;
+    const end = Math.max(prev, (l.at - t0) / 1000);
+    segs.push({ id: `s${segs.length + 1}`, t0: Math.round(prev * 10) / 10, t1: Math.round(end * 10) / 10, speaker: "화자1", text });
+    prev = end;
+  }
+  return {
+    id: meta.id, class: meta.class, period: meta.period, startedAt: iso(meta.startedAt), endedAt: iso(meta.endedAt), segments: segs,
+    teacherSpeaker: { auto: null, confirmed: null }, engine: { ...BROWSER_ENGINE }, createdAt: meta.createdAt || iso(new Date()),
+  };
 }
 
 /* ---------------- 이름 가리기 (외부 LLM 으로 보내기 전) ---------------- */
