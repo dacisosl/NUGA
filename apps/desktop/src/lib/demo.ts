@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import { nowIso, parseTranscription, resolveNow, slotsForWeekday, uuid, weekdayOf, type Transcript } from "@nuga/core";
 import { DEMO_LESSON as demoLesson } from "@nuga/core";
 import { arrivalModeOf, useStore } from "../store";
@@ -15,7 +16,9 @@ export interface DemoInfo { transcriptId: string; class: string; period: number;
 export function demoInfo(): DemoInfo | null {
   try { const v = localStorage.getItem(DEMO_FLAG); return v ? (JSON.parse(v) as DemoInfo) : null; } catch { return null; }
 }
-function setDemoInfo(v: DemoInfo | null) { try { if (v) localStorage.setItem(DEMO_FLAG, JSON.stringify(v)); else localStorage.removeItem(DEMO_FLAG); } catch { /* 저장 불가 */ } }
+function setDemoInfo(v: DemoInfo | null) { try { if (v) localStorage.setItem(DEMO_FLAG, JSON.stringify(v)); else localStorage.removeItem(DEMO_FLAG); } catch { /* 저장 불가 */ } useDemo.setState({ on: !!v }); }
+/** 데모 데이터로 둘러보는 중인가 (화면 위 '내 반으로 시작하기' 띠가 따른다) */
+export const useDemo = create<{ on: boolean }>(() => ({ on: demoInfo() !== null }));
 
 /** 2-3 반의 오늘 수업(없으면 가장 최근 수업일)의 시작 시각 */
 function demoSlot(): { start: Date; period: number } {
@@ -73,3 +76,13 @@ export async function endDemo() {
   if (prev) await useTranscripts.getState().remove(prev.transcriptId).catch(() => {});
   setDemoInfo(null);
 }
+
+/** 데모를 끝내고 내 반으로 시작: 데모 스크립트·샘플 명단·기록을 지우고 처음 설정(온보딩)을 바로 연다. AI·동기화 설정은 그대로 */
+export async function leaveDemoAndStart() {
+  await endDemo();
+  try { sessionStorage.setItem(ONB_DIRECT, "1"); } catch { /* 없으면 첫 화면부터 */ }
+  useStore.getState().startFresh();
+}
+/** 온보딩을 첫 화면(데모 | 내 반) 없이 바로 설정부터 열지 */
+export const ONB_DIRECT = "nuga.onb.direct";
+

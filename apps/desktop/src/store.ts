@@ -152,6 +152,8 @@ interface State {
   loadSample(): void;
   replaceDoc(d: NugaDoc): void;
   resetAll(): void;
+  /** 데모·샘플을 지우고 지금 영역을 빈 상태로: 처음 설정(온보딩)부터. AI·동기화 같은 공통 설정은 그대로 */
+  startFresh(): void;
 }
 
 /**
@@ -545,6 +547,12 @@ export const useStore = create<State>((set, get) => ({
   },
   replaceDoc(d) {
     set({ doc: d, cls: d.settings.classes[0]?.class || "" });
+    scheduleSave(d, get().outbox);
+  },
+  startFresh() {
+    const d = applyGlobal(emptyDoc(), lastGlobal ?? pickGlobal(get().doc, null));
+    d.settings.onboarded = false;
+    set({ doc: d, cls: "", page: "main", selected: null, inbox: null, deferred: [], deferredTr: [] });
     scheduleSave(d, get().outbox);
   },
   resetAll() {

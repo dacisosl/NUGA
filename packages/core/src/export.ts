@@ -102,3 +102,34 @@ export function progressFromRows(rows: Record<string, unknown>[]): NugaDoc["sett
   }
   return out;
 }
+
+/**
+ * 붙여넣은 명단 글 → 학생. 한 줄에 한 명. 이름만 있으면 번호를 차례로 매긴다.
+ * "3 홍길동", "3. 홍길동", "20315 홍길동"(학번 끝 두 자리 = 번호), "홍길동 72"(도달 정도 0~100 또는 옛 수준 A·B·C), 엑셀에서 복사한 탭 칸 모두 읽는다.
+ * @param used 이미 쓰고 있는 번호 (이름만 있는 줄은 이 번호를 건너뛴다)
+ * @param start 이름만 있는 줄에 처음 매길 번호
+ */
+export function parseRosterLines(text: string, cls: string, opts: { used?: Iterable<number>; start?: number } = {}): Student[] {
+  const used = new Set<number>(opts.used || []);
+  let next = opts.start ?? 1;
+  const out: Student[] = [];
+  for (const line of text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    let rest = line.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
+    if (/^(번호|이름|성명|학번|반|도달 ?정도)( (번호|이름|성명|학번|반|도달 ?정도))*$/.test(rest)) continue; // 엑셀 머리글 줄
+    let no: number | null = null;
+    const hak = rest.match(/^(\d{4,5})[\s.,)\-]+(.+)$/);
+    const num = rest.match(/^(\d{1,3})[\s.,)\-]+(.+)$/);
+    if (hak) { no = parseInt(hak[1].slice(-2), 10); rest = hak[2]; }
+    else if (num) { no = parseInt(num[1], 10); rest = num[2]; }
+    let manual: number | null = null;
+    const lv = rest.match(/[\s,]+([ABCabc]|\d{1,3})$/);
+    if (lv) { const t = lv[1].toUpperCase(); manual = /\d/.test(t) ? clampScore(Number(t)) : LEGACY_LEVEL_SCORE[t as Level]; rest = rest.slice(0, lv.index).trim(); }
+    const name = rest.replace(/[,]+$/, "").trim();
+    if (!name) continue;
+    if (!no) { while (used.has(next)) next++; no = next++; }
+    used.add(no);
+    out.push({ class: cls, no, name, ...(manual !== null ? { achievement: { auto: null, manual, confidence: "ok" as const } } : {}) });
+  }
+  return out;
+}
+

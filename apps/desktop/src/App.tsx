@@ -2,7 +2,7 @@
 import "./styles.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { classList, useStore, type Page } from "./store";
-import { Icon, Toasts } from "./components/ui";
+import { Confirm, Icon, Toasts } from "./components/ui";
 import { RecordsPage, exportRecordsExcel } from "./pages/RecordsPage";
 import { DraftPage } from "./pages/DraftPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -15,7 +15,8 @@ import { syncEngine } from "./lib/syncEngine";
 import { toExportJson, nowIso } from "@nuga/core";
 import { saveFile } from "./lib/platform";
 import { PANEL, SUB_WINDOW, startParams } from "./lib/windows";
-import { enterWhale, useWhale } from "./lib/whale";
+import { WHALE_AREA, enterWhale, useWhale } from "./lib/whale";
+import { leaveDemoAndStart, useDemo } from "./lib/demo";
 import { WhaleTour } from "./components/WhaleTour";
 import { HelpPanel, closeHelp, toggleHelp, useHelp } from "./components/HelpPanel";
 import { LoginButton, LoginModal } from "./components/LoginModal";
@@ -74,6 +75,7 @@ export default function App() {
   return (
     <div className="app">
       <main className="main one" data-page={view}>
+        <DemoBar />
         <TopNav view={view} />
         {view === "main" && <RecordsPage />}
         {view === "draft" && <DraftPage />}
@@ -274,3 +276,21 @@ export function useDebounced<T>(v: T, ms = 200): T {
   useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]);
   return d;
 }
+
+/** 데모 데이터로 둘러보는 중이면 맨 위 띠: [내 반으로 시작하기] → 데모를 지우고 처음 설정 3단계로 (웨일 데모 영역에서는 웨일 칸이 따로 안내) */
+function DemoBar() {
+  const on = useDemo((s) => s.on);
+  const whale = useStore((s) => s.areaId === WHALE_AREA);
+  const [ask, setAsk] = useState(false);
+  if (!on || whale) return null;
+  return (
+    <div className="demo-bar" role="region" aria-label="데모 안내">
+      <span><b>데모 데이터</b>로 둘러보는 중이에요 <small>· 학생·기록·추천은 모두 합성 예시예요</small></span>
+      <span className="grow" />
+      <button type="button" onClick={() => setAsk(true)}>내 반으로 시작하기 →</button>
+      {ask && <Confirm title="내 반으로 시작할까요?" body="데모 명단·기록·추천 카드를 지우고, 처음 설정(학교급·과목 → 반·명단 → 시간표, 약 2분)을 시작해요. AI·로그인 설정은 그대로 남아요." okLabel="시작하기"
+        onOk={() => { void leaveDemoAndStart(); }} onClose={() => setAsk(false)} />}
+    </div>
+  );
+}
+

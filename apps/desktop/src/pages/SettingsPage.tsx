@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import {
   WEEKDAY_LABELS, DEFAULT_DRAFT_GUIDE, DRAFT_OUTPUT_RULES, DRAFT_PROMPT_PRESETS, isBlankProgress, syncProgressSkeleton, buildDraftRequest, buildPairingUri, classSortKey, decryptBackup, encryptBackup, generateSyncKey, keyIdOf, nowIso, parseImportJson, progressFromRows, studentsFromRows, isSchoolRoster, toB64, toExportJson,
   LEGACY_LEVEL_SCORE, LENGTH_PRESET, lengthSlack, defaultGuideFor, PROVIDER_INFO, PROVIDER_ORDER, DEFAULT_LOCAL_URL, SCHOOL_PRESETS, WRITE_ITEM_LABEL, WRITE_ITEM_PROMPT, applySchoolPreset, clampScore, presetLimitIn, schoolStyle,
-  type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem,
+  type AiProvider, type BackupContainer, type Level, type LengthMode, type ProgressRow, type SchoolLevel, type Student, type WriteItem, parseRosterLines
 } from "@nuga/core";
 import { Sheet, TopBar } from "../App";
 import { achievementOf, classList, guideOf, limitOf, perfsOf, recordsOf, useStore, type AreaStats, type MultiBackup, arrivalModeOf } from "../store";
@@ -267,28 +267,9 @@ function PasteModal({ cls, onClose }: { cls: string; onClose: () => void }) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"append" | "replace">(existing.length ? "append" : "replace");
   const parsed = useMemo(() => {
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const used = new Set<number>(mode === "append" ? existing.map((s) => s.no) : []);
-    let next = mode === "append" ? Math.max(0, ...existing.map((s) => s.no)) + 1 : 1;
-    const out: (Student & { overwrite: boolean })[] = [];
-    for (const line of lines) {
-      let rest = line.replace(/\t/g, " ").replace(/\s+/g, " ").trim();
-      let no: number | null = null;
-      const hak = rest.match(/^(\d{4,5})[\s.,)\-]+(.+)$/);
-      const num = rest.match(/^(\d{1,3})[\s.,)\-]+(.+)$/);
-      if (hak) { no = parseInt(hak[1].slice(-2), 10); rest = hak[2]; }
-      else if (num) { no = parseInt(num[1], 10); rest = num[2]; }
-      let manual: number | null = null;
-      const lv = rest.match(/[\s,]+([ABCabc]|\d{1,3})$/);
-      if (lv) { const t = lv[1].toUpperCase(); manual = /\d/.test(t) ? clampScore(Number(t)) : LEGACY_LEVEL_SCORE[t as Level]; rest = rest.slice(0, lv.index).trim(); }
-      const name = rest.replace(/[,]+$/, "").trim();
-      if (!name) continue;
-      if (!no) { while (used.has(next)) next++; no = next++; }
-      const overwrite = mode === "append" && existing.some((s) => s.no === no);
-      used.add(no);
-      out.push({ class: cls, no, name, ...(manual !== null ? { achievement: { auto: null, manual, confidence: "ok" as const } } : {}), overwrite });
-    }
-    return out;
+    const used = mode === "append" ? existing.map((s) => s.no) : [];
+    const start = mode === "append" ? Math.max(0, ...existing.map((s) => s.no)) + 1 : 1;
+    return parseRosterLines(text, cls, { used, start }).map((s) => ({ ...s, overwrite: mode === "append" && existing.some((e) => e.no === s.no) }));
   }, [text, cls, mode, existing.length]);
   const apply = () => {
     const keep = mode === "replace" ? doc.students.filter((s) => s.class !== cls) : doc.students.filter((s) => !(s.class === cls && parsed.some((p) => p.no === s.no)));

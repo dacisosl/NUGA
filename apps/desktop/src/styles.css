@@ -1113,3 +1113,46 @@ button.stag-name:hover { text-decoration-color: currentColor; }
 :is(.dl-dots, .msg.typing) i:nth-child(3) { animation-delay: .3s; }
 @keyframes dl-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
 @keyframes dl-bounce { 0%, 70%, 100% { transform: translateY(0); opacity: .45; } 35% { transform: translateY(-4px); opacity: 1; } }
+
+/* ---------- 처음 설정 3단계 (Onboarding.tsx) ---------- */
+.onb-setup { align-items: flex-start; }
+.onb-setup .box { width: 860px; display: flex; flex-direction: column; gap: 14px; }
+.onb-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.onb-head .steps { margin: 0; padding: 0; list-style: none; }
+.onb-q h2 { margin: 6px 0 4px; font-size: 24px; letter-spacing: -.03em; }
+.onb-q p { margin: 0; color: var(--text2); font-size: 14.5px; word-break: keep-all; }
+.onb-card { display: flex; flex-direction: column; gap: 14px; }
+.onb-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 650; color: var(--text2); }
+.onb-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.onb-levels .level-card { min-width: 0; padding: 14px 16px; gap: 4px; }
+.onb-levels .level-card b { font-size: 17px; }
+.onb-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.onb-row .field { margin: 0; }
+.onb-row .field.grow { flex: 1; min-width: 220px; }
+.onb-row input, .onb-row .select { height: 42px; font-size: 15px; }
+.onb-paste { display: flex; gap: 14px; align-items: stretch; }
+.onb-paste .field { margin: 0; }
+.onb-paste textarea { width: 100%; min-height: 150px; font-size: 15px; line-height: 1.55; resize: vertical; }
+.onb-count { flex: none; width: 170px; display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft, #EAF2FF); }
+.onb-count b { font-size: 30px; line-height: 1; color: var(--accent); }
+.onb-count small { font-size: 12px; word-break: keep-all; }
+.onb-size { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.onb-size input { width: 74px; height: 36px; }
+.onb-add { align-self: flex-start; }
+.onb-nav { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+.onb-nav .btn.lg { min-width: 120px; height: 44px; font-size: 15px; }
+.onb-tt { max-width: none; }
+@media (max-width: 700px) {
+  .onb-setup { padding: 20px 14px; }
+  .onb-levels { grid-template-columns: 1fr; }
+  .onb-paste { flex-direction: column; }
+  .onb-count { width: auto; }
+}
+
+/* 데모 데이터로 둘러보는 중: 화면 맨 위 얇은 띠 + [내 반으로 시작하기] */
+.demo-bar { display: flex; align-items: center; gap: 12px; padding: 8px 18px; background: linear-gradient(90deg, #FFE7A3, #FFD76A); color: #2A2410; font-size: 14px; font-weight: 600; word-break: keep-all; }
+.demo-bar b { font-weight: 800; }
+.demo-bar .grow { flex: 1; }
+.demo-bar button { flex: none; height: 34px; padding: 0 16px; border: 0; border-radius: 8px; background: #1C2A3D; color: #fff; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+.demo-bar button:hover { background: #081422; }
+@media (max-width: 700px) { .demo-bar { flex-wrap: wrap; padding: 8px 12px; font-size: 13px; } .demo-bar small { display: none; } }
